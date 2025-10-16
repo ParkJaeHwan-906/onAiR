@@ -9,9 +9,11 @@ import java.time.LocalDateTime;
 public class UserAccountsDto {
     private Long id;
     private Long userId;
+    private Long companyId;
     private String email;
     private String password;
     private Long roleId;
+    private Integer online;
     private Integer ban;
     private LocalDate exit;
     private LocalDateTime createdAt;
