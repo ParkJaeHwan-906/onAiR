@@ -1,0 +1,42 @@
+DROP DATABASE IF EXISTS `example`;
+
+CREATE DATABASE `example`;
+
+USE `example`;
+
+-- 회원정보 --
+CREATE TABLE `roles`(
+	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+	`role` VARCHAR(10) NOT NULL COMMENT '권한(관리자, 일반 유저)',
+	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT '권한정보를 저장';
+
+INSERT INTO `roles`(`role`) VALUES ('관리자'), ('사용자');
+
+CREATE TABLE `users`(
+	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+	`name` VARCHAR(30) NOT NULL COMMENT '사용자 이름',
+	`birth` DATE NOT NULL COMMENT '사용자 생년월일',
+	`phone` VARCHAR(11) NOT NULL COMMENT '사용자 휴대폰 번호',
+	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT '사용자의 기본 정보를 저장';
+
+CREATE TABLE `user_accounts`(
+	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+	`user_id` BIGINT NOT NULL COMMENT 'users 테이블의 id 와 FK',
+	`email` VARCHAR(100) NOT NULL UNIQUE KEY COMMENT '계정 id 로 사용할 이메일',
+	`password` VARCHAR(255) NOT NULL COMMENT '계정 패스워드',
+	`role_id` BIGINT NOT NULL DEFAULT 2 COMMENT '계정의 권한 ( 기본은 사용자 )',
+	`ban` TINYINT NOT NULL DEFAULT 0 COMMENT '계정의 ban 여부를 확인 ( 0 : X, 1 : O )', -- 수정됨: 'exampleexampleexample' 제거 및 쉼표 추가
+	`exit` DATE DEFAULT NULL COMMENT '계정의 탈퇴 여부를 확인',
+	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	FOREIGN KEY(`role_id`) REFERENCES `roles`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE,
+	FOREIGN KEY(`user_id`) REFERENCES `users`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
+) COMMENT '사용자의 계정 정보를 저장';
