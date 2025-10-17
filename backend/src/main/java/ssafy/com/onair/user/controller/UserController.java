@@ -8,7 +8,7 @@ import ssafy.com.onair.global.jwt.user.CustomUserDetails;
 import ssafy.com.onair.global.response.dto.ApiResponse;
 import ssafy.com.onair.user.dto.UserInfoDto;
 import ssafy.com.onair.user.dto.ValidationUserRequestDto;
-import ssafy.com.onair.user.servicec.UserServiceImpl;
+import ssafy.com.onair.user.service.UserServiceImpl;
 
 @RestController
 @RequestMapping("/user")

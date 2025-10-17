@@ -1,4 +1,4 @@
-package ssafy.com.onair.user.servicec;
+package ssafy.com.onair.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

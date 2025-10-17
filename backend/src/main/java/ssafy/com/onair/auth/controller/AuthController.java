@@ -1,5 +1,6 @@
 package ssafy.com.onair.auth.controller;
 
+import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,18 +19,18 @@ import ssafy.com.onair.global.response.dto.ApiResponse;
 public class AuthController {
     private final AuthServiceImpl authService;
 
-    @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<?>> signup(@Valid @RequestBody SignupRequestDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(authService.signup(request), "회원가입이 완료되었습니다."));
+    @PostMapping({"/signup/", "/signup/{companyUID}"})
+    public ResponseEntity<ApiResponse<?>> signup(@Valid @RequestBody SignupRequestDto request, @Nullable @PathVariable String companyUID) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(authService.signup(request, companyUID), "회원가입이 완료되었습니다."));
     }
 
-    @PostMapping("/check/email")
-    public ResponseEntity<ApiResponse<?>> isValidEmail(@RequestBody checkInfoRequestDto request) {
+    @PostMapping({"/check/email/", "/check/email/{companyUID}"})
+    public ResponseEntity<ApiResponse<?>> isValidEmail(@RequestBody checkInfoRequestDto request, @Nullable @PathVariable String companyUID) {
         return ResponseEntity.ok(ApiResponse.success(authService.isValidEmail(request.getEmail()), "사용 가능한 이메일입니다."));
     }
 
-    @PostMapping("/check/password")
-    public ResponseEntity<ApiResponse<?>> isValidPassword(@RequestBody checkInfoRequestDto request) {
+    @PostMapping({"/check/password/", "/check/password/{companyUID}"})
+    public ResponseEntity<ApiResponse<?>> isValidPassword(@RequestBody checkInfoRequestDto request, @Nullable @PathVariable String companyUID) {
         return ResponseEntity.ok(ApiResponse.success(authService.isValidPassword(request.getPassword()), "사용 가능한 비밀번호입니다."));
     }
 

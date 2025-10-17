@@ -31,7 +31,7 @@ public class AuthServiceImpl implements AuthService{
 
     @Transactional
     @Override
-    public boolean signup(SignupRequestDto request) {
+    public boolean signup(SignupRequestDto request, String companyUID) {
         try {
             log.info("회원가입 요청 : {}", request.getEmail());
             usersRepository.insertUser(request.getName(), request.getBirth(), request.getPhone());

@@ -5,7 +5,7 @@ import ssafy.com.onair.auth.dto.LoginResponseDto;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
 
 public interface AuthService {
-    boolean signup(SignupRequestDto request);
+    boolean signup(SignupRequestDto request, String companyUID);
     Boolean isValidEmail(String email);
     Boolean isValidPassword(String password);
     LoginResponseDto login(LoginRequestDto request);

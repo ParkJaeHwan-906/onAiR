@@ -21,6 +21,12 @@ CREATE TABLE `companies` (
 	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) COMMENT '가입된 기업 정보를 저장';
 
+CREATE TABLE `company_uuid` (
+    `company_id` BIGINT NOT NULL,
+    `uuid` VARCHAR(36) UNIQUE KEY,
+    `expired_at` DATETIME NOT NULL
+) COMMENT 'B2B 서비스를 위한 임시 UUID 저장';
+
 CREATE TABLE `users`(
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
 	`name` VARCHAR(30) NOT NULL COMMENT '사용자 이름',

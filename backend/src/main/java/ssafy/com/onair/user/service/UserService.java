@@ -1,4 +1,4 @@
-package ssafy.com.onair.user.servicec;
+package ssafy.com.onair.user.service;
 
 import ssafy.com.onair.user.dto.UserInfoDto;
 
