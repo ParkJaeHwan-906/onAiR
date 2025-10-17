@@ -21,7 +21,7 @@ public class AuthController {
 
     @PostMapping({"/signup/", "/signup/{companyUID}"})
     public ResponseEntity<ApiResponse<?>> signup(@Valid @RequestBody SignupRequestDto request, @Nullable @PathVariable String companyUID) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(authService.signup(request), "회원가입이 완료되었습니다."));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(authService.signup(request, companyUID), "회원가입이 완료되었습니다."));
     }
 
     @PostMapping({"/check/email/", "/check/email/{companyUID}"})
