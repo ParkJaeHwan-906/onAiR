@@ -25,6 +25,9 @@ CREATE TABLE `company_uuid` (
     `company_id` BIGINT NOT NULL,
     `uuid` VARCHAR(36) UNIQUE KEY,
     `expired_at` DATETIME NOT NULL
+    FOREIGN KEY(`company_id`) REFERENCES `companies`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
 ) COMMENT 'B2B 서비스를 위한 임시 UUID 저장';
 
 CREATE TABLE `users`(
@@ -58,6 +61,15 @@ CREATE TABLE `user_accounts`(
 		ON UPDATE CASCADE
 		ON DELETE CASCADE
 ) COMMENT '사용자의 계정 정보를 저장';
+
+CREATE TABLE `refresh_token`(
+	`user_account_id` BIGINT NOT NULL,
+	`refresh_token` VARCHAR(255) NOT NULL,
+	`expired_at` DATETIME NOT NULL,
+	FOREIGN KEY(`user_account_id`) REFERENCES `user_accounts`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
+) COMMENT '사용자의 리프레쉬 토큰 정보를 저장';
 
 -- 설비 정보 --
 CREATE TABLE `equipments` (
