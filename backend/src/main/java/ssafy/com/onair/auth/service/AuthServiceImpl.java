@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.auth.dto.LoginRequestDto;
 import ssafy.com.onair.auth.dto.LoginResponseDto;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
+import ssafy.com.onair.company.service.CompanyServiceImpl;
 import ssafy.com.onair.global.jwt.util.JwtTokenProvider;
 import ssafy.com.onair.global.security.config.SecurityConfig;
 import ssafy.com.onair.user.dto.ValidUserAccountDto;
@@ -26,6 +27,7 @@ public class AuthServiceImpl implements AuthService{
     private final UsersRepository usersRepository;
     private final UserAccountsRepository userAccountsRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final CompanyServiceImpl companyService;
 
     private final SecurityConfig securityConfig;
 
@@ -34,8 +36,9 @@ public class AuthServiceImpl implements AuthService{
     public boolean signup(SignupRequestDto request, String companyUID) {
         try {
             log.info("회원가입 요청 : {}", request.getEmail());
+            request = companyService.fillCompanyInfo(request, companyUID);
             usersRepository.insertUser(request.getName(), request.getBirth(), request.getPhone());
-            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()));
+            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getCompanyId(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()), request.getRoleId());
             return true;
         } catch(Exception e) {
             throw new IllegalArgumentException("회원가입 도중 오류가 발생했습니다.");
@@ -73,8 +76,6 @@ public class AuthServiceImpl implements AuthService{
         ValidUserAccountDto validUser = userAccountsRepository.selectUserByEmail(request.getEmail())
                         .orElseThrow(() -> new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요."));
         if(!securityConfig.passwordEncoder().matches(request.getPassword(), validUser.getPassword())) throw new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요.");
-
-
 
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(validUser.getId()))
