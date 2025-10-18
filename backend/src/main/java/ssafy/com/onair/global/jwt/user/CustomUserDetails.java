@@ -14,7 +14,7 @@ public class CustomUserDetails implements UserDetails {
     public CustomUserDetails(UserInfoDto userInfo) { this.userInfo = userInfo; }
 
     public Long getUserAccountId() { return this.userInfo.getUserAccountId(); }
-
+    public Long getCompanyId() { return this.userInfo.getCompanyId(); }
     public UserInfoDto getUserInfo() { return this.userInfo; }
 
     @Override

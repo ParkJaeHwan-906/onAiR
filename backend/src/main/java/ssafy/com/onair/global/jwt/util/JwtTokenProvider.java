@@ -3,9 +3,11 @@ package ssafy.com.onair.global.jwt.util;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import ssafy.com.onair.auth.repository.RefreshTokenRepository;
 
 import java.security.Key;
 import java.util.Date;
@@ -13,6 +15,7 @@ import java.util.Date;
 @Slf4j
 @Component
 public class JwtTokenProvider {
+    private final RefreshTokenRepository refreshTokenRepository;
     private final long accessTokenExp;
     private final long refreshTokenExp;
     private final Key key;
@@ -20,11 +23,13 @@ public class JwtTokenProvider {
     public JwtTokenProvider(
             @Value("${jwt.secret}") String secretKey,
             @Value("${jwt.access-token-expiration}") long accessTokenExp,
-            @Value("${jwt.refresh-token-expiration}") long refreshTokenExp) {
+            @Value("${jwt.refresh-token-expiration}") long refreshTokenExp,
+            RefreshTokenRepository refreshTokenRepository) {
 
         this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secretKey));
         this.accessTokenExp = accessTokenExp;
         this.refreshTokenExp = refreshTokenExp;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
     public String generateAccessToken(Long userAccountId) {
         return Jwts.builder()
@@ -37,13 +42,16 @@ public class JwtTokenProvider {
     }
 
     public String generateRefreshToken(Long userAccountId) {
-        return Jwts.builder()
+        Date expiredAt = new Date(System.currentTimeMillis()+refreshTokenExp);
+        String refreshToken = Jwts.builder()
                 .setSubject(String.valueOf(userAccountId))
                 .claim("type", "refresh")
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis()+refreshTokenExp))
+                .setExpiration(expiredAt)
                 .signWith(key)
                 .compact();
+        refreshTokenRepository.insertRefreshToken(userAccountId, refreshToken, expiredAt);
+        return refreshToken;
     }
 
     public Claims getClaims(String token) {

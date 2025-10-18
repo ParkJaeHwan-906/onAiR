@@ -6,7 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.auth.dto.LoginRequestDto;
 import ssafy.com.onair.auth.dto.LoginResponseDto;
+import ssafy.com.onair.auth.dto.RegenerateRefreshTokenRequestDto;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
+import ssafy.com.onair.auth.repository.RefreshTokenRepository;
+import ssafy.com.onair.company.service.CompanyServiceImpl;
 import ssafy.com.onair.global.jwt.util.JwtTokenProvider;
 import ssafy.com.onair.global.security.config.SecurityConfig;
 import ssafy.com.onair.user.dto.ValidUserAccountDto;
@@ -26,6 +29,8 @@ public class AuthServiceImpl implements AuthService{
     private final UsersRepository usersRepository;
     private final UserAccountsRepository userAccountsRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final CompanyServiceImpl companyService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     private final SecurityConfig securityConfig;
 
@@ -34,8 +39,9 @@ public class AuthServiceImpl implements AuthService{
     public boolean signup(SignupRequestDto request, String companyUID) {
         try {
             log.info("회원가입 요청 : {}", request.getEmail());
+            request = companyService.fillCompanyInfo(request, companyUID);
             usersRepository.insertUser(request.getName(), request.getBirth(), request.getPhone());
-            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()));
+            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getCompanyId(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()), request.getRoleId());
             return true;
         } catch(Exception e) {
             throw new IllegalArgumentException("회원가입 도중 오류가 발생했습니다.");
@@ -68,17 +74,29 @@ public class AuthServiceImpl implements AuthService{
         return true;
     }
 
+    @Transactional
     @Override
     public LoginResponseDto login(LoginRequestDto request) {
         ValidUserAccountDto validUser = userAccountsRepository.selectUserByEmail(request.getEmail())
                         .orElseThrow(() -> new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요."));
         if(!securityConfig.passwordEncoder().matches(request.getPassword(), validUser.getPassword())) throw new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요.");
 
-
-
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(validUser.getId()))
                 .refreshToken(jwtTokenProvider.generateRefreshToken(validUser.getId()))
+                .build();
+    }
+
+    @Transactional
+    @Override
+    public LoginResponseDto regenerateRefreshToken(RegenerateRefreshTokenRequestDto request) {
+        Long userAccountId = jwtTokenProvider.getUserAccountId(request.getRefreshToken());
+        if(!refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId)
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다.")).equals(request.getRefreshToken())) throw new IllegalArgumentException("유효하지 않은 토큰입니다.");
+        refreshTokenRepository.deleteRefreshTokenByUserAccountId(userAccountId);
+        return LoginResponseDto.builder()
+                .accessToken(jwtTokenProvider.generateAccessToken(userAccountId))
+                .refreshToken(jwtTokenProvider.generateRefreshToken(userAccountId))
                 .build();
     }
 }
