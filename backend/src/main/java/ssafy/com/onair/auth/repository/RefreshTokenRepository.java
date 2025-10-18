@@ -28,4 +28,10 @@ public interface RefreshTokenRepository {
             WHERE `user_account_id` = #{userAccountId};
             """)
     Integer deleteRefreshTokenByUserAccountId(Long userAccountId);
+
+    @Delete("""
+            DELETE FROM `refresh_token`
+            WHERE `expired_at` <= NOW();
+            """)
+    Integer deleteInvalidRefreshTokens();
 }
