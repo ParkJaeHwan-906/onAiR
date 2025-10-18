@@ -3,6 +3,7 @@ package ssafy.com.onair.company.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
 import ssafy.com.onair.company.dto.CompanyUuidResponseDto;
 import ssafy.com.onair.company.repository.CompanyRepository;
@@ -20,6 +21,7 @@ public class CompanyServiceImpl implements CompanyService {
     @Value("${company.uuid.expiration}")
     private Long companyUuidExpiration;
 
+    @Transactional
     @Override
     public SignupRequestDto fillCompanyInfo(SignupRequestDto request, String companyUID) {
         if(companyUID == null || companyUID.isEmpty()) {
@@ -34,6 +36,7 @@ public class CompanyServiceImpl implements CompanyService {
         return request;
     }
 
+    @Transactional
     @Override
     public CompanyUuidResponseDto publishToken(Long companyId) {
         String companyUUID = UUID.randomUUID().toString();

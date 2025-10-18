@@ -1,5 +1,6 @@
 package ssafy.com.onair.company.repository;
 
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
@@ -28,4 +29,10 @@ public interface CompanyUuidRepository {
             VALUES (#{companyId}, #{uuid}, #{expiredAt});
             """)
     Integer insertCompanyUUID(Long companyId, String uuid, Date expiredAt);
+
+    @Delete("""
+            DELETE FROM `company_uuid`
+            WHERE `expired_at` <= NOW();
+            """)
+    Integer removeInvalidCompanyUUID();
 }

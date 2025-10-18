@@ -74,6 +74,7 @@ public class AuthServiceImpl implements AuthService{
         return true;
     }
 
+    @Transactional
     @Override
     public LoginResponseDto login(LoginRequestDto request) {
         ValidUserAccountDto validUser = userAccountsRepository.selectUserByEmail(request.getEmail())
@@ -86,6 +87,7 @@ public class AuthServiceImpl implements AuthService{
                 .build();
     }
 
+    @Transactional
     @Override
     public LoginResponseDto regenerateRefreshToken(RegenerateRefreshTokenRequestDto request) {
         Long userAccountId = jwtTokenProvider.getUserAccountId(request.getRefreshToken());
