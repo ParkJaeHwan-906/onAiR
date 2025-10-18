@@ -6,10 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ssafy.com.onair.auth.dto.LoginRequestDto;
-import ssafy.com.onair.auth.dto.LoginResponseDto;
-import ssafy.com.onair.auth.dto.checkInfoRequestDto;
-import ssafy.com.onair.auth.dto.SignupRequestDto;
+import ssafy.com.onair.auth.dto.*;
 import ssafy.com.onair.auth.service.AuthServiceImpl;
 import ssafy.com.onair.global.response.dto.ApiResponse;
 
@@ -37,5 +34,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponseDto>> loginRequest(@RequestBody LoginRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(authService.login(request), "로그인 되었습니다."));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<LoginResponseDto>> regenerateAccessToken(@RequestBody RegenerateRefreshTokenRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(authService.regenerateRefreshToken(request)));
     }
 }

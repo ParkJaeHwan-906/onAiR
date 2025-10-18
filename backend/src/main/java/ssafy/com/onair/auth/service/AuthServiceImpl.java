@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.auth.dto.LoginRequestDto;
 import ssafy.com.onair.auth.dto.LoginResponseDto;
+import ssafy.com.onair.auth.dto.RegenerateRefreshTokenRequestDto;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
+import ssafy.com.onair.auth.repository.RefreshTokenRepository;
 import ssafy.com.onair.company.service.CompanyServiceImpl;
 import ssafy.com.onair.global.jwt.util.JwtTokenProvider;
 import ssafy.com.onair.global.security.config.SecurityConfig;
@@ -28,6 +30,7 @@ public class AuthServiceImpl implements AuthService{
     private final UserAccountsRepository userAccountsRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final CompanyServiceImpl companyService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     private final SecurityConfig securityConfig;
 
@@ -80,6 +83,18 @@ public class AuthServiceImpl implements AuthService{
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(validUser.getId()))
                 .refreshToken(jwtTokenProvider.generateRefreshToken(validUser.getId()))
+                .build();
+    }
+
+    @Override
+    public LoginResponseDto regenerateRefreshToken(RegenerateRefreshTokenRequestDto request) {
+        Long userAccountId = jwtTokenProvider.getUserAccountId(request.getRefreshToken());
+        if(!refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId)
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다.")).equals(request.getRefreshToken())) throw new IllegalArgumentException("유효하지 않은 토큰입니다.");
+        refreshTokenRepository.deleteRefreshTokenByUserAccountId(userAccountId);
+        return LoginResponseDto.builder()
+                .accessToken(jwtTokenProvider.generateAccessToken(userAccountId))
+                .refreshToken(jwtTokenProvider.generateRefreshToken(userAccountId))
                 .build();
     }
 }

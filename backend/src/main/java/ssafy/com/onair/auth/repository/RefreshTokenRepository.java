@@ -1,9 +1,12 @@
 package ssafy.com.onair.auth.repository;
 
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.Date;
+import java.util.Optional;
 
 @Mapper
 public interface RefreshTokenRepository {
@@ -12,4 +15,17 @@ public interface RefreshTokenRepository {
             (#{userAccountId}, #{refreshToken}, #{expiredAt});
             """)
     Integer insertRefreshToken(Long userAccountId, String refreshToken, Date expiredAt);
+
+    @Select("""
+            SELECT `refresh_token` FROM `refresh_token`
+            WHERE `user_account_id` = #{userAccountId}
+            AND `expired_at` > NOW();
+            """)
+    Optional<String> selectRefreshTokenByUserAccountId(Long userAccountId);
+
+    @Delete("""
+            DELETE FROM `refresh_token`
+            WHERE `user_account_id` = #{userAccountId};
+            """)
+    Integer deleteRefreshTokenByUserAccountId(Long userAccountId);
 }
