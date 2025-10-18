@@ -34,6 +34,8 @@ public interface UserAccountsRepository {
     @Select("""
             SELECT
             ua.id AS 'userAccountId',
+            ua.company_id AS 'companyId',
+            c.`name` AS 'company',
             u.name AS 'name',
             u.phone AS 'phone',
             u.birth AS 'birth',
@@ -42,6 +44,7 @@ public interface UserAccountsRepository {
             FROM `user_accounts` AS ua
             JOIN `users` AS u ON u.id = ua.user_id
             JOIN `roles` AS r ON r.id = ua.role_id
+            JOIN `companies` AS c ON ua.company_id = c.id
             WHERE ua.id = #{userAccountId};
             """)
     Optional<UserInfoDto> selectUserInfoByUserAccountId(Long userAccountId);
