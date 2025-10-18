@@ -24,7 +24,7 @@ CREATE TABLE `companies` (
 CREATE TABLE `company_uuid` (
     `company_id` BIGINT NOT NULL,
     `uuid` VARCHAR(36) UNIQUE KEY,
-    `expired_at` DATETIME NOT NULL
+    `expired_at` DATETIME NOT NULL,
     FOREIGN KEY(`company_id`) REFERENCES `companies`(`id`)
 		ON UPDATE CASCADE
 		ON DELETE CASCADE
