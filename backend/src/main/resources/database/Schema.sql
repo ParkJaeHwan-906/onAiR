@@ -71,6 +71,18 @@ CREATE TABLE `refresh_token`(
 		ON DELETE CASCADE
 ) COMMENT '사용자의 리프레쉬 토큰 정보를 저장';
 
+CREATE TABLE attendance (
+     `user_account_id` BIGINT NOT NULL,
+     `work_date` DATE NOT NULL,
+     `check_in_time` DATETIME DEFAULT NULL,
+     `check_out_time` DATETIME DEFAULT NULL,
+     `total_work_minutes` INT DEFAULT NULL,
+     PRIMARY KEY (`user_account_id`, `work_date`),
+ 	 FOREIGN KEY (`user_account_id`) REFERENCES `user_accounts`(`id`)
+         ON DELETE CASCADE
+         ON UPDATE CASCADE
+ ) COMMENT '근로자들의 근태관리를 위한 테이블';
+
 -- 설비 정보 --
 CREATE TABLE `equipments` (
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
