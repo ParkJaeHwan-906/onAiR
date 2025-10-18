@@ -1,6 +1,7 @@
 package ssafy.com.onair.user.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -8,6 +9,7 @@ import ssafy.com.onair.global.jwt.user.CustomUserDetails;
 import ssafy.com.onair.global.response.dto.ApiResponse;
 import ssafy.com.onair.user.dto.UserInfoDto;
 import ssafy.com.onair.user.dto.ValidationUserRequestDto;
+import ssafy.com.onair.user.service.AttendanceServiceImpl;
 import ssafy.com.onair.user.service.UserServiceImpl;
 
 @RestController
@@ -15,6 +17,7 @@ import ssafy.com.onair.user.service.UserServiceImpl;
 @RequiredArgsConstructor
 public class UserController {
     private final UserServiceImpl userService;
+    private final AttendanceServiceImpl attendanceService;
 
     @GetMapping("/detail")
     public ResponseEntity<ApiResponse<UserInfoDto>> userDetail(@AuthenticationPrincipal CustomUserDetails user) {
@@ -29,5 +32,15 @@ public class UserController {
     @PostMapping("/validation")
     public ResponseEntity<ApiResponse<Boolean>> validationUserInfo(@AuthenticationPrincipal CustomUserDetails user, @RequestBody ValidationUserRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(userService.ValidationUserInto(user.getUserInfo().getEmail(), request.getPassword()), "인증되었습니다."));
+    }
+
+    @GetMapping("/check/in")
+    public ResponseEntity<ApiResponse<String>> checkIn(@AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(attendanceService.checkIn(user.getUserAccountId())));
+    }
+
+    @GetMapping("/check/out")
+    public ResponseEntity<ApiResponse<String>> checkOut(@AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.success(attendanceService.checkOut(user.getUserAccountId())));
     }
 }
