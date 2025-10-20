@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.user.dto.AttendanceDto;
 import ssafy.com.onair.user.repository.AttendanceRepository;
+import ssafy.com.onair.user.repository.UserAccountsRepository;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -14,12 +15,14 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceRepository attendanceRepository;
+    private final UserAccountsRepository userAccountsRepository;
 
     @Transactional
     @Override
     public String checkIn(Long userAccountId) {
         try {
             attendanceRepository.insertCheckIn(userAccountId, LocalDate.now(), LocalDateTime.now());
+            userAccountsRepository.updateUserStateCheckIn(userAccountId);
             return "정상적으로 출근처리 되었습니다.";
         } catch (Exception e) {
             throw new IllegalArgumentException("이미 출근처리 되었습니다.");
@@ -39,6 +42,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         int totalMinutes = (int) Duration.between(attendance.getCheckInTime(), checkOutTime).toMinutes();
 
         attendanceRepository.updateCheckOut(userAccountId, today, checkOutTime, totalMinutes);
+        userAccountsRepository.updateUserStateCheckOut(userAccountId);
         return "정상적으로 퇴근처리 되었습니다.";
     }
 }
