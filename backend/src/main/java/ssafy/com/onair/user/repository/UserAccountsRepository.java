@@ -4,9 +4,11 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import ssafy.com.onair.user.dto.HrUserDto;
 import ssafy.com.onair.user.dto.UserInfoDto;
 import ssafy.com.onair.user.dto.ValidUserAccountDto;
 
+import java.util.List;
 import java.util.Optional;
 
 @Mapper
@@ -45,7 +47,9 @@ public interface UserAccountsRepository {
             JOIN `users` AS u ON u.id = ua.user_id
             JOIN `roles` AS r ON r.id = ua.role_id
             JOIN `companies` AS c ON ua.company_id = c.id
-            WHERE ua.id = #{userAccountId};
+            WHERE ua.id = #{userAccountId}
+            AND ua.exit IS NULL
+            AND ua.ban = 0;
             """)
     Optional<UserInfoDto> selectUserInfoByUserAccountId(Long userAccountId);
 
@@ -72,4 +76,30 @@ public interface UserAccountsRepository {
             WHERE `id` = #{userAccountId};
             """)
     Integer updateUserStateCheckOut(Long userAccountId);
+
+    @Select("""
+            SELECT
+            ua.id AS 'userAccountId',
+            ua.company_id AS 'companyId',
+            u.name AS 'name',
+            u.phone AS 'phone',
+            ua.email AS 'email',
+            ua.equipment_id AS 'equipmentId'
+            FROM `user_accounts` AS ua
+            JOIN `users` AS u ON u.id = ua.user_id
+            WHERE ua.company_id = #{companyId}
+            AND ua.id != #{userAccountId}
+            AND ua.exit IS NULL
+            AND ua.ban = 0;
+            """)
+    List<HrUserDto> getCompanyUserList(Long companyId, Long userAccountId);
+
+    @Update("""
+            UPDATE `user_accounts`
+            SET
+                `equipment_id` = #{equipmentId}
+            WHERE `id` = #{userAccountId};
+            """)
+    Boolean assignEquipment(Long userAccountId, Long equipmentId);
+
 }
