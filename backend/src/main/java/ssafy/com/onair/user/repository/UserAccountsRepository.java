@@ -56,4 +56,20 @@ public interface UserAccountsRepository {
             WHERE ua.email = #{userEmail};
             """)
     Integer updateUserInfo(String password, String userEmail);
+
+    @Update("""
+            UPDATE `user_accounts`
+            SET
+               `online` = 1
+            WHERE `id` = #{userAccountId};
+            """)
+    Integer updateUserStateCheckIn(Long userAccountId);
+
+    @Update("""
+            UPDATE `user_accounts`
+            SET
+               `online` = 0
+            WHERE `id` = #{userAccountId};
+            """)
+    Integer updateUserStateCheckOut(Long userAccountId);
 }
