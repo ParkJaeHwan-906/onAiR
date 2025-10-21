@@ -153,10 +153,11 @@ CREATE TABLE `tasks`(
 --	`task_bundle_id` BIGINT NOT NULL,
 	`equipment_id` BIGINT NOT NULL,
 	`company_id` BIGINT NOT NULL,
-	`user_account_id`BIGINT NOT NULL,
+	`user_account_id`BIGINT DEFAULT NULL COMMENT '업무 책임자',
 --	`address` TEXT NOT NULL COMMENT '업무를 진행할 위치 (도로명 주소)',
 	`request` TEXT NOT NULL COMMENT '업무 요청사항',
 	`action` INT DEFAULT 1 COMMENT '0 : 취소, 1 : 진행 전, 2 : 진행중, 3 : 완료',
+	`solution` TEXT DEFAULT NULL,
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 --	FOREIGN KEY(`task_bundle_id`) REFERENCES `task_bundles`(`id`)
