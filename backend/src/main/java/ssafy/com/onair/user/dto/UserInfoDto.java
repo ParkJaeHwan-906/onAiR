@@ -15,4 +15,8 @@ public class UserInfoDto {
     private String email;
     private String role;
     private String password = null;
+    private Long equipmentId;
+    private String equipmentName;
+    private Long equipmentCategoryId;
+    private String equipmentCategoryName;
 }
