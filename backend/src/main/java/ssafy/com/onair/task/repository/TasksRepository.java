@@ -78,4 +78,41 @@ public interface TasksRepository {
             WHERE `id` = #{taskId};
             """)
     Integer assignTaskToWorker(Long userAccountId, Long taskId);
+
+    @Update("""
+            UPDATE `tasks` SET
+                `action` = 3
+            WHERE `id` = #{taskId};
+            """)
+    Integer endTaskAsAdmin(Long taskId);
+
+    @Update("""
+            UPDATE `tasks` SET
+                `action` = 0
+            WHERE `id` = #{taskId};
+            """)
+    Integer cancelTaskAsAdmin(Long taskId);
+
+    @Update("""
+            UPDATE `tasks` SET
+                `action` = 3
+            WHERE `id` = #{taskId}
+            AND `user_account_id` = #{userAccountId};
+            """)
+    Integer endTaskAsWorker(Long userAccountId, Long taskId);
+
+    @Update("""
+            UPDATE `tasks` SET
+                `action` = 0
+            WHERE `id` = #{taskId}
+            AND `user_account_id` = #{userAccountId};
+            """)
+    Integer cancelTaskAsWorker(Long userAccountId, Long taskId);
+
+    @Update("""
+            UPDATE `tasks` SET
+                `user_account_id` = #{userAccountId};
+            WHERE `id` = #{taskId};
+            """)
+    Integer reAssignTaskToWorker(Long userAccountId, Long taskId);
 }

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import ssafy.com.onair.global.jwt.user.CustomUserDetails;
 import ssafy.com.onair.task.dto.InsertTaskRequestDto;
 import ssafy.com.onair.global.response.dto.ApiResponse;
+import ssafy.com.onair.task.dto.ReAssignTaskRequestDto;
 import ssafy.com.onair.task.dto.TaskListDto;
 import ssafy.com.onair.task.dto.TaskStatusChangeRequestDto;
 import ssafy.com.onair.task.service.TaskServiceImpl;
@@ -43,6 +44,20 @@ public class TaskController {
     @PatchMapping("/end")
     public ResponseEntity<ApiResponse<Boolean>> endTask(@AuthenticationPrincipal CustomUserDetails user,
                                                         @RequestBody TaskStatusChangeRequestDto request) {
-        return ResponseEntity.ok(ApiResponse.success(null));
+        return ResponseEntity.ok(ApiResponse.success(taskService.endTask(user, request)));
     }
+
+    @PatchMapping("/cancel")
+    public ResponseEntity<ApiResponse<Boolean>> cancelTask(@AuthenticationPrincipal CustomUserDetails user,
+                                                        @RequestBody TaskStatusChangeRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(taskService.cancelTask(user, request)));
+    }
+
+    @PreAuthorize("hasRole('관리자')")
+    @PatchMapping("/reassign")
+    public ResponseEntity<ApiResponse<Boolean>> reAssignTask(@RequestBody ReAssignTaskRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(taskService.reAssignTask(request)));
+    }
+
+
 }
