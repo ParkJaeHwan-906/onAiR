@@ -5,11 +5,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public class EquipmentsDto {
+public class EquipmentCategoryDto {
     private Long id;
-    private Long equipment_category_id;
     private String name;
-    private String image;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
