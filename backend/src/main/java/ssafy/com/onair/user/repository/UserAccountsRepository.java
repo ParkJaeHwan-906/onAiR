@@ -108,5 +108,4 @@ public interface UserAccountsRepository {
             WHERE `id` = #{userAccountId};
             """)
     Boolean assignEquipment(Long userAccountId, Long equipmentId);
-
 }
