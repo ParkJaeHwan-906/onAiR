@@ -106,7 +106,6 @@ CREATE TABLE `company_equipments` (
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
 	`company_id` BIGINT NOT NULL COMMENT 'companies 테이블의 id 와 FK',
 	`equipment_id` BIGINT NOT NULL COMMENT 'equipments 테이블의 id 와 FK',
-	`name` VARCHAR(255) NOT NULL COMMENT '설비 이름', 
 	`deleted` DATETIME DEFAULT NULL COMMENT '해당 설비의 사용 여부',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
