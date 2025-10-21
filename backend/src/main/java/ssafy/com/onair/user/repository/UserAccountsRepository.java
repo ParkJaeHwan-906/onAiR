@@ -78,21 +78,28 @@ public interface UserAccountsRepository {
     Integer updateUserStateCheckOut(Long userAccountId);
 
     @Select("""
-            SELECT
-            ua.id AS 'userAccountId',
-            ua.company_id AS 'companyId',
-            u.name AS 'name',
-            u.phone AS 'phone',
-            ua.email AS 'email',
-            ua.equipment_id AS 'equipmentId'
-            FROM `user_accounts` AS ua
-            JOIN `users` AS u ON u.id = ua.user_id
-            WHERE ua.company_id = #{companyId}
-            AND ua.id != #{userAccountId}
-            AND ua.exit IS NULL
-            AND ua.ban = 0;
-            """)
-    List<HrUserDto> getCompanyUserList(Long companyId, Long userAccountId);
+        <script>
+        SELECT
+            ua.id AS userAccountId,
+            ua.company_id AS companyId,
+            u.name AS name,
+            u.phone AS phone,
+            ua.email AS email,
+            ua.equipment_id AS equipmentId
+        FROM user_accounts AS ua
+        JOIN users AS u ON u.id = ua.user_id
+        WHERE ua.company_id = #{companyId}
+          AND ua.id != #{userAccountId}
+          AND ua.exit IS NULL
+          AND ua.ban = 0
+        <if test="equipmentId != null">
+          AND ua.equipment_id = #{equipmentId}
+        </if>
+        ;
+        </script>
+        """)
+    List<HrUserDto> getCompanyUserList(Long companyId, Long userAccountId, Long equipmentId);
+
 
     @Update("""
             UPDATE `user_accounts`

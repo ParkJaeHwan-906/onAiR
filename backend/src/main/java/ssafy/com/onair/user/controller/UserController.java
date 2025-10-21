@@ -1,5 +1,6 @@
 package ssafy.com.onair.user.controller;
 
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,11 +49,9 @@ public class UserController {
 
     @PreAuthorize("hasRole('관리자')")
     @GetMapping("/list")
-    public ResponseEntity<ApiResponse<?>> getCompanyUserList(@AuthenticationPrincipal CustomUserDetails user) {
-        /**
-         * [TODO] 직원이 하나도 없을 때는?
-         */
-        return ResponseEntity.ok(ApiResponse.success(userService.getCompanyUserList(user)));
+    public ResponseEntity<ApiResponse<?>> getCompanyUserList(@AuthenticationPrincipal CustomUserDetails user,
+                                                             @Nullable @RequestParam Long equipmentId) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getCompanyUserList(user, equipmentId)));
     }
 
     @PreAuthorize("hasRole('관리자')")
