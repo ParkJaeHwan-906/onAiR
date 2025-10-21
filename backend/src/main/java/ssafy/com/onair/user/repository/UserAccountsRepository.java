@@ -42,11 +42,17 @@ public interface UserAccountsRepository {
             u.phone AS 'phone',
             u.birth AS 'birth',
             ua.email AS 'email',
-            r.role AS 'role'
+            r.role AS 'role',
+            e.id AS 'equipmentId',
+            e.`name` AS 'equipmentName',
+            ec.id AS 'equipmentCategoryId',
+            ec.`name` AS 'equipmentCategoryName'
             FROM `user_accounts` AS ua
             JOIN `users` AS u ON u.id = ua.user_id
             JOIN `roles` AS r ON r.id = ua.role_id
             JOIN `companies` AS c ON ua.company_id = c.id
+            LEFT JOIN `equipments` AS e ON ua.equipment_id = e.id
+            LEFT JOIN `equipment_categories` ec ON ec.id = e.equipment_category_id
             WHERE ua.id = #{userAccountId}
             AND ua.exit IS NULL
             AND ua.ban = 0;
