@@ -38,8 +38,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public List<HrUserDto> getCompanyUserList(CustomUserDetails user) {
-        List<HrUserDto> companyUserList = userAccountsRepository.getCompanyUserList(user.getCompanyId(), user.getUserAccountId());
+    public List<HrUserDto> getCompanyUserList(CustomUserDetails user, Long equipmentId) {
+        List<HrUserDto> companyUserList = userAccountsRepository.getCompanyUserList(user.getCompanyId(), user.getUserAccountId(), equipmentId);
         if(companyUserList == null) throw new IllegalArgumentException("잘못된 요청입니다.");
         return companyUserList;
     }
