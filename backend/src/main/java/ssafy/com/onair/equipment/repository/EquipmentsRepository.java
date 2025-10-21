@@ -16,7 +16,12 @@ public interface EquipmentsRepository {
     Integer insertEquipment(Long equipmentCategoryId, String name);
 
     @Select("""
-            SELECT `id`,`name` FROM `equipments`;
+            SELECT
+            e.id AS 'id',
+            ec.name AS 'category',
+            e.name AS 'name'
+            FROM `equipments` e
+            JOIN `equipment_categories` ec ON e.equipment_category_id = ec.id;
             """)
     List<EquipmentListDto> selectEquipmentList();
 }

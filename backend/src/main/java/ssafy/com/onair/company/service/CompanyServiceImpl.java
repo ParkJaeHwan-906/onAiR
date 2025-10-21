@@ -5,11 +5,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ssafy.com.onair.auth.dto.SignupRequestDto;
+import ssafy.com.onair.company.dto.CompanyEquipmentListDto;
 import ssafy.com.onair.company.dto.CompanyUuidResponseDto;
+import ssafy.com.onair.company.dto.InsertCompanyEquipmentRequestDto;
+import ssafy.com.onair.company.repository.CompanyEquipmentsRepository;
 import ssafy.com.onair.company.repository.CompanyRepository;
 import ssafy.com.onair.company.repository.CompanyUuidRepository;
 
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -17,6 +21,7 @@ import java.util.UUID;
 public class CompanyServiceImpl implements CompanyService {
     private final CompanyRepository companyRepository;
     private final CompanyUuidRepository companyUuidRepository;
+    private final CompanyEquipmentsRepository companyEquipmentsRepository;
 
     @Value("${company.uuid.expiration}")
     private Long companyUuidExpiration;
@@ -46,5 +51,15 @@ public class CompanyServiceImpl implements CompanyService {
         return CompanyUuidResponseDto.builder()
                 .token(companyUUID)
                 .build();
+    }
+
+    @Override
+    public Boolean registCompanyEquipment(Long companyId, InsertCompanyEquipmentRequestDto request) {
+        return companyEquipmentsRepository.insertCompanyEquipments(companyId, request.getEquipmentId()) == 1;
+    }
+
+    @Override
+    public List<CompanyEquipmentListDto> getCompanyEquipmentList(Long companyId) {
+        return companyEquipmentsRepository.selectCompanyEquipmentListByCompanyId(companyId);
     }
 }

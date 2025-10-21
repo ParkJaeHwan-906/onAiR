@@ -57,9 +57,6 @@ public class UserController {
     @PreAuthorize("hasRole('관리자')")
     @PatchMapping("/equipment")
     public ResponseEntity<ApiResponse<Boolean>> assignEquipment(@RequestBody AssignEquipmentRequestDto request) {
-        /**
-         * [TODO] 장비 할당 잘 되는지?
-         */
         return ResponseEntity.ok(ApiResponse.success(userService.assignEquipment(request.getUserAccountId(), request.getEquipmentId())));
     }
 }
