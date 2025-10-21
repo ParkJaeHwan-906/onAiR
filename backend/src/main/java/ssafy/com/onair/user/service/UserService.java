@@ -9,6 +9,6 @@ import java.util.List;
 public interface UserService {
     Boolean editUserInfo(UserInfoDto reqUser, UserInfoDto request);
     Boolean ValidationUserInto(String userEmail, String password);
-    List<HrUserDto> getCompanyUserList(CustomUserDetails user);
+    List<HrUserDto> getCompanyUserList(CustomUserDetails user, Long equipmentId);
     Boolean assignEquipment(Long userAccountId, Long equipmentId);
 }
