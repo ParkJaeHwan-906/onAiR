@@ -3,11 +3,14 @@ package ssafy.com.onair.task.controller;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import ssafy.com.onair.global.jwt.user.CustomUserDetails;
+import ssafy.com.onair.sse.manager.SseManager;
 import ssafy.com.onair.task.dto.InsertTaskRequestDto;
 import ssafy.com.onair.global.response.dto.ApiResponse;
 import ssafy.com.onair.task.dto.ReAssignTaskRequestDto;
@@ -22,6 +25,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TaskController {
     private final TaskServiceImpl taskService;
+    private final SseManager sseManager;
 
     @PreAuthorize("hasRole('관리자')")
     @PostMapping("/regist")
@@ -32,8 +36,9 @@ public class TaskController {
 
     @GetMapping("/list")
     public ResponseEntity<ApiResponse<List<TaskListDto>>> getTaskList(@AuthenticationPrincipal CustomUserDetails user,
-                                                                      @Nullable @RequestParam Long equipmentId) {
-        return ResponseEntity.ok(ApiResponse.success(taskService.getTaskList(user, equipmentId)));
+                                                                      @Nullable @RequestParam Long equipmentId,
+                                                                      @Nullable @RequestParam Integer action) {
+        return ResponseEntity.ok(ApiResponse.success(taskService.getTaskList(user, equipmentId, action)));
     }
 
     @PatchMapping("/assign")
@@ -54,10 +59,14 @@ public class TaskController {
     }
 
     @PreAuthorize("hasRole('관리자')")
-    @PatchMapping("/reassign")
-    public ResponseEntity<ApiResponse<Boolean>> reAssignTask(@RequestBody ReAssignTaskRequestDto request) {
-        return ResponseEntity.ok(ApiResponse.success(taskService.reAssignTask(request)));
+    @PatchMapping("/assign/re")
+    public ResponseEntity<ApiResponse<Boolean>> reAssignTask(@AuthenticationPrincipal CustomUserDetails user,
+                                                             @RequestBody ReAssignTaskRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(taskService.reAssignTask(user, request)));
     }
 
-
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter connectSse(@AuthenticationPrincipal CustomUserDetails user) {
+        return sseManager.connSse(user);
+    }
 }
