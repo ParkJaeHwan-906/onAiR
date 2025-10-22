@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 @Mapper
 public interface UsersRepository {
@@ -28,4 +29,11 @@ public interface UsersRepository {
             WHERE ua.email = #{userEmail};
             """)
     Integer updateUserInfo(String userName, String userPhone, LocalDate userBirth, String userEmail);
+
+    @Select("""
+            SELECT `name` FROM `users` u
+            JOIN `user_accounts` ua ON u.id = ua.user_id
+            WHERE ua.id = #{userAccountId};
+            """)
+    Optional<String> selectUserNameByUserAccountId(Long userAccountId);
 }
