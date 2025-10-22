@@ -37,9 +37,12 @@ public interface TasksRepository {
             <if test="equipmentId != null">
                 AND t.equipment_id = #{equipmentId}
             </if>
+            <if test="action != null">
+                AND t.action = #{action}
+            </if>
             </script>
             """)
-    List<TaskListDto> getTaskListAsAdmin(Long companyId, Long equipmentId);
+    List<TaskListDto> getTaskListAsAdmin(Long companyId, Long equipmentId, Integer action);
 
     @Select("""
             SELECT
@@ -58,6 +61,7 @@ public interface TasksRepository {
             LEFT JOIN `users` u ON u.id = ua.user_id
             WHERE t.company_id = #{companyId}
             AND t.equipment_id = #{equipmentId}
+            AND t.action = 1;
             """)
     List<TaskListDto> getTaskListAsWorker(Long companyId, Long equipmentId);
 
@@ -109,10 +113,11 @@ public interface TasksRepository {
             """)
     Integer cancelTaskAsWorker(Long userAccountId, Long taskId);
 
-    @Update("""
-            UPDATE `tasks` SET
-                `user_account_id` = #{userAccountId};
-            WHERE `id` = #{taskId};
+    @Select("""
+            SELECT
+            `equipment_id`
+            FROM `tasks`
+            WHERE id = #{taskId};
             """)
-    Integer reAssignTaskToWorker(Long userAccountId, Long taskId);
+    Optional<Long> selectEquipmentIdById(Long taskId);
 }
