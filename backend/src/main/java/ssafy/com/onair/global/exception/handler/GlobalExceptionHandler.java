@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import ssafy.com.onair.global.response.dto.ApiResponse;
 
+import java.sql.SQLIntegrityConstraintViolationException;
+
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -50,5 +52,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Object>> handleJwtException(JwtException e) {
         log.error("JwtException Reason : {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail("인증이 필요합니다."));
+    }
+
+    @ExceptionHandler(SQLIntegrityConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleJwtException(SQLIntegrityConstraintViolationException e) {
+        log.error("SQLIntegrityConstraintViolationException Reason : {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail("잘못된 요청입니다."));
     }
 }
