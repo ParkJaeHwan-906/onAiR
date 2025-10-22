@@ -12,7 +12,7 @@ import java.util.List;
 public interface EquipmentCategoriesRepository {
     @Insert("""
             INSERT INTO `equipment_categories`(`name`)
-            VALUES (#{equipmentName});
+            VALUES (REPLACE(#{equipmentName}, ' ', ''));
             """)
     Integer insertEquipmentCategory(String equipmentName);
 

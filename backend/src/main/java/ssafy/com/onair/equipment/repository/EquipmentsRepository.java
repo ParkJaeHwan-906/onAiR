@@ -11,7 +11,7 @@ import java.util.List;
 public interface EquipmentsRepository {
     @Insert("""
             INSERT INTO `equipments`(`equipment_category_id`, `name`) VALUES
-            (#{equipmentCategoryId}, #{name});
+            (#{equipmentCategoryId}, REPLACE(#{name}, ' ', ''));
             """)
     Integer insertEquipment(Long equipmentCategoryId, String name);
 
