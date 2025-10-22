@@ -28,60 +28,6 @@ CREATE TABLE `company_uuid` (
 	FOREIGN KEY(`company_id`) REFERENCES `companies`(`id`)
 ) COMMENT '기업 내 직원 관리를 위한 UUID 저장';
 
-CREATE TABLE `users`(
-	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-	`name` VARCHAR(30) NOT NULL COMMENT '사용자 이름',
-	`birth` DATE NOT NULL COMMENT '사용자 생년월일',
-	`phone` VARCHAR(11) NOT NULL COMMENT '사용자 휴대폰 번호',
-	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) COMMENT '사용자의 기본 정보를 저장';
-
-CREATE TABLE `user_accounts`(
-	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-	`user_id` BIGINT NOT NULL COMMENT 'users 테이블의 id 와 FK',
-	`company_id` BIGINT NOT NULL COMMENT 'company 테이블의 id 와 FK',
-	`email` VARCHAR(100) NOT NULL UNIQUE KEY COMMENT '계정 id 로 사용할 이메일',
-	`password` VARCHAR(255) NOT NULL COMMENT '계정 패스워드',
-	`role_id` BIGINT NOT NULL DEFAULT 2 COMMENT '계정의 권한 ( 기본은 사용자 )',
-	`online` TINYINT NOT NULL DEFAULT 0 COMMENT '온라인(출근) 여부 ( 0 : X, 1 : O )',
-	`equipment_id` BIGINT DEFAULT NULL COMMENT 'equipments 테이블의 id와 FK (주 담당 설비)',
-	`ban` TINYINT NOT NULL DEFAULT 0 COMMENT '계정의 ban 여부를 확인 ( 0 : X, 1 : O )',
-	`exit` DATE DEFAULT NULL COMMENT '계정의 탈퇴 여부를 확인',
-	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-	FOREIGN KEY(`role_id`) REFERENCES `roles`(`id`)
-		ON UPDATE CASCADE
-		ON DELETE CASCADE,
-	FOREIGN KEY(`company_id`) REFERENCES `companies`(`id`)
-		ON UPDATE CASCADE
-		ON DELETE CASCADE,
-	FOREIGN KEY(`user_id`) REFERENCES `users`(`id`)
-		ON UPDATE CASCADE
-		ON DELETE CASCADE
-) COMMENT '사용자의 계정 정보를 저장';
-
-CREATE TABLE `refresh_token`(
-	`user_account_id` BIGINT NOT NULL,
-	`refresh_token` VARCHAR(255) NOT NULL,
-	`expired_at` DATETIME NOT NULL,
-	FOREIGN KEY(`user_account_id`) REFERENCES `user_accounts`(`id`)
-		ON UPDATE CASCADE
-		ON DELETE CASCADE
-) COMMENT '사용자의 리프레쉬 토큰 정보를 저장';
-
-CREATE TABLE attendance (
-     `user_account_id` BIGINT NOT NULL,
-     `work_date` DATE NOT NULL,
-     `check_in_time` DATETIME DEFAULT NULL,
-     `check_out_time` DATETIME DEFAULT NULL,
-     `total_work_minutes` INT DEFAULT NULL,
-     PRIMARY KEY (`user_account_id`, `work_date`),
- 	 FOREIGN KEY (`user_account_id`) REFERENCES `user_accounts`(`id`)
-         ON DELETE CASCADE
-         ON UPDATE CASCADE
- ) COMMENT '근로자들의 근태관리를 위한 테이블';
-
 -- 설비 정보 --
 CREATE TABLE `equipment_categories`(
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -94,7 +40,7 @@ CREATE TABLE `equipments` (
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
 	`equipment_category_id` BIGINT NOT NULL COMMENT 'equipment_categories 테이블의 id와 FK',
 	`name` VARCHAR(255) NOT NULL COMMENT '설비 이름',
-	`image` VARCHAR(255) DEFAULT NULL COMMENT '설비 사진url (S3 endPoint)', 
+	`image` VARCHAR(255) DEFAULT NULL COMMENT '설비 사진url (S3 endPoint)',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	FOREIGN KEY(`equipment_category_id`) REFERENCES `equipment_categories`(`id`)
@@ -129,6 +75,63 @@ CREATE TABLE `equipment_faq` (
 		ON UPDATE CASCADE
 		ON DELETE CASCADE
 ) COMMENT '각 설비의 이전 작업 이력 및 메뉴얼 내용';
+
+CREATE TABLE `users`(
+	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+	`name` VARCHAR(30) NOT NULL COMMENT '사용자 이름',
+	`birth` DATE NOT NULL COMMENT '사용자 생년월일',
+	`phone` VARCHAR(11) NOT NULL COMMENT '사용자 휴대폰 번호',
+	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT '사용자의 기본 정보를 저장';
+
+CREATE TABLE `user_accounts`(
+	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+	`user_id` BIGINT NOT NULL COMMENT 'users 테이블의 id 와 FK',
+	`company_id` BIGINT NOT NULL COMMENT 'company 테이블의 id 와 FK',
+	`email` VARCHAR(100) NOT NULL UNIQUE KEY COMMENT '계정 id 로 사용할 이메일',
+	`password` VARCHAR(255) NOT NULL COMMENT '계정 패스워드',
+	`role_id` BIGINT NOT NULL DEFAULT 2 COMMENT '계정의 권한 ( 기본은 사용자 )',
+	`online` TINYINT NOT NULL DEFAULT 0 COMMENT '온라인(출근) 여부 ( 0 : X, 1 : O )',
+	`equipment_id` BIGINT DEFAULT NULL COMMENT 'equipments 테이블의 id와 FK (주 담당 설비)',
+	`ban` TINYINT NOT NULL DEFAULT 0 COMMENT '계정의 ban 여부를 확인 ( 0 : X, 1 : O )',
+	`exit` DATE DEFAULT NULL COMMENT '계정의 탈퇴 여부를 확인',
+	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	FOREIGN KEY(`equipment_id`) REFERENCES `equipments`(`id`)
+    		ON UPDATE CASCADE
+    		ON DELETE CASCADE,
+	FOREIGN KEY(`role_id`) REFERENCES `roles`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE,
+	FOREIGN KEY(`company_id`) REFERENCES `companies`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE,
+	FOREIGN KEY(`user_id`) REFERENCES `users`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
+) COMMENT '사용자의 계정 정보를 저장';
+
+CREATE TABLE `refresh_token`(
+	`user_account_id` BIGINT NOT NULL,
+	`refresh_token` VARCHAR(255) NOT NULL,
+	`expired_at` DATETIME NOT NULL,
+	FOREIGN KEY(`user_account_id`) REFERENCES `user_accounts`(`id`)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
+) COMMENT '사용자의 리프레쉬 토큰 정보를 저장';
+
+CREATE TABLE attendance (
+     `user_account_id` BIGINT NOT NULL,
+     `work_date` DATE NOT NULL,
+     `check_in_time` DATETIME DEFAULT NULL,
+     `check_out_time` DATETIME DEFAULT NULL,
+     `total_work_minutes` INT DEFAULT NULL,
+     PRIMARY KEY (`user_account_id`, `work_date`),
+ 	 FOREIGN KEY (`user_account_id`) REFERENCES `user_accounts`(`id`)
+         ON DELETE CASCADE
+         ON UPDATE CASCADE
+ ) COMMENT '근로자들의 근태관리를 위한 테이블';
 
 -- 업무 --
 -- CREATE TABLE `task_bundles`(
