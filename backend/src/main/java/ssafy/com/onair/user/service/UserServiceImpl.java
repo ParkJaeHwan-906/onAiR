@@ -44,6 +44,7 @@ public class UserServiceImpl implements UserService {
         return companyUserList;
     }
 
+    @Transactional
     @Override
     public Boolean assignEquipment(Long userAccountId, Long equipmentId) {
         return userAccountsRepository.assignEquipment(userAccountId, equipmentId);
