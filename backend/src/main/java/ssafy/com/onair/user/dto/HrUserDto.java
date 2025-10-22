@@ -9,4 +9,5 @@ public class HrUserDto {
     private String phone;
     private String email;
     private Long equipmentId;
+    private String equipmentName;
 }

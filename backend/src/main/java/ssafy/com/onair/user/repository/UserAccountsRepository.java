@@ -91,9 +91,11 @@ public interface UserAccountsRepository {
             u.name AS name,
             u.phone AS phone,
             ua.email AS email,
-            ua.equipment_id AS equipmentId
+            ua.equipment_id AS equipmentId,
+            e.name AS equipmentName
         FROM user_accounts AS ua
         JOIN users AS u ON u.id = ua.user_id
+        LEFT JOIN `equipments` e ON e.id = ua.`equipment_id`
         WHERE ua.company_id = #{companyId}
           AND ua.id != #{userAccountId}
           AND ua.exit IS NULL
