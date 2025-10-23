@@ -1,4 +1,4 @@
-package ssafy.com.onair.webrtc;
+package ssafy.com.onair.webrtc.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ssafy.com.onair.global.jwt.user.CustomUserDetails;
 import ssafy.com.onair.global.response.dto.ApiResponse;
+import ssafy.com.onair.webrtc.service.WebRtcService;
 
 
 @RestController

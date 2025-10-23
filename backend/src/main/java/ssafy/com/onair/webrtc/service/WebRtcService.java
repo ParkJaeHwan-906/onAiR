@@ -1,4 +1,4 @@
-package ssafy.com.onair.webrtc;
+package ssafy.com.onair.webrtc.service;
 
 import io.livekit.server.*;
 import org.springframework.beans.factory.annotation.Value;
