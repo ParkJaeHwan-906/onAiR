@@ -7,10 +7,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ssafy.com.onair.global.jwt.user.CustomUserDetails;
 import ssafy.com.onair.global.response.dto.ApiResponse;
+import ssafy.com.onair.user.dto.UserInfoDto;
+import ssafy.com.onair.user.repository.UserAccountsRepository;
 import ssafy.com.onair.webrtc.dto.WebRtcRequestDto;
 import ssafy.com.onair.webrtc.dto.WebRtcResponseDto;
 import ssafy.com.onair.webrtc.service.WebRtcService;
 
+import java.time.LocalDateTime;
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -19,16 +23,13 @@ public class WebRtcController {
 
     private final WebRtcService webRtcService;
 
-
-
     @PostMapping("/request")
     public ResponseEntity<?> request(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @AuthenticationPrincipal CustomUserDetails senderDetails,
             @RequestBody WebRtcRequestDto webRtcRequestDto
     ){
-
         // 연결 요청 메서드
-        webRtcService.requestConnection(webRtcRequestDto, userDetails);
+        webRtcService.requestConnection(webRtcRequestDto, senderDetails);
 
         // 응답
         return ResponseEntity
@@ -38,22 +39,48 @@ public class WebRtcController {
 
     @PostMapping("/response")
     public ResponseEntity<?> response(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @AuthenticationPrincipal CustomUserDetails receiverDetails,
             @RequestBody WebRtcResponseDto webRtcResponseDto
     ){
+        // 거절요청이라면 sender에 sse로 거절 사실 전달 -> return
+        if(!webRtcResponseDto.acceptConnection()){
+            // 거절 사실 전달
+            webRtcService.responseConnection(webRtcResponseDto, receiverDetails, null);
+            // 응답
+            return ResponseEntity
+                    .status(HttpStatus.ACCEPTED)
+                    .body(ApiResponse.success(null)
+                    );
+        }
+        // 토큰 생성하기
+        String roomName = "room_" + LocalDateTime.now();
+        String metadata = "metadata";   // TODO: 의미 있는 메타데이터로 바꾸기
 
-        // TODO: 거절요청이라면 sender에 sse로 거절 사실 전달 -> return
+        // 수신자 토큰
+        String receiverAccessToken = webRtcService.createToken(
+                receiverDetails.getUsername(),
+                receiverDetails.getUserAccountId() + "",
+                metadata,
+                roomName
+            );
 
-        // TODO: 토큰 생성하기
+        // 발신자 토큰
+        String senderAccessToken = webRtcService.createToken(
+                webRtcResponseDto.senderName(),
+                webRtcResponseDto.senderAccountId() + "",
+                metadata,
+                roomName
+            );
 
-        // TODO: sender에 sse로 토큰 전달
+        // sender에 sse로 토큰 전달
+        webRtcService.responseConnection(webRtcResponseDto, receiverDetails, senderAccessToken);
 
-
-
-        // TODO: 응답(토큰 포함)
+        // 응답(토큰 포함)
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)
-                .body(ApiResponse.success(null));
+                .body(ApiResponse.success(Map.of(
+                        "accessToken", receiverAccessToken
+                )));
     }
 
 
@@ -62,9 +89,6 @@ public class WebRtcController {
     public ResponseEntity<?> createToken(
             @AuthenticationPrincipal CustomUserDetails userDetails
     ){
-
-        // TODO: 여러 작업자의 요청 대응하기
-
         // 토큰 생성
         String webrtcToken = webRtcService.createToken(
                 userDetails.getUsername(),
@@ -72,9 +96,6 @@ public class WebRtcController {
                 "metadata", // TODO: 의미 있는 메타데이터로 바꾸기
                 "room_" + userDetails.getUsername() + "_" + userDetails.getUserAccountId()
         );
-
-        // TODO: SSE로 관제실 서버에 먼저 토큰 보내주기
-
 
         // 작업자에게 토큰 보내주기
         return ResponseEntity
