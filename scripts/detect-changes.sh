@@ -3,9 +3,9 @@
 CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null)
 SERVICES=""
 
-# CI/CD 관련 파일 변경 시 docker-compose의 모든 서비스 재배포
+# CI/CD 관련 파일 변경 시 docker compose의 모든 서비스 재배포
 if echo "$CHANGED_FILES" | grep -qE "^(Jenkinsfile|docker-compose.yml)"; then
-    ALL_SERVICES=$(docker-compose config --services 2>/dev/null || echo "")
+    ALL_SERVICES=$(docker compose config --services 2>/dev/null || echo "")
     if [ -n "$ALL_SERVICES" ]; then
         SERVICES="$ALL_SERVICES"
     else

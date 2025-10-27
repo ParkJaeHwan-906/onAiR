@@ -62,7 +62,7 @@ pipeline {
         }
         failure {
             echo "❌ Deployment failed"
-            sh 'docker-compose logs --tail=50 || true'
+            sh 'docker compose logs --tail=50 || true'
         }
         always {
             cleanWs()
