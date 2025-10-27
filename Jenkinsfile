@@ -6,23 +6,23 @@ pipeline {
         DOCKER_TAG = "${BUILD_NUMBER}"
         CONTAINER_NAME = 'spring'
         
-        # Database
+        // Database
         SPRING_DB_USERNAME = credentials('SPRING_DB_USERNAME')
         SPRING_DB_PASSWORD = credentials('SPRING_DB_PASSWORD')
         
-        # JWT
+        // JWT
         JWT_SECRET = credentials('JWT_SECRET')
         JWT_ACCESS_TOKEN_EXPIRATION = credentials('JWT_ACCESS_TOKEN_EXPIRATION')
         JWT_REFRESH_TOKEN_EXPIRATION = credentials('JWT_REFRESH_TOKEN_EXPIRATION')
         
-        # LiveKit
+        //  LiveKit
         LIVEKIT_API_KEY = credentials('LIVEKIT_API_KEY')
         LIVEKIT_API_SECRET = credentials('LIVEKIT_API_SECRET')
         
-        # Company UUID
+        //  Company UUID
         COMPANY_UUID_EXPIRATION = credentials('COMPANY_UUID_EXPIRATION')
         
-        # Spring Security
+        // Spring Security
         SPRING_SECURITY_USER_NAME = credentials('SPRING_SECURITY_USER_NAME')
         SPRING_SECURITY_USER_PASSWORD = credentials('SPRING_SECURITY_USER_PASSWORD')
     }
