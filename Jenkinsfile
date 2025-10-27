@@ -1,10 +1,12 @@
 pipeline {
     agent any
     
+    // Jenkins가 실행하는 모든 하위 프로세스(deploy.sh, docker compose 등)에 환경변수로 전달
     environment {
         
         // Database
-        SPRING_DB_USERNAME = credentials('SPRING_DB_USERNAME')
+        // Jenkins의 Credentials 저장소에서 ID가 SPRING_DB_USERNAME인 credential을 찾아서 가져옴
+        SPRING_DB_USERNAME = credentials('SPRING_DB_USERNAME') 
         SPRING_DB_PASSWORD = credentials('SPRING_DB_PASSWORD')
         
         // JWT
