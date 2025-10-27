@@ -2,9 +2,6 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_IMAGE = 'backend'
-        DOCKER_TAG = "${BUILD_NUMBER}"
-        CONTAINER_NAME = 'spring'
         
         // Database
         SPRING_DB_USERNAME = credentials('SPRING_DB_USERNAME')
