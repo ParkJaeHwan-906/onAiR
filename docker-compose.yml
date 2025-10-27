@@ -4,7 +4,8 @@ services:
     build: ./backend
     ports: 
       - 8080:8080
-    network_mode: bridge
+    networks:
+      - onair-network # 커스텀 네트워크 사용 
     environment:
       # Application
       - SPRING_APPLICATION_NAME=demo
@@ -30,3 +31,8 @@ services:
       # Logging
       - LOGGING_LEVEL_COM_ZAXXER_HIKARI=info
       - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+
+# 도커 네트워크 설정 
+networks:
+  onair-network:
+    external: true  # 이미 생성된 네트워크 사용
