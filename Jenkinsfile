@@ -32,6 +32,7 @@ pipeline {
             }
         }
 
+
         stage('Detect Changes') {
             steps {
                 script {
