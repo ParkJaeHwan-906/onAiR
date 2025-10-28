@@ -24,14 +24,12 @@ pipeline {
         SPRING_SECURITY_USER_PASSWORD = credentials('SPRING_SECURITY_USER_PASSWORD')
     }
     
-    
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
-
 
         stage('Detect Changes') {
             steps {

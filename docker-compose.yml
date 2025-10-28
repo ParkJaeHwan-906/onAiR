@@ -2,8 +2,8 @@ services:
   backend:
     container_name: spring
     build: ./backend
-    ports: 
-      - 8080:8080
+    expose: # nginx 리버스 프록시를 사용하므로 ports 대신 expose 사용
+      - "8080"
     networks:
       - onair-network # 커스텀 네트워크 사용 
     environment:
@@ -31,6 +31,14 @@ services:
       # Logging
       - LOGGING_LEVEL_COM_ZAXXER_HIKARI=info
       - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+
+  frontend:
+    container_name: react
+    build: ./frontend
+    expose: 
+      - "3000"
+    networks:
+      - onair-network # 커스텀 네트워크 사용 
 
 # 도커 네트워크 설정 
 networks:
