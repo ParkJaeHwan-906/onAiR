@@ -40,6 +40,11 @@ export const OverlayCanvas = () =>{
     isDrawing.current = false
   }
 
+  const handleSerialize = () => {
+    const json = JSON.stringify(lines)
+    console.log(json);    
+  }
+
   return (
     <>
       <select
@@ -51,6 +56,17 @@ export const OverlayCanvas = () =>{
         <option value={'brush'}>Brush</option>
         <option value={'eraser'}>Eraser</option>
       </select>
+      <button
+        onClick={handleSerialize}
+        style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          zIndex: 1
+        }}
+      >
+        Serialize
+      </button>
       <Stage 
         width={window.innerWidth} 
         height={window.innerHeight}
