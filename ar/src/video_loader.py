@@ -1,15 +1,20 @@
 import cv2
 import os
 
-def load_video(idx):
-    path = f"../data/{idx}.mp4"
-    video = cv2.VideoCapture(path)
-    if not video.isOpened():
-        raise FileNotFoundError(f"'{path}' 파일을 열 수 없습니다.")
+def load_video(source):
+    """
+    비디오 캡처 객체 로드
+    Parameters:
+        source : int | str
+            0이면 웹캠, 문자열이면 영상 파일 경로
+            -> 라즈베리파이에 올릴 수 있으면 webcam 으로 쓸 수도 있지 않을까?
+    Returns:
+        cap : cv2.VideoCapture 객체
+    """
+    if isinstance(source, str) and not os.path.exists(source):
+        raise FileNotFoundError(f"Video file not found: {source}")
     
-    actual_fps = video.get(cv2.CAP_PROP_FPS)
-    total_frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
-
-    print(f"실제 동영상 파일의 FPS: {actual_fps}")
-    print(f"실제 동영상 파일의 총 프레임 수 (메타데이터): {total_frames}")
-    return video
+    cap = cv2.VideoCapture(source)
+    if not cap.isOpened():
+        raise IOError("Failed to open video source.")    
+    return cap
