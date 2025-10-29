@@ -1,0 +1,37 @@
+.home-small {
+  width: 382px;
+  height: 313px;
+  border-radius: 16px;
+  background-color: #FFFFFF;
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-small-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-family: 'NotoSansKR';
+  font-size: 20px;
+  font-weight: 800;
+  color: #2E2E2E;
+}
+
+.status {
+  font-family: 'NotoSansKR';
+  font-size: 36px;
+  font-weight: 800;
+  color: #2e2e2e;
+  margin-top: 22px;
+  align-self: flex-start;
+}
+
+.gauge-wrapper {
+  display: flex;
+  justify-content: center;
+}
