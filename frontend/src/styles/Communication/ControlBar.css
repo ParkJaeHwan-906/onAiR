@@ -1,0 +1,64 @@
+.control-bar {
+  width: 972px;
+  height: 72px;
+  background-color: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+/* 내부 전체 묶음 (왼쪽 - 중앙 - 오른쪽) 정렬 */
+.control-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px; 
+}
+
+/* 아이콘 그룹  */
+.icon-group {
+  display: flex;
+  gap: 16px;
+}
+
+/* 버튼 공통 스타일 */
+.icon-button {
+  width: 48px;
+  height: 48px;
+  background-color: #f9fafb;
+  border: none;
+  border-radius: 9999px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.icon-button:hover {
+  background-color: #f3f4f6;
+  transform: scale(1.05);
+}
+
+.icon {
+  color: #111827;
+  flex-shrink: 0;
+
+}
+
+/* 종료 버튼 스타일 */
+.end-call {
+  background-color: #ef4444;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.end-call-icon {
+    color: #ffffff;
+}
+
+.end-call:hover {
+  background-color: #dc2626;
+  transform: scale(1.05);
+}
