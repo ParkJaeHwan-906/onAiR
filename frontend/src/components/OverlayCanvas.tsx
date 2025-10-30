@@ -1,14 +1,17 @@
 import { type KonvaEventObject } from "konva/lib/Node";
 import { useRef, useState } from "react";
 import { Layer, Line, Stage } from "react-konva";
+import type { DrawingLine } from "../types/DrawingLine";
 
-interface Line {
-  tool : string,
-  points : number[]
+interface CanvasProps {
+  handleSerialize : (lines : DrawingLine[]) => void
 }
-export const OverlayCanvas = () =>{
+
+export const OverlayCanvas = (
+  { handleSerialize } : CanvasProps
+) => {
   const [tool, setTool] = useState<string>('brush')
-  const [lines, setLines] = useState<Line[]>([])
+  const [lines, setLines] = useState<DrawingLine[]>([])
   const isDrawing = useRef(false)
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -47,13 +50,28 @@ export const OverlayCanvas = () =>{
         onChange={(e) => {
           setTool(e.target.value)
         }}
+        style={{
+          position: 'absolute',
+          zIndex: 1
+        }}
       >
         <option value={'brush'}>Brush</option>
         <option value={'eraser'}>Eraser</option>
       </select>
+      <button
+        onClick={() => handleSerialize(lines)}
+        style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          zIndex: 1
+        }}
+      >
+        Serialize
+      </button>
       <Stage 
-        width={window.innerWidth} 
-        height={window.innerHeight}
+        width= {800} 
+        height={600}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -66,11 +84,16 @@ export const OverlayCanvas = () =>{
             <Line
               key={i}
               points={line.points}
-              stroke={"#000000"}
+              stroke={"#ffffff"}
               strokeWidth={5}
               tension={0.5}
               lineCap="round"
               lineJoin="round"
+              shadowColor="red"
+              shadowBlur={20}
+              shadowOffsetX={5}
+              shadowOffsetY={5}
+              shadowOpacity={0.7}
               globalCompositeOperation={
                 line.tool === 'eraser' ? 'destination-out' : 'source-over'
               }

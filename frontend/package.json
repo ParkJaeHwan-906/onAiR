@@ -10,10 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.15",
+    "@livekit/components-styles": "^1.1.6",
     "konva": "^10.0.8",
+    "livekit-client": "^2.15.14",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-konva": "^19.2.0"
+    "react-konva": "^19.2.0",
+    "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
