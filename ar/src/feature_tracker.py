@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def track_features(prev_gray, cur_gray, prev_pts, max_err=20.0, max_move=50.0):
+def track_features(prev_gray, cur_gray, prev_pts, max_err=5.0, max_move=30.0):
     """
     Lucas–Kanade Optical Flow로 이전 프레임의 특징점 추적
     개선 버전 (오류 처리 + 이상치 필터링 포함)

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def extract_features(gray_frame, max_corners=500, quality=0.01, min_distance=30):
+def extract_features(gray_frame, max_corners=500, quality=0.005, min_distance=30):
     """
     Shi-Tomasi 코너 기반 특징점 추출
     Parameters:
