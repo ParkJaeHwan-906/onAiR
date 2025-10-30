@@ -1,0 +1,121 @@
+.worker-card {
+  width: 572px;
+  height: 68px;
+  background-color: #f9fbfb;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.worker-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.worker-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e5e7eb;
+}
+
+.top-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.worker-texts {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.worker-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 16px;
+}
+
+.worker-position {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.bottom-row {
+  margin-top: 2px;
+}
+
+.status-text {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 통신 대기 */
+.status-text.waiting {
+  color: #16a34a;
+}
+
+/* 통신 진행 */
+.status-text.active {
+  color: #3b82f6;
+}
+
+.dropdown-icon {
+  background: none;
+  border: none;
+  color: #6b7280;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropdown-icon:hover {
+  transform: scale(1.05);
+}
+
+.dropdown-icon:focus {
+  outline: none;
+}
+
+/* 드롭다운 */
+.dropdown-list {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  width: 100%;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  padding: 8px 0;
+  z-index: 10;
+}
+
+.dropdown-item {
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #374151;
+  transition: background-color 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
