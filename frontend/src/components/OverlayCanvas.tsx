@@ -50,6 +50,10 @@ export const OverlayCanvas = (
         onChange={(e) => {
           setTool(e.target.value)
         }}
+        style={{
+          position: 'absolute',
+          zIndex: 1
+        }}
       >
         <option value={'brush'}>Brush</option>
         <option value={'eraser'}>Eraser</option>
@@ -66,8 +70,8 @@ export const OverlayCanvas = (
         Serialize
       </button>
       <Stage 
-        width={window.innerWidth} 
-        height={window.innerHeight}
+        width= {800} 
+        height={600}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
