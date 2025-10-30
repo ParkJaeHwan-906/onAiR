@@ -87,14 +87,15 @@ public class WebRtcController {
 
     @GetMapping("/create-token")
     public ResponseEntity<?> createToken(
-            @AuthenticationPrincipal CustomUserDetails userDetails
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam String roomName
     ){
         // 토큰 생성
         String webrtcToken = webRtcService.createToken(
                 userDetails.getUsername(),
                 userDetails.getUserAccountId() + "",
                 "metadata", // TODO: 의미 있는 메타데이터로 바꾸기
-                "room_" + userDetails.getUsername() + "_" + userDetails.getUserAccountId()
+                roomName
         );
 
         // 작업자에게 토큰 보내주기
