@@ -93,7 +93,8 @@ public interface UserAccountsRepository {
             ua.email AS email,
             ua.equipment_id AS equipmentId,
             e.name AS equipmentName,
-            ua.`online` AS 'online'
+            ua.`online` AS 'online',
+            ua.`part` AS 'part'
         FROM user_accounts AS ua
         JOIN users AS u ON u.id = ua.user_id
         LEFT JOIN `equipments` e ON e.id = ua.`equipment_id`
