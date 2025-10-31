@@ -17,6 +17,8 @@ public class SignupRequestDto {
     // 회사 정보를 동적으로 헐당
     private String companyName;
     private Long companyId;
+    @NotBlank(message = "부서정보는 필수입니다.")
+    private String part;
     private Long roleId;        // companyName 으로 들어오면 관리자로 판단
     @NotBlank(message = "이메일은 필수입니다.")
     private String email;

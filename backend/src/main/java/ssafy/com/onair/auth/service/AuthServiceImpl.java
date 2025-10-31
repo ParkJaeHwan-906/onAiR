@@ -41,7 +41,7 @@ public class AuthServiceImpl implements AuthService{
             log.info("회원가입 요청 : {}", request.getEmail());
             request = companyService.fillCompanyInfo(request, companyUID);
             usersRepository.insertUser(request.getName(), request.getBirth(), request.getPhone());
-            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getCompanyId(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()), request.getRoleId());
+            userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getCompanyId(), request.getPart(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()), request.getRoleId());
             return true;
         } catch(Exception e) {
             throw new IllegalArgumentException("회원가입 도중 오류가 발생했습니다.");

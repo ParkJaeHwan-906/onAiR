@@ -8,6 +8,7 @@ public class HrUserDto {
     private String name;
     private String phone;
     private String email;
+    private String part;
     private Long equipmentId;
     private String equipmentName;
     private Boolean online;
