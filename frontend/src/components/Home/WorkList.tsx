@@ -9,7 +9,6 @@ type WorkListProps = {
 }
 
 const backColors = ['#F4C0C0', '#F9E9B5', '#B5BFE0', '#B6E7C8']
-
 const fontColors = ['#EF4444', '#FFBC11', '#1E40AF', '#22C55E']
 
 function WorkList({userName, solution, action, actionStatus, lastUpdateTime}: WorkListProps) {

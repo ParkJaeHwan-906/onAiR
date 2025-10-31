@@ -1,16 +1,17 @@
+import { useState } from 'react';
 import './App.css'
-import HomeSmall from './components/Home/HomeSmall';
-import HomeBig from './components/Home/HomeBig'
+import EmployeeBig from './components/Employee/EmployeeBig';
+import EmployeeDetail from './components/Employee/EmployeeDetail';
+import type { Employee } from './types/employee';
 
 function App() {
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+
   return (
-    // <HomeSmall
-    //   isGraph={true}
-    //   numInfo={'15'}
-    //   title={'오늘의 작업 수'}
-    //   value={40}
-    // />
-    <HomeBig title='오늘의 작업 목록' icon='icons/profile.png'/>
+    <div style={{width: '1920px', display: 'flex', flexDirection: 'row'}}>
+      <EmployeeBig onSelectEmployee={setSelectedEmployee} />
+      <EmployeeDetail employee={selectedEmployee} />
+    </div>
   );
 }
 
