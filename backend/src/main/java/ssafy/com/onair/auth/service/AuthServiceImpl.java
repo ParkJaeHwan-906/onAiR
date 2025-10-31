@@ -79,6 +79,7 @@ public class AuthServiceImpl implements AuthService{
     public LoginResponseDto login(LoginRequestDto request) {
         ValidUserAccountDto validUser = userAccountsRepository.selectUserByEmail(request.getEmail())
                         .orElseThrow(() -> new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요."));
+        System.out.println(validUser);
         if(!securityConfig.passwordEncoder().matches(request.getPassword(), validUser.getPassword())) throw new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요.");
 
         return LoginResponseDto.builder()

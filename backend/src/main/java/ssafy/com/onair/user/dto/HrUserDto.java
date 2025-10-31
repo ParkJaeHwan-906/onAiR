@@ -10,4 +10,5 @@ public class HrUserDto {
     private String email;
     private Long equipmentId;
     private String equipmentName;
+    private Boolean online;
 }
