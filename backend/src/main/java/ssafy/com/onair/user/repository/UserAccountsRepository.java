@@ -14,10 +14,10 @@ import java.util.Optional;
 @Mapper
 public interface UserAccountsRepository {
     @Insert("""
-            INSERT INTO `user_accounts`(`user_id`, `company_id`, `email`, `password`, `role_id`) VALUES
-            (#{userId}, #{companyId}, #{email}, #{password}, #{roleId});
+            INSERT INTO `user_accounts`(`user_id`, `company_id`, `part`, `email`, `password`, `role_id`) VALUES
+            (#{userId}, #{companyId}, #{part}, #{email}, #{password}, #{roleId});
             """)
-    Integer insertUserAccounts(Long userId, Long companyId, String email, String password, Long roleId);
+    Integer insertUserAccounts(Long userId, Long companyId, String part, String email, String password, Long roleId);
 
     @Select("""
             SELECT COUNT(*) FROM `user_accounts`
