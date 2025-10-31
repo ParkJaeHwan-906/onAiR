@@ -29,6 +29,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .list-header > div {
@@ -47,6 +48,17 @@
   height: 100%;
 }
 
+.list-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-body::-webkit-scrollbar {
+  display: none;
+}
+
 .second {
   width: 38.5%;
   height: 100%;
@@ -55,4 +67,12 @@
 .third {
   width: 24.5%;
   height: 100%;
+}
+
+.list-header > .fourth {
+  width: 17%;
+  height: 100%;
+  justify-content: flex-end;
+  padding-left: 0;
+  padding-right: 25px;
 }
