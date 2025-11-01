@@ -2,16 +2,16 @@ import '../../styles/HomeBig.css';
 import WorkList from '../Work/WorkList';
 
 const dummy = [
-  {id: 1, userName: '손동현', solution: '네트워크 장비 교체', action: 2, actionStatus: '작업중', lastUpdateTime: '19:08:01'},
-  {id: 2, userName: '최선우', solution: '개발 환경 구성', action: 2, actionStatus: '작업중', lastUpdateTime: '19:08:01'},
-  {id: 3, userName: '박재환', solution: '커피 타기', action: 3, actionStatus: '완료', lastUpdateTime: '19:08:01'},
-  {id: 4, userName: '김준혁', solution: '데이터 백업', action: 1, actionStatus: '대기', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
-  {id: 5, userName: '김나영', solution: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 1, userName: '손동현', request: '네트워크 장비 교체', action: 2, actionStatus: '작업중', lastUpdateTime: '19:08:01'},
+  {id: 2, userName: '최선우', request: '개발 환경 구성', action: 2, actionStatus: '작업중', lastUpdateTime: '19:08:01'},
+  {id: 3, userName: '박재환', request: '커피 타기', action: 3, actionStatus: '완료', lastUpdateTime: '19:08:01'},
+  {id: 4, userName: '김준혁', request: '데이터 백업', action: 1, actionStatus: '대기', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
+  {id: 5, userName: '김나영', request: '서버 점검', action: 0, actionStatus: '취소', lastUpdateTime: '19:08:01'},
 ]
 
 type HomeBigProps = {
@@ -45,7 +45,7 @@ function HomeBig({ title, icon }: HomeBigProps) {
           <WorkList 
             key={item.id}
             userName={item.userName}
-            solution={item.solution}
+            request={item.request}
             action={item.action}
             actionStatus={item.actionStatus}
             lastUpdateTime={item.lastUpdateTime}

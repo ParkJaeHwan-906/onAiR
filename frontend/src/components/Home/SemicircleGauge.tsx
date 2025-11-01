@@ -16,7 +16,7 @@ function SemicircleGauge({ value = 0, max = 100 }: SemicircleGaugeProps) {
   ];
 
   return (
-    <div style={{ position: 'relative', width: '200px', height: '200px' }}>
+    <div style={{ position: 'relative', width: '160px', height: '160px' }}>
       <ResponsivePie
         data={data}
         startAngle={-135}
