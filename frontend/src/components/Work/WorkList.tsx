@@ -2,7 +2,7 @@ import '../../styles/WorkList.css';
 
 type WorkListProps = {
   userName: string;
-  solution: string;
+  request: string;
   action: number;
   actionStatus: string;
   lastUpdateTime: string;
@@ -11,7 +11,7 @@ type WorkListProps = {
 const backColors = ['#F4C0C0', '#F9E9B5', '#B5BFE0', '#B6E7C8']
 const fontColors = ['#EF4444', '#FFBC11', '#1E40AF', '#22C55E']
 
-function WorkList({userName, solution, action, actionStatus, lastUpdateTime}: WorkListProps) {
+function WorkList({userName, request, action, actionStatus, lastUpdateTime}: WorkListProps) {
   const backColor = backColors[action]
   const fontColor = fontColors[action]
 
@@ -22,7 +22,7 @@ function WorkList({userName, solution, action, actionStatus, lastUpdateTime}: Wo
           {userName}
         </div>
         <div className='second'>
-          {solution}
+          {request}
         </div>
         <div className='third'>
           <div className='action-wrapper' style={{backgroundColor: backColor, color: fontColor }}>

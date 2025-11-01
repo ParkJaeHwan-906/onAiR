@@ -1,5 +1,5 @@
 import '../../styles/HomeBig.css';
-import WorkList from './WorkList';
+import WorkList from '../Work/WorkList';
 
 const dummy = [
   {id: 1, userName: '손동현', solution: '네트워크 장비 교체', action: 2, actionStatus: '작업중', lastUpdateTime: '19:08:01'},
