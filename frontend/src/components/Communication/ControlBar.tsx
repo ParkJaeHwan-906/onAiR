@@ -54,7 +54,7 @@ const ControlBar = ({
         wrapperRef.current &&
         !wrapperRef.current.contains(event.target as Node)
       ) {
-        setOpenMenu("none"); // ✅ 외부 클릭 시 모든 메뉴 닫기
+        setOpenMenu("none");
       }
     };
 
@@ -108,7 +108,7 @@ const ControlBar = ({
           </div>
         </div>
 
-        {/* ✏️ 펜 */}
+        {/* 펜 */}
         <button
           className={`icon-button ${currentTool === "pen" ? "active" : ""}`}
           onClick={() => handleToolChange("pen")}
@@ -116,7 +116,7 @@ const ControlBar = ({
           <PenLine className="icon" size={18} style={{ color: "#111827" }} />
         </button>
 
-        {/* ⬜ 도형 */}
+        {/* 도형 */}
         <div className="shape-wrapper">
           <button
             className={`icon-button ${
