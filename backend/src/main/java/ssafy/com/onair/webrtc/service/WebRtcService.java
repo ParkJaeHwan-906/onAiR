@@ -3,6 +3,7 @@ package ssafy.com.onair.webrtc.service;
 
 import io.livekit.server.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -17,6 +18,7 @@ import ssafy.com.onair.webrtc.dto.WebRtcResponseDto;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class WebRtcService {
@@ -40,6 +42,9 @@ public class WebRtcService {
                 .description("")    // TODO: AI 서포터 질문 요약 추가하기
                 .build();
         String senderRole = senderInfo.getRole();
+
+        log.debug("webrtc senderInfo : {}", senderInfo);
+
 
         // 사용자가 요청한거면 sender : 사용자, receiver : 관리자
         if(senderRole.equals("사용자")){
