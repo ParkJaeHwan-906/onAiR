@@ -36,10 +36,11 @@ WORKDIR /app
 RUN npm install -g serve
 
 # 빌드된 파일만 복사
-COPY --from=builder /app/build ./build
+# Vite는 build 폴더 말고 dist 폴더에 빌드됨! 
+COPY --from=builder /app/dist ./dist
 
 # 포트 노출 (기본적으로 serve는 3000 포트 사용)
 EXPOSE 3000
 
 # serve로 빌드된 파일 제공
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["serve", "-s", "dist", "-l", "3000"]
