@@ -1,77 +1,196 @@
 import { type KonvaEventObject } from "konva/lib/Node";
 import { useRef, useState } from "react";
-import { Layer, Line, Stage } from "react-konva";
+import {
+  Layer,
+  Line,
+  Stage,
+  Circle,
+  Rect,
+  RegularPolygon,
+  Arrow,
+} from "react-konva";
 import type { DrawingLine } from "../types/DrawingLine";
+// import { ratchet } from "livekit-client";
 
 interface CanvasProps {
-  handleSerialize : (lines : DrawingLine[]) => void
+  handleSerialize: (lines: DrawingLine[]) => void;
+  penColor: string;
+  tool?: string;
 }
 
-export const OverlayCanvas = (
-  { handleSerialize } : CanvasProps
-) => {
-  const [tool, setTool] = useState<string>('brush')
-  const [lines, setLines] = useState<DrawingLine[]>([])
-  const isDrawing = useRef(false)
+export const OverlayCanvas = ({
+  handleSerialize,
+  penColor,
+  tool = "pen",
+}: CanvasProps) => {
+  const [lines, setLines] = useState<DrawingLine[]>([]);
+  const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
+  const [currentShape, setCurrentShape] = useState<any | null>(null); // 드래그 중 도형
+  const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const isDrawing = useRef(false);
+  const startPos = useRef<{ x: number; y: number } | null>(null);
 
+  // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
-    isDrawing.current = true
-    const pos = e.target.getStage()?.getPointerPosition()
-    if (!pos) return
-    setLines([...lines, {tool, points: [pos.x, pos.y] }])
-  }
+    const pos = e.target.getStage()?.getPointerPosition();
+    if (!pos) return;
 
-  const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
-    if (!isDrawing.current) {
-      return
+    if (tool === "eraser") return;
+
+    // 펜 / 지우개 모드
+    if (tool === "pen") {
+      isDrawing.current = true;
+      setLines((prev) => [
+        ...prev,
+        { tool, color: penColor, points: [pos.x, pos.y] },
+      ]);
+    } else if (["circle", "square", "triangle", "arrow"].includes(tool)) {
+      startPos.current = pos;
+      setCurrentShape({
+        type: tool,
+        startX: pos.x,
+        startY: pos.y,
+        endX: pos.x,
+        endY: pos.y,
+        color: penColor,
+      });
     }
-    const stage = e.target.getStage()
-    const point = stage?.getPointerPosition()
+  };
 
-    if (!point) return
+  // ------------------------------- 마우스 이동 -------------------------------
+  const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const pos = e.target.getStage()?.getPointerPosition();
+    if (!pos) return;
 
-    setLines(prevLines => {
-      const newLines = [...prevLines]
-      const lastLine = {...newLines[newLines.length - 1]}
-      lastLine.points = [...lastLine.points, point.x, point.y]
-      newLines[newLines.length - 1] = lastLine
-      return newLines
-    })
-  }
+    if (tool === "eraser") {
+      setEraserPos(pos);
+      return;
+    }
 
+    if (tool === "pen") {
+      if (!isDrawing.current) return;
+      setLines((prevLines) => {
+        const newLines = [...prevLines];
+        const lastLine = { ...newLines[newLines.length - 1] };
+        lastLine.points = [...lastLine.points, pos.x, pos.y];
+        newLines[newLines.length - 1] = lastLine;
+        return newLines;
+      });
+    } else if (startPos.current && currentShape) {
+      setCurrentShape({
+        ...currentShape,
+        endX: pos.x,
+        endY: pos.y,
+      });
+    }
+  };
+
+  // ------------------------------- 마우스 클릭 끝 -------------------------------
   const handleMouseUp = () => {
-    isDrawing.current = false
-  }
+    if (currentShape) {
+      // 드래그 종료 시 도형 목록에 추가
+      setShapes((prev) => [...prev, currentShape]);
+      setCurrentShape(null);
+    }
+    isDrawing.current = false;
+    startPos.current = null;
+  };
+
+  // ------------------------------- 삭제 -------------------------------
+  const handleDeleteShape = (index: number) => {
+    if (tool !== "eraser") return;
+    setShapes((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDeleteLine = (index: number) => {
+    if (tool !== "eraser") return;
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // ------------------------------- 도형 계산 함수 -------------------------------
+  const renderShape = (shape: any, i: number) => {
+    const { type, startX, startY, endX, endY, color } = shape;
+    switch (type) {
+      case "circle": {
+        const radius = Math.hypot(endX - startX, endY - startY) / 2;
+        const centerX = (startX + endX) / 2;
+        const centerY = (startY + endY) / 2;
+        return (
+          <Circle
+            key={i}
+            x={centerX}
+            y={centerY}
+            radius={radius}
+            stroke={color}
+            strokeWidth={3}
+            hitStrokeWidth={15}
+            onClick={() => handleDeleteShape(i)}
+          />
+        );
+      }
+      case "square": {
+        const x = Math.min(startX, endX);
+        const y = Math.min(startY, endY);
+        const width = Math.abs(endX - startX);
+        const height = Math.abs(endY - startY);
+        return (
+          <Rect
+            key={i}
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            stroke={color}
+            strokeWidth={3}
+            hitStrokeWidth={15}
+            onClick={() => handleDeleteShape(i)}
+          />
+        );
+      }
+      case "triangle": {
+        const centerX = (startX + endX) / 2;
+        const centerY = (startY + endY) / 2;
+        const size = Math.abs(endX - startX);
+        return (
+          <RegularPolygon
+            key={i}
+            x={centerX}
+            y={centerY}
+            sides={3}
+            radius={size / 2}
+            stroke={color}
+            strokeWidth={3}
+            hitStrokeWidth={15}
+            onClick={() => handleDeleteShape(i)}
+          />
+        );
+      }
+      case "arrow": {
+        return (
+          <Arrow
+            key={i}
+            points={[startX, startY, endX, endY]}
+            stroke={color}
+            strokeWidth={3}
+            pointerLength={12}
+            pointerWidth={12}
+            hitStrokeWidth={15}
+            onClick={() => handleDeleteShape(i)}
+          />
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   return (
     <>
-      <select
-        value={tool}
-        onChange={(e) => {
-          setTool(e.target.value)
-        }}
-        style={{
-          position: 'absolute',
-          zIndex: 1
-        }}
-      >
-        <option value={'brush'}>Brush</option>
-        <option value={'eraser'}>Eraser</option>
-      </select>
-      <button
-        onClick={() => handleSerialize(lines)}
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          zIndex: 1
-        }}
-      >
-        Serialize
-      </button>
-      <Stage 
-        width= {800} 
-        height={600}
+      <Stage
+        width={940}
+        height={857}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -80,29 +199,42 @@ export const OverlayCanvas = (
         onTouchEnd={handleMouseUp}
       >
         <Layer>
+          {/* 펜 / 지우개 */}
           {lines.map((line, i) => (
             <Line
-              key={i}
+              key={`line-${i}`}
               points={line.points}
-              stroke={"#ffffff"}
+              stroke={line.color || penColor}
               strokeWidth={5}
               tension={0.5}
               lineCap="round"
               lineJoin="round"
-              shadowColor="red"
-              shadowBlur={20}
-              shadowOffsetX={5}
-              shadowOffsetY={5}
-              shadowOpacity={0.7}
-              globalCompositeOperation={
-                line.tool === 'eraser' ? 'destination-out' : 'source-over'
-              }
+              globalCompositeOperation="source-over"
+              hitStrokeWidth={15}
+              onClick={() => handleDeleteLine(i)}
             />
           ))}
-        </Layer>
 
+          {/* 기존 도형 */}
+          {shapes.map((shape, i) => renderShape(shape, i))}
+
+          {/* 현재 드래그 중인 도형 (실시간 크기 변화) */}
+          {currentShape && renderShape(currentShape, -1)}
+
+          {/* 지우개 커서 */}
+          {tool === "eraser" && eraserPos && (
+            <Circle
+              x={eraserPos.x}
+              y={eraserPos.y}
+              radius={15}
+              stroke="#9ca3af"
+              strokeWidth={2}
+              dash={[4, 4]}
+              listening={false}
+            />
+          )}
+        </Layer>
       </Stage>
     </>
-
-  )
-}
+  );
+};
