@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import '../../styles/SideBar.css'
 
 const navItems = [
-  { id: 'home', label: '홈', icon: '/icons/home.png', to: '/', exact: true },
+  { id: 'home', label: '홈', icon: '/icons/home.png', to: '/home' },
   { id: 'communication', label: '커뮤니케이션 관리', icon: '/icons/text.png', to: '/communication' },
   { id: 'staff', label: '직원 관리', icon: '/icons/profile.png', to: '/employees' },
   { id: 'work', label: '작업 관리', icon: '/icons/list.png', to: '/work' },
@@ -23,7 +23,7 @@ function SideBar() {
         <NavLink
           key={item.id}
           to={item.to}
-          end={item.exact}
+          end={item.to === '/home'}
           className={({ isActive }) => `nav-button${isActive ? ' active' : ''}`}
         >
           <img src={item.icon} alt={item.label} />
