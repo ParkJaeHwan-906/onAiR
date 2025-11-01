@@ -43,4 +43,6 @@ COPY --from=builder /app/dist ./dist
 EXPOSE 3000
 
 # serve로 빌드된 파일 제공
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# serve는 기본적으로 localhost에만 바인딩되어 다른 컨테이너에서 접근 불가
+# 0.0.0.0으로 바인딩하여 같은 Docker 네트워크 내의 Nginx 컨테이너에서 접근 가능하도록 설정
+CMD ["serve", "-s", "dist", "-l", "tcp://0.0.0.0:3000"]
