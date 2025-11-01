@@ -11,6 +11,13 @@ dist
 # Testing
 coverage
 .nyc_output
+**/*.test.tsx
+**/*.test.ts
+**/*.spec.tsx
+**/*.spec.ts
+src/setupTests.ts
+src/reportWebVitals.ts
+src/react-app-env.d.ts
 
 # IDE
 .vscode
