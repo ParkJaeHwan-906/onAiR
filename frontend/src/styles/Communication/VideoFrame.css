@@ -1,10 +1,32 @@
 .video-frame {
-    width: 972px;
-    height: 961px;
-    background-color: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+  width: 972px;
+  height: 961px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  padding-bottom: 72px;
+}
+
+.video-canvas-wrap {
+  width: 940px;
+  height: 857px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.control-bar-wrap {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
 }

@@ -1,5 +1,4 @@
 import "./App.css";
-import HomeSmall from "./components/HomeSmall";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { CommunicationPage } from "./pages/CommunicationPage";
 
@@ -13,8 +12,9 @@ const router = createBrowserRouter([
 function App() {
   return (
     <>
-      <HomeSmall />
-      <RouterProvider router={router} />
+      <main>
+        <RouterProvider router={router} />
+      </main>
     </>
   );
 }

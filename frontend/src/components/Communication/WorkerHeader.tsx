@@ -1,6 +1,6 @@
-// 프로필, 이름, 부서, 상태 “대기중” 부분
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { TextAlignJustify } from "lucide-react";
+import WorkerCard from "./WorkerCard";
 import "../../styles/Communication/WorkerHeader.css";
 
 interface UserData {
@@ -11,16 +11,11 @@ interface UserData {
 }
 
 const WorkerHeader = () => {
-  // 현재 사용자 통신 상태
   const [status, setStatus] = useState<"대기중" | "통신중">("대기중");
-
-  // 리스트 드롭여부
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  // 대기자 목록 (더미) -> 추후 api 연결 예정
   const [waitingList, setWaitingList] = useState<UserData[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // 더미 데이터
   useEffect(() => {
     const dummyData: UserData[] = [
       {
@@ -45,55 +40,75 @@ const WorkerHeader = () => {
     setWaitingList(dummyData);
   }, []);
 
-  // 통신 상태 토글 (임시)
   const toggleStatus = () => {
     setStatus((prev) => (prev === "대기중" ? "통신중" : "대기중"));
   };
 
-  // 리스트 클릭 -> 열기 / 닫기
   const toggleDropdown = () => setIsDropdownOpen((prev) => !prev);
 
+  // 카드 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div className="worker-card">
-      <div className="worker-info">
-        <div className="worker-profile">
-          <div className="profile-icon" />
-          <div className="worker-texts">
-            <div className="top-row">
-              <span className="worker-name">홍길동</span>
-              <span className="worker-position">부서</span>
-            </div>
-            <div className="bottom-row">
-              <span
-                className={`status-text ${
-                  status === "대기중" ? "waiting" : "active"
-                }`}
-                onClick={toggleStatus}
-              >
-                {status}
-              </span>
+    <div className="worker-header-container" ref={containerRef}>
+      {/* 상단 메인 카드 */}
+      <div className="worker-card default">
+        <div className="worker-info">
+          <div className="worker-profile">
+            <div className="profile-icon" />
+            <div className="worker-texts">
+              <div className="top-row">
+                <span className="worker-name">홍길동</span>
+                <span className="worker-position">부서</span>
+              </div>
+              <div className="bottom-row">
+                <span
+                  className={`status-text ${
+                    status === "대기중" ? "waiting" : "active"
+                  }`}
+                  onClick={toggleStatus}
+                >
+                  {status}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <button
-          className={`dropdown-icon ${isDropdownOpen ? "open" : ""}`}
-          onClick={toggleDropdown}
-        >
-          <TextAlignJustify size={20} />
-          <TextAlignJustify />
-        </button>
+          <button
+            className={`dropdown-icon ${isDropdownOpen ? "open" : ""}`}
+            onClick={toggleDropdown}
+          >
+            <TextAlignJustify size={25} />
+          </button>
+        </div>
       </div>
 
-      {/* 대기자 리스트 */}
+      {/* 대기자 목록 */}
       {isDropdownOpen && (
-        <div className="dropdown-list">
-          {waitingList.map((user) => (
-            <div key={user.userAccountId} className="dropdown-item">
-              <span className="dropdown-name">{user.name}</span>
-              <span className="dropdown-equip">{user.equipmentName}</span>
-            </div>
-          ))}
+        <div className="dropdown-overlay">
+          <div className="dropdown-list">
+            <div className="dropdown-title">대기자 목록</div>
+            {waitingList.map((user) => (
+              <WorkerCard
+                key={user.userAccountId}
+                name={user.name}
+                role={user.role}
+                equipmentName={user.equipmentName}
+                size="small"
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

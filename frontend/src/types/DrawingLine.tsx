@@ -1,4 +1,5 @@
 export interface DrawingLine {
-  tool : string,
-  points : number[]
+  tool: string;
+  points: number[];
+  color?: string;
 }

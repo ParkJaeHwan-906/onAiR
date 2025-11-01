@@ -1,48 +1,74 @@
-.worker-card {
-  width: 572px;
-  height: 68px;
-  background-color: #f9fbfb;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  padding: 12px 16px;
+.worker-header-container {
+  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  position: relative;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 572px;
   box-sizing: border-box;
+  overflow: visible;
 }
 
-.worker-info {
+/* 리스트 오버레이 */
+.dropdown-overlay {
+  position: absolute;
+  top: 80px;
+  left: 0;
+  width: 100%;
+  z-index: 10;
+}
+
+/* 리스트 박스 */
+.dropdown-list {
+  width: 100%;
+  background-color: #f9fafb;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 16px;
+  box-sizing: border-box;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  animation: dropdownSlide 0.2s ease;
+}
+
+/* 제목 */
+.dropdown-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-left: 4px;
+}
+
+/* 애니메이션 */
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .worker-profile {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* 홍길동 기준 맞추기 */
   gap: 16px;
-}
-
-.profile-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #e5e7eb;
-}
-
-.top-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
 }
 
 .worker-texts {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  justify-content: flex-start;
   align-items: flex-start;
+}
+
+.top-row {
+  display: flex;
+  align-items: baseline; /* 글자 높이 기준 정렬 */
+  gap: 8px; /* 홍길동-부서 사이 간격 */
 }
 
 .worker-name {
@@ -52,70 +78,45 @@
 }
 
 .worker-position {
-  font-size: 14px;
-  color: #6b7280;
-}
-
-.bottom-row {
-  margin-top: 2px;
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .status-text {
   font-size: 14px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.2;
+  margin-left: 0;
 }
-
-/* 통신 대기 */
-.status-text.waiting {
-  color: #16a34a;
-}
-
-/* 통신 진행 */
-.status-text.active {
-  color: #3b82f6;
-}
-
 .dropdown-icon {
-  background: none;
-  border: none;
-  color: #6b7280;
-  padding: 0;
+  all: unset; /* 브라우저 기본 버튼 스타일 완전 제거 */
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  border-radius: 8px;
+  background-color: transparent;
+  color: #6b7280;
+  transition: all 0.2s ease;
 }
 
+/* hover 시 회색 톤 */
 .dropdown-icon:hover {
+  background-color: #f3f4f6;
   transform: scale(1.05);
 }
 
+/* focus 시에도 테두리 제거 */
 .dropdown-icon:focus {
   outline: none;
+  border: none;
+  box-shadow: none;
 }
 
-/* 드롭다운 */
-.dropdown-list {
-  position: absolute;
-  top: 72px;
-  left: 0;
-  width: 100%;
-  background-color: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-  padding: 8px 0;
-  z-index: 10;
-}
-
-.dropdown-item {
-  padding: 8px 16px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  color: #374151;
-  transition: background-color 0.2s ease;
-}
-
-.dropdown-item:hover {
-  background-color: #f3f4f6;
+/* active 눌렀을 때 살짝 눌리는 효과 */
+.dropdown-icon:active {
+  background-color: #e5e7eb;
+  transform: scale(0.97);
 }
