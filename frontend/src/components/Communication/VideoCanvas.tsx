@@ -1,5 +1,5 @@
 // import { VideoTrack } from "@livekit/components-react"
-import type { DrawingLine } from "../types/DrawingLine";
+import type { DrawingLine } from "../../types/DrawingLine";
 import { OverlayCanvas } from "./OverlayCanvas";
 
 interface VideoProps {

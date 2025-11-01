@@ -1,4 +1,4 @@
-import { VideoCanvas } from "../components/VideoCanvas";
+import { VideoCanvas } from "../components/Communication/VideoCanvas";
 import type { DrawingLine } from "../types/DrawingLine";
 import { LiveKitRoom } from "@livekit/components-react";
 import VideoFrame from "../components/Communication/VideoFrame";

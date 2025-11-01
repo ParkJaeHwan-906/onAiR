@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { VideoCanvas } from "../VideoCanvas"; // 비디오 박스
+import { VideoCanvas } from "./VideoCanvas"; // 비디오 박스
 import ControlBar from "./ControlBar";
 import type { DrawingLine } from "../../types/DrawingLine";
 import "../../styles/Communication/VideoFrame.css";

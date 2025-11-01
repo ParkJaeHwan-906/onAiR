@@ -9,7 +9,7 @@ import {
   RegularPolygon,
   Arrow,
 } from "react-konva";
-import type { DrawingLine } from "../types/DrawingLine";
+import type { DrawingLine } from "../../types/DrawingLine";
 // import { ratchet } from "livekit-client";
 
 interface CanvasProps {
