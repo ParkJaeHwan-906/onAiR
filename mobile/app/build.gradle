@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
+//    id("com.google.devtools.ksp")
+//    id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -24,7 +27,8 @@ android {
         }
     }
     buildFeatures {
-        compose = true
+        compose true
+        viewBinding true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -95,4 +99,8 @@ dependencies {
     androidTestUtil "androidx.test:orchestrator:1.4.2"
 
     implementation libs.livekit.android.compose.components
+    implementation libs.androidx.activity.compose
+//    implementation libs.androidx.hilt.navigation.fragment
+//    implementation(libs.hilt.android)
+//    ksp(libs.hilt.android.compiler)
 }
