@@ -1,4 +1,3 @@
-import React from 'react';
 import { ResponsivePie } from '@nivo/pie';
 
 type SemicircleGaugeProps = {
@@ -17,14 +16,14 @@ function SemicircleGauge({ value = 0, max = 100 }: SemicircleGaugeProps) {
   ];
 
   return (
-    <div style={{ position: 'relative', width: '200px', height: '200px' }}>
+    <div style={{ position: 'relative', width: '160px', height: '160px' }}>
       <ResponsivePie
         data={data}
         startAngle={-135}
         endAngle={135}
         sortByValue={false}
         colors={(datum) => datum.data.color as string}
-        innerRadius={0.85}
+        innerRadius={0.8}
         cornerRadius={45}
         activeOuterRadiusOffset={0}
         enableArcLinkLabels={false}
