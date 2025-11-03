@@ -1,0 +1,11 @@
+.drawing-preview {
+  width: 572px;
+  height: 847px;
+  background-color: #e5e7eb;
+  border-radius: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #9ca3af;
+  font-size: 14px;
+}

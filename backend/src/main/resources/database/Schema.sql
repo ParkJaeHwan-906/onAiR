@@ -89,6 +89,7 @@ CREATE TABLE `user_accounts`(
 	`id` BIGINT AUTO_INCREMENT PRIMARY KEY,
 	`user_id` BIGINT NOT NULL COMMENT 'users 테이블의 id 와 FK',
 	`company_id` BIGINT NOT NULL COMMENT 'company 테이블의 id 와 FK',
+	`part` VARCHAR(100) NOT NULL COMMENT '회사에 속한 부서',   -- 추후에 테이블 분리
 	`email` VARCHAR(100) NOT NULL UNIQUE KEY COMMENT '계정 id 로 사용할 이메일',
 	`password` VARCHAR(255) NOT NULL COMMENT '계정 패스워드',
 	`role_id` BIGINT NOT NULL DEFAULT 2 COMMENT '계정의 권한 ( 기본은 사용자 )',

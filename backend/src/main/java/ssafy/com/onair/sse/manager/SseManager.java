@@ -49,6 +49,8 @@ public class SseManager {
     }
 
     public void sendSseMessage(SseEmitter emitter, SseMessageDto request) {
+        log.debug("sse emitter : {}", emitter);
+
         try {
             emitter.send(
                     SseEmitter
@@ -116,6 +118,9 @@ public class SseManager {
     public void sendRequestWorkerToAdmin(Long companyId, Object data) {
         UserInfoDto admin = companies.get(companyId).stream().filter((user) -> user.getRole().equals("관리자"))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("관리자가 부재중입니다."));
+
+        log.debug("receiver(admin) info : {}", admin);
+
         sendSseMessage(emitters.get(admin.getUserAccountId()),
                 SseMessageDto.builder()
                         .eventName("")  // 이벤트 명 지정해주세여

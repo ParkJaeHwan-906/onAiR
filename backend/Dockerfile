@@ -19,6 +19,7 @@ COPY gradle ./gradle
 COPY src ./src
 
 # Gradle 프로젝트 빌드 명령어 실행
+RUN chmod +x gradlew
 # 빌드 시간 단축을 위해 테스트 실행 스킵 (-x test)
 RUN ./gradlew clean build -x test --no-daemon
 

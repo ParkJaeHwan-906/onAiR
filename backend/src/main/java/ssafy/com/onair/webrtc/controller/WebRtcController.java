@@ -1,6 +1,7 @@
 package ssafy.com.onair.webrtc.controller;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,6 +17,7 @@ import ssafy.com.onair.webrtc.service.WebRtcService;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/webrtc")
@@ -28,6 +30,8 @@ public class WebRtcController {
             @AuthenticationPrincipal CustomUserDetails senderDetails,
             @RequestBody WebRtcRequestDto webRtcRequestDto
     ){
+        log.debug("requested sender info: {}", senderDetails);
+
         // 연결 요청 메서드
         webRtcService.requestConnection(webRtcRequestDto, senderDetails);
 
@@ -87,14 +91,15 @@ public class WebRtcController {
 
     @GetMapping("/create-token")
     public ResponseEntity<?> createToken(
-            @AuthenticationPrincipal CustomUserDetails userDetails
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam String roomName
     ){
         // 토큰 생성
         String webrtcToken = webRtcService.createToken(
                 userDetails.getUsername(),
                 userDetails.getUserAccountId() + "",
                 "metadata", // TODO: 의미 있는 메타데이터로 바꾸기
-                "room_" + userDetails.getUsername() + "_" + userDetails.getUserAccountId()
+                roomName
         );
 
         // 작업자에게 토큰 보내주기

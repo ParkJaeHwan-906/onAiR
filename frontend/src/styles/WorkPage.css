@@ -1,0 +1,18 @@
+.work-page-wrapper {
+  box-sizing: border-box;
+  width: 1664px;
+  height: 1011px;
+  background-color: #F5F6F8;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px 32px;
+}
+
+.work-page-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
