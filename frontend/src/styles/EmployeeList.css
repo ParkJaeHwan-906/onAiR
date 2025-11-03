@@ -1,0 +1,60 @@
+.employee-wrapper {
+  box-sizing: border-box;
+  width: 1048px;
+  height: 65px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-top: 1px solid #E5E7EB;
+  flex-shrink: 0;
+}
+
+.employee-wrapper > div {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 25px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #2E2E2E;
+}
+
+.employee-wrapper > .sixth {
+  width: 17%;
+  height: 100%;
+  justify-content: flex-end;
+  padding-left: 0;
+  padding-right: 25px;
+}
+
+.third > .online-wrapper {
+  width: fit-content;
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.employee-wrapper > button {
+  border-radius: 99px;
+  background-color: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  color: #2E2E2E;
+  margin-left: 80px;
+}
+
+.employee-wrapper > button:hover {
+  transform: translateY(-5px) translateZ(0);
+  background-color: #E5E7EB;
+}
+
+.employee-wrapper > button:hover::before {
+  bottom: -5px;
+}
