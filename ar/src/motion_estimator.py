@@ -105,10 +105,10 @@ def estimate_motion(good_prev, good_next, K, threshold=1.0, prob=0.999):
 
     # ✅ 2. Pose 복원 (R, t)
     _, R, t, pose_mask = cv2.recoverPose(E, good_next, good_prev, K)
-    print(f"🧭 Pose 추정 완료: t = {np.round(t.flatten(), 4)}")
+    # print(f"🧭 Pose 추정 완료: t = {np.round(t.flatten(), 4)}")
 
     # ✅ 3. 추가 정제 (옵션)
     good_prev_ref, good_next_ref = refine_inliers(good_prev, good_next, E, K)
-    print(f"🔍 인라이어 {len(good_prev)} → 정제 후 {len(good_prev_ref)}")
+    # print(f"🔍 인라이어 {len(good_prev)} → 정제 후 {len(good_prev_ref)}")
 
     return R, t, E

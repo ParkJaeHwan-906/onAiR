@@ -84,6 +84,6 @@ def ransac_filter(good_prev, good_next, method="fundamental", threshold=1.0, pro
     total = len(good_prev)
     inliers = np.count_nonzero(mask)
     ratio = (inliers / total) * 100
-    print(f"🧩 RANSAC 인라이어: {inliers}/{total} ({ratio:.1f}%)")
+    # print(f"🧩 RANSAC 인라이어: {inliers}/{total} ({ratio:.1f}%)")
 
     return inlier_prev, inlier_next, mask, model
