@@ -17,7 +17,7 @@ export const VideoCanvas = ({
     <div
       style={{
         position: "relative",
-        width: "940px",
+        width: "968px",
         height: "857px",
         backgroundColor: "#333",
         borderRadius: "16px",

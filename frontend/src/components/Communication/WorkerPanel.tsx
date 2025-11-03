@@ -1,15 +1,15 @@
 import React from "react";
-import DrawingPreview from "./DrawingPreview"
+import DrawingPreview from "./DrawingPreview";
 import WorkerHeader from "./WorkerHeader";
-import "../../styles/Communication/WorkerPanel.css"
+import "../../styles/Communication/WorkerPanel.css";
 
 const WorkerPanel = () => {
-    return (
-        <div className="work-panel">
-            <WorkerHeader />
-            <DrawingPreview />
-        </div>
-    )
-}
+  return (
+    <div className="work-panel">
+      <WorkerHeader />
+      <DrawingPreview />
+    </div>
+  );
+};
 
-export default WorkerPanel
+export default WorkerPanel;
