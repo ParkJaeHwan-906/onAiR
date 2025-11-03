@@ -5,16 +5,19 @@ plugins {
 
 android {
     namespace 'com.onair.mobile'
-    compileSdk 36
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.onair.mobile"
         minSdk 30
-        targetSdk 36
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // ✅ Orchestrator와의 연결 설정
+        testInstrumentationRunnerArguments clearPackageData: 'true'
     }
 
     buildTypes {
@@ -23,23 +26,61 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
+
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = '17'
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+        execution 'ANDROIDX_TEST_ORCHESTRATOR'
+        animationsDisabled = true
+    }
+    
+    packaging {
+        resources {
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/*.SF"
+            excludes += "META-INF/*.DSA"
+            excludes += "META-INF/*.RSA"
+            excludes += "META-INF/DEPENDENCIES"
+        }
     }
 }
 
-dependencies {
+// Protobuf 중복 제거
+configurations.all {
+    exclude group: 'com.google.protobuf', module: 'protobuf-java'
+}
 
-    implementation libs.androidx.core.ktx
-    implementation libs.androidx.appcompat
-    implementation libs.material
-    implementation libs.androidx.activity
-    implementation libs.androidx.constraintlayout
-    testImplementation libs.junit
-    androidTestImplementation libs.androidx.junit
-    androidTestImplementation libs.androidx.espresso.core
+dependencies {
+    // Android 기본
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "com.google.android.material:material:1.12.0"
+    
+    // STT 관련 - Android 내장 SpeechRecognizer
+    // (별도 의존성 불필요 - Android SDK에 포함됨)
+    
+    // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
+    implementation("org.java-websocket:Java-WebSocket:1.5.6")
+    
+    // JSON 처리
+    implementation("org.json:json:20231013")
+    
+    // ONNX Runtime
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.18.0"
+
+    testImplementation "junit:junit:4.13.2"
+
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test:runner:1.5.2"
+    androidTestImplementation "androidx.test:rules:1.5.0"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
+    androidTestUtil "androidx.test:orchestrator:1.4.2"
 }

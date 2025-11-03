@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Google Cloud Speech-to-Text and Auth
+-keep class com.google.cloud.** { *; }
+-keep class com.google.auth.** { *; }
+-keep class io.grpc.** { *; }
+-dontwarn javax.annotation.**
+-dontwarn com.google.**
