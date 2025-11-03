@@ -2,6 +2,8 @@ import { type KonvaEventObject } from "konva/lib/Node";
 import { useRef, useState } from "react";
 import { Layer, Line, Stage } from "react-konva";
 import type { DrawingLine } from "../types/DrawingLine";
+import { useRoomContext } from "@livekit/components-react";
+import { throttle } from "lodash";
 
 interface CanvasProps {
   handleSerialize : (lines : DrawingLine[]) => void
@@ -10,15 +12,35 @@ interface CanvasProps {
 export const OverlayCanvas = (
   { handleSerialize } : CanvasProps
 ) => {
+  const room = useRoomContext()
   const [tool, setTool] = useState<string>('brush')
   const [lines, setLines] = useState<DrawingLine[]>([])
   const isDrawing = useRef(false)
+
+  const sendDrawingData = (data: object) => {
+    if (!room) return
+
+    const jsonString = JSON.stringify(data)
+    const byteArray = new TextEncoder().encode(jsonString)
+    room.localParticipant.publishData(byteArray, {
+      reliable: false
+    })
+  }
+
+  const throttledSendDrawMove = throttle(
+    (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
+  )
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     isDrawing.current = true
     const pos = e.target.getStage()?.getPointerPosition()
     if (!pos) return
     setLines([...lines, {tool, points: [pos.x, pos.y] }])
+    sendDrawingData({
+      event: 'draw-start',
+      x: pos.x,
+      y: pos.y
+    })
   }
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -37,10 +59,12 @@ export const OverlayCanvas = (
       newLines[newLines.length - 1] = lastLine
       return newLines
     })
+    throttledSendDrawMove(point.x, point.y)
   }
 
   const handleMouseUp = () => {
     isDrawing.current = false
+    sendDrawingData({event: 'draw-end'})
   }
 
   return (
