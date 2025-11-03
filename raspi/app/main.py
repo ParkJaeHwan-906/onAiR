@@ -1,7 +1,11 @@
 from fastapi import FastAPI
-from routers import sensor, camera, control
-from sockets.socket_manager import sio
+from app.routers import sensor, camera, control
+from app.sockets.socket_manager import sio
 import socketio
+
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 app = FastAPI(
     title="Raspberry Pi FastAPI Server",
