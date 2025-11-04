@@ -45,7 +45,7 @@ async def handle_video_frame(sid, data):
 
         await sio.emit("frame-video", {"frame": frame_b64}, to=sid)
         await sio.emit("motion-update", result, to=sid)
-
+        
     except Exception as e:
         await sio.emit("frame-error", {"error": str(e)}, to=sid)
 
