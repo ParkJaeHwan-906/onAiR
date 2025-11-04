@@ -9,7 +9,6 @@ SAMPLE_RATE = 16000
 DURATION = 1.0  # 1초 창
 N_MELS = 40
 
-# ===== Load TFLite model =====
 interpreter = tf.lite.Interpreter(model_path="wakeword_onair_cnn.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()[0]
@@ -31,7 +30,6 @@ def predict_wakeword(audio_chunk):
     pred = interpreter.get_tensor(output_details['index'])[0]
     return pred
 
-# ===== Real-time Audio Stream =====
 buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
 
 last_print_time = 0
@@ -58,7 +56,7 @@ def callback(indata, frames, time_info, status):
         print(f"\nlabel={label}, conf={conf:.2f}")
 
         if label == "onair" and conf > 0.75:
-            print(f"🚀 Wakeword Detected! ({conf*100:.1f}%)")
+            print(f"Wakeword Detected! ({conf*100:.1f}%)")
 
 print("🎙️ Listening for wakeword 'onair' ... (press Ctrl+C to stop)")
 with sd.InputStream(callback=callback, channels=1, samplerate=SAMPLE_RATE):
