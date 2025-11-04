@@ -15,8 +15,3 @@ async def connect(sid, environ):
 @sio.event
 async def disconnect(sid):
     print(f"Disconnected: {sid}", t=sid)
-
-@sio.on("ping")
-async def handle_ping(sid, data):
-    print(f"📡 Received ping from {sid}: {data}")
-    await sio.emit("pong", {"msg": "Pong from FastAPI Server!"}, to=sid)
