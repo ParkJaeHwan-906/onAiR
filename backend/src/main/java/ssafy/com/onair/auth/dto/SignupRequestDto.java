@@ -28,7 +28,8 @@ public class SignupRequestDto {
     public void replaceRegex() {
         this.phone = this.phone.replace("-", "").replace(" ", "");
         this.name = this.name.replace(" ", "");
-        this.companyName = this.companyName.replace(" ", "");
         this.part = this.part.replace(" ", "");
+
+        this.companyName = this.companyName == null ? null : this.companyName.replace(" ", "");
     }
 }
