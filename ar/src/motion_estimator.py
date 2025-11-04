@@ -166,7 +166,7 @@ def estimate_motion(
 
                 # ✅ Sparse → Dense Depth 보간 로직 추가
         # --- 해상도 설정 (640x480 기본, 필요 시 자동 감지 가능)
-        h, w = 480, 640
+        h, w = 480, 720
         sparse_depth = np.zeros((h, w), dtype=np.float32)
 
         # 특징점 위치에 깊이값 찍기
