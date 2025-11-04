@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def extract_features(gray_frame, max_corners=5000, quality=0.08, min_distance=5):
+def extract_features(gray_frame, max_corners=1200, quality=0.08, min_distance=15):
     """
     안정형 특징점 추출기 (GFTT ↔ ORB 자동 선택)
     - CLAHE 명암보정
