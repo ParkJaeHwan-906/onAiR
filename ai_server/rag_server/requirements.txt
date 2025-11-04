@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+faiss-cpu
+sentence-transformers
+elasticsearch
+pydantic-settings
+python-dotenv
+google-generativeai
+openai
+redis>=5.0.0
