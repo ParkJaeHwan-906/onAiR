@@ -2,13 +2,20 @@ services:
   backend:
     container_name: spring
     build: ./backend
-    ports: 
-      - 8080:8080
+    expose: # nginx 리버스 프록시를 사용하므로 ports 대신 expose 사용
+      - "8080"
+    networks:
+      - onair-network # 커스텀 네트워크 사용 
     environment:
+      # Application
+      - SPRING_APPLICATION_NAME=demo
       # Database
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/onair
-      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DB_PASSWORD}
+      # Mybatis
+      - MYBATIS_CONFIGURATION_MAP_UNDERSCORE_TO_CAMEL_CASE=true
       # JWT
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ACCESS_TOKEN_EXPIRATION=${JWT_ACCESS_TOKEN_EXPIRATION:-7200000}
@@ -21,19 +28,21 @@ services:
       # Spring Security
       - SPRING_SECURITY_USER_NAME=${SPRING_SECURITY_USER_NAME:-admin}
       - SPRING_SECURITY_USER_PASSWORD=${SPRING_SECURITY_USER_PASSWORD}
-    depends_on:
-      - database
+      # Logging
+      - LOGGING_LEVEL_SSAFY_COM_ONAIR=debug
+      - LOGGING_LEVEL_COM_ZAXXER_HIKARI=info
+      - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
 
-  database:
-    container_name: mysql
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
-      - MYSQL_DATABASE=onair
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - 3306:3306
+  frontend:
+    container_name: react
+    build: ./frontend
+    expose: 
+      - "3000"
+    networks:
+      - onair-network # 커스텀 네트워크 사용 
 
-volumes:
-  mysql_data:
+# 도커 네트워크 설정 
+networks:
+  onair-network:
+    external: true  # 이미 생성된 네트워크 사용
+

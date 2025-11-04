@@ -1,0 +1,15 @@
+.communication-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-start;
+
+  /* 전체 페이지 영역 */
+  width: 100%;
+  height: 100vh;
+
+  /* 양쪽 여백 */
+  padding: 32px;
+  box-sizing: border-box;
+  gap: 24px;
+}

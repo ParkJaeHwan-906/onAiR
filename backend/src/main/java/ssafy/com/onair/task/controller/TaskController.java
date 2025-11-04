@@ -65,6 +65,7 @@ public class TaskController {
         return ResponseEntity.ok(ApiResponse.success(taskService.reAssignTask(user, request)));
     }
 
+    // TODO: deprecated -> SseController로 이동함 -> 문제 없으면 지우자!
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter connectSse(@AuthenticationPrincipal CustomUserDetails user) {
         return sseManager.connSse(user);
