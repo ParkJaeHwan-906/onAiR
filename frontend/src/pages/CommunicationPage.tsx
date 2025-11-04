@@ -1,6 +1,7 @@
 import { VideoCanvas } from "../components/Communication/VideoCanvas";
 import type { DrawingLine } from "../types/DrawingLine";
 import { LiveKitRoom } from "@livekit/components-react";
+// import { OverlayCanvas } from "../components/OverlayCanvas"
 import VideoFrame from "../components/Communication/VideoFrame";
 import WorkerPanel from "../components/Communication/WorkerPanel";
 import "../styles/Communication/CommunicationPage.css";
