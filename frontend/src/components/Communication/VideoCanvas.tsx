@@ -15,31 +15,55 @@ export const VideoCanvas = ({
   currentTool,
 }: VideoProps) => {
   const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
-  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement>(new Image());
-  const [isConnected, setIsConnected] = useState(false); // 첫 프레임 수신 여부
-
+  
+  // 1. useState 제거 -> useRef로 변경
+  const imgRef = useRef<HTMLImageElement>(null);
+  
+  // 연결 상태만 최소한으로 관리 (UI 표시용)
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const canvas = videoCanvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    const img = imgRef.current;
-    if (!canvas || !ctx) return;
+    if(!socket) return;
 
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      if (!isConnected) setIsConnected(true);
-    };
+    let frameCount = 0;
+    let lastLogTime = performance.now();
+
+    const handleVideoFrame = (data: {frame: string}) => {
+      // 2. 리렌더링 없이 DOM 조작으로 이미지 교체
+      if(imgRef.current){
+        imgRef.current.src = `data:image/jpeg;base64,${data.frame}`;
+
+        // 첫 프레임 수신 시 연결 상태 업데이트(한번만 실행됨)
+        if(!isConnected){
+          setIsConnected(true);
+        }
+      }
+
+      // === 🔍 디버깅 코드 시작 ===
+      frameCount++;
+      const now = performance.now();
+      // 1초마다 로그 출력
+      if (now - lastLogTime >= 1000) {
+        const fps = frameCount;
+        // Base64 길이로 대략적인 이미지 크기(KB) 계산
+        const sizeInKB = (data.frame.length * 0.75) / 1024;
+        
+        console.log(`📺 수신 FPS: ${fps} | 프레임 크기: 약 ${sizeInKB.toFixed(1)} KB`);
+
+        frameCount = 0;
+        lastLogTime = now;
+      }
+      // === 🔍 디버깅 코드 끝 ===
+      
+    }
 
     // 서버로부터 video_frame 이벤트 수신
-    socket.on('video_frame', (data) => {
-      img.src = `data:image/jpeg;base64,${data.frame}`;
-    });
+    socket.on('video_frame', handleVideoFrame);
 
     return () => {
-      socket.off('video_frame'); // clean up
+      socket.off('video_frame', handleVideoFrame); // clean up
     };
-  }, [socket]);
+  }, [socket, isConnected]);
 
   return (
     <div
@@ -64,12 +88,19 @@ export const VideoCanvas = ({
       >
         {/* <VideoTrack /> */}
         {/* <p style={{ color: "white" }}>(Video)</p> */}
-        <canvas 
-          ref={videoCanvasRef}
-          width={940}
-          height={857}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        
+        {/* 3. ref 연결 및 초기 상태 제어 */}
+        <img 
+          ref={imgRef}
+          alt="Video Stream"
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            display: isConnected ? 'block' : 'none' // 연결 전에는 숨김
+          }}
         />
+        
         {!isConnected && (
           <p style={{ 
             color: 'white',
