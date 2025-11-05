@@ -6,12 +6,17 @@ import EmployeePage from './pages/EmployeePage'
 import WorkPage from './pages/WorkPage'
 import { CommunicationPage } from './pages/CommunicationPage'
 import LoginPage from './pages/LoginPage'
+import { SocketProvider } from './utils/socketContext'
 
 function App() {
   return (
     <Routes>
       <Route path='/' element={<LoginPage />} />
-      <Route element={<AppLayout />}>
+      <Route element={
+          <SocketProvider>
+            <AppLayout />
+          </SocketProvider>
+        }>
         <Route path='home' element={<HomePage />} />
         <Route path='communication' element={<CommunicationPage />} />
         <Route path='employees' element={<EmployeePage />} />
