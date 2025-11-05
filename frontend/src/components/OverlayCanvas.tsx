@@ -13,6 +13,7 @@ export const OverlayCanvas = (
   { handleSerialize } : CanvasProps
 ) => {
   const room = useRoomContext()
+  console.log("OverlayCanvas 렌더링됨. room 객체:", room);
   const [tool, setTool] = useState<string>('brush')
   const [lines, setLines] = useState<DrawingLine[]>([])
   const isDrawing = useRef(false)
@@ -22,8 +23,10 @@ export const OverlayCanvas = (
 
     const jsonString = JSON.stringify(data)
     const byteArray = new TextEncoder().encode(jsonString)
+    console.log(">>> [Web] SENDING DATA:", jsonString);
     room.localParticipant.publishData(byteArray, {
-      reliable: false
+      reliable: false,
+      // topic: 'drawing-data'
     })
   }
 
@@ -32,6 +35,7 @@ export const OverlayCanvas = (
   )
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    alert("클릭! 이벤트 발사 성공!");
     isDrawing.current = true
     const pos = e.target.getStage()?.getPointerPosition()
     if (!pos) return
@@ -68,7 +72,12 @@ export const OverlayCanvas = (
   }
 
   return (
-    <>
+    <div
+      style={{
+        position: 'relative',
+        width: 800,
+        height: 600
+      }}>
       <select
         value={tool}
         onChange={(e) => {
@@ -102,6 +111,12 @@ export const OverlayCanvas = (
         onTouchStart={handleMouseDown}
         onTouchMove={handleMouseMove}
         onTouchEnd={handleMouseUp}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          zIndex: 0
+        }}
       >
         <Layer>
           {lines.map((line, i) => (
@@ -126,7 +141,7 @@ export const OverlayCanvas = (
         </Layer>
 
       </Stage>
-    </>
+    </div>
 
   )
 }

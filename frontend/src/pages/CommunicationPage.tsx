@@ -1,4 +1,3 @@
-import { VideoCanvas } from "../components/Communication/VideoCanvas";
 import type { DrawingLine } from "../types/DrawingLine";
 import { LiveKitRoom } from "@livekit/components-react";
 import VideoFrame from "../components/Communication/VideoFrame";
@@ -10,7 +9,7 @@ export const CommunicationPage = () => {
     const json = JSON.stringify(lines)
     console.log(json);    
   }
-  const TOKEN : string = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJBUElZRGhEQVVQckxMNDciLCJleHAiOjE3NjIxNDI4NDEsInN1YiI6IjMiLCJuYW1lIjoi6rmA7KSA7ZiBIiwibWV0YWRhdGEiOiJtZXRhZGF0YSIsInZpZGVvIjp7InJvb21Kb2luIjp0cnVlLCJyb29tIjoicm9vbV8yMDI1LTExLTAzVDAzOjU3OjE2Ljg0NDQ1MzYxNCJ9LCJzaXAiOnt9fQ.DjdeFAthS-bZ_rJs_GeGEqS1ZkRjchNqFAHCXdJeUsc"
+  const TOKEN : string = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJBUElZRGhEQVVQckxMNDciLCJleHAiOjE3NjI4MTk2MTIsInN1YiI6IjMiLCJuYW1lIjoi6rmA7KSA7ZiBIiwibWV0YWRhdGEiOiJtZXRhZGF0YSIsInZpZGVvIjp7InJvb21Kb2luIjp0cnVlLCJyb29tIjoiamhfcm9vbSJ9LCJzaXAiOnt9fQ.e-cTHUTvWe6nD7RtIlPAIH8kD35metbExvv8jbufA4c"
 
  
   return (

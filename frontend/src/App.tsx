@@ -8,13 +8,6 @@ import { CommunicationPage } from './pages/CommunicationPage'
 import LoginPage from './pages/LoginPage'
 
 function App() {
-<<<<<<< HEAD
-
-  return (
-    <>
-      <RouterProvider router={router} />
-    </>
-=======
   return (
     <Routes>
       <Route path='/' element={<LoginPage />} />
@@ -27,7 +20,6 @@ function App() {
       </Route>
       <Route path='*' element={<Navigate to='/' replace />} />
     </Routes>
->>>>>>> origin/develop
   )
 }
 
