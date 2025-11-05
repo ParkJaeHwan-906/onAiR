@@ -1,6 +1,9 @@
 """
-FastAPI 서버와 WebSocket 연결을 관리하는 클라이언트
-스트리밍 모드에서 사용됩니다.
+FastAPI 서버와 WebSocket 연결을 관리하는 클라이언트 (레거시)
+⚠️ 이 파일은 더 이상 사용되지 않습니다. Streaming STT는 Socket.IO를 사용합니다.
+
+이 파일은 호환성을 위해 유지되지만, 새로운 코드에서는 사용하지 마세요.
+대신 `socketio_client.py`의 `SocketIOClient`를 사용하세요.
 """
 import asyncio
 import json
