@@ -20,6 +20,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".communicate.CallActivity"/>
+        <activity android:name=".communicate.CommunicationActivity" />
     </application>
 
 </manifest>

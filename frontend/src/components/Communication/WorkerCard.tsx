@@ -1,4 +1,3 @@
-import React from "react";
 import "../../styles/Communication/WorkerCard.css";
 
 interface WorkerCardProps {
