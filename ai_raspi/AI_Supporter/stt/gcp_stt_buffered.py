@@ -43,7 +43,10 @@ class GcpBufferedStt:
                 print(f"   수집 중... {elapsed:.1f}초 / {target_duration:.1f}초")
         
         if not buffer:
-            await broadcaster('{"type":"error","text":"음성 데이터가 수집되지 않았습니다."}')
+            await broadcaster({
+                "type": "error",
+                "text": "음성 데이터가 수집되지 않았습니다."
+            })
             return
         
         # PCM 데이터 합치기
@@ -84,17 +87,28 @@ class GcpBufferedStt:
                     confidence = result.alternatives[0].confidence
                     print(f"📝 STT 결과: {transcript} (신뢰도: {confidence:.2f})")
                     
-                    # WebSocket으로 결과 전송
-                    await broadcaster(f'{{"type":"final","text":"{transcript}","confidence":{confidence}}}')
+                    # Socket.IO로 결과 전송 (딕셔너리 형태로 전달)
+                    stt_data = {
+                        "type": "final",
+                        "text": transcript,
+                        "confidence": confidence
+                    }
+                    await broadcaster(stt_data)
                     # 텍스트 전송 완료 → 마이크는 이미 OFF 상태 (Intent 분류 중간)
             else:
                 print("⚠️ STT 결과가 없습니다.")
-                await broadcaster('{"type":"info","text":"음성이 인식되지 않았습니다."}')
+                await broadcaster({
+                    "type": "info",
+                    "text": "음성이 인식되지 않았습니다."
+                })
                 # 마이크는 이미 OFF 상태
                 
         except Exception as e:
             error_msg = str(e)
             print(f"❌ STT 오류: {error_msg}")
-            await broadcaster(f'{{"type":"error","text":"{error_msg}"}}')
+            await broadcaster({
+                "type": "error",
+                "text": error_msg
+            })
             # 마이크는 이미 OFF 상태
 

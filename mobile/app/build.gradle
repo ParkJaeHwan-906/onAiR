@@ -90,8 +90,11 @@ dependencies {
     // STT 관련 - Android 내장 SpeechRecognizer
     // (별도 의존성 불필요 - Android SDK에 포함됨)
 
-    // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
+    // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신) - 레거시, Socket.IO 클라이언트로 대체 예정
     implementation("org.java-websocket:Java-WebSocket:1.5.6")
+    
+    // Socket.IO 클라이언트 (Socket.IO 서버에서 stt_result 이벤트 수신)
+    implementation("io.socket:socket.io-client:2.1.0")
 
     // HTTP 서버 (라즈베리파이로부터 stt_start 알림 수신)
     implementation("org.nanohttpd:nanohttpd:2.3.1")
@@ -102,6 +105,9 @@ dependencies {
     // Retrofit (FastAPI 서버 호출용)
     implementation "com.squareup.retrofit2:retrofit:2.9.0"
     implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+    
+    // OkHttp (WebSocket 클라이언트용)
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
 
     // ONNX Runtime
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.18.0"
