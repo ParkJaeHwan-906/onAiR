@@ -2,90 +2,127 @@
   width: 1096px;
   height: 961px;
   border-radius: 16px;
-  background-color: #FFFFFF;
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
+  background-color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-top: 25px;
 }
 
+/* 상단 제목 */
 .employee-big-header {
-  box-sizing: border-box;
-  width: 100%;
+  width: 1048px;
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  padding: 25px;
+  margin-bottom: 12px;
 }
 
-.title {
-  font-family: 'NotoSansKR';
+.employee-list {
+  font-family: "NotoSansKR";
   font-size: 20px;
   font-weight: 800;
-  color: #2E2E2E;
+  color: #3b4a6b;
 }
 
+/* 검색창 */
 .search-bar {
   width: 1048px;
   height: 48px;
-  border-radius: 16px;
-  margin-bottom: 25px;
-  border: 1px solid #E5E7EB;
-}
-
-.list-header {
-  box-sizing: border-box;
-  width: 1048px;
-  height: 52px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.list-header > div {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: 25px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 20px;
+  padding-left: 16px;
   font-size: 14px;
-  font-weight: 600;
-  color: #2E2E2E;
+  color: #374151;
 }
 
+.search-bar::placeholder {
+  color: #9ca3af;
+}
+
+/* 리스트 전체 박스 */
+.employee-table {
+  width: 1048px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 리스트 헤더 */
+.list-header {
+  width: 1048px;
+  height: 69px;
+  display: flex;
+  align-items: center;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 8px 8px 0 0;
+}
+
+.employee-table .list-header > div {
+  font-family: "NotoSansKR";
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+  box-sizing: border-box;
+}
+
+/* 컬럼 너비 */
+.col-name {
+  width: 14%;
+}
+.col-phone {
+  width: 18%;
+}
+.col-part {
+  width: 12%;
+}
+.col-email {
+  width: 22%;
+}
+.col-equipment {
+  width: 16%;
+}
+.col-status {
+  width: 10%;
+}
+.col-view {
+  width: 8%;
+  justify-content: center;
+}
+
+/* 리스트 본문 */
 .list-body {
-  flex: 1 1 auto;
+  width: 1048px;
+  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .list-body::-webkit-scrollbar {
   display: none;
 }
 
-.first {
-  width: 14%;
-  height: 100%;
+/* 접근 불가 메시지 */
+.no-access-box {
+  text-align: center;
+  margin-top: 80px;
+  color: #555;
 }
-
-.second {
-  width: 15%;
-  height: 100%;
+.no-access-title {
+  font-weight: 600;
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: #3b4a6b;
 }
-
-.third {
-  width: 17%;
-  height: 100%;
-}
-
-.fourth {
-  width: 19%;
-  height: 100%;
-}
-
-.fifth {
-  width: 19%;
-  height: 100%;
+.no-access-sub {
+  font-size: 16px;
+  color: #888;
 }

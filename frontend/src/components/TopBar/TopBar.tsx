@@ -12,7 +12,7 @@ function TopBar() {
 
   const handleLogout = () => {
     logoutUser();
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   // 외부 클릭 감지해서 메뉴 닫기
