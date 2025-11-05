@@ -16,7 +16,10 @@ COPY package*.json ./
 # npm ci : package-lock.json을 기반으로 정확한 버전의 의존성 설치 
 # 빌드 스테이지에서는 devDependencies도 필요 (typescript, vite 등)
 # npm cache clean --force : npm 캐시 삭제로 이미지 크기 감소 
-RUN npm ci && npm cache clean --force
+# RUN npm ci && npm cache clean --force
+RUN rm -rf node_modules package-lock.json \
+    && npm install \
+    && npm cache clean --force
 
 # 현재 디렉토리의 모든 소스코드를 컨테이너의 /app 디렉토리로 복사 
 COPY . .
