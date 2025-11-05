@@ -14,6 +14,7 @@
     "@livekit/components-styles": "^1.1.6",
     "@nivo/pie": "^0.99.0",
     "axios": "^1.13.1",
+    "event-source-polyfill": "^1.0.31",
     "konva": "^10.0.8",
     "livekit-client": "^2.15.14",
     "lucide-react": "^0.548.0",

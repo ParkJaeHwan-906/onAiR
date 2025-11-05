@@ -88,7 +88,7 @@ public class WebRtcService {
 
         // 액세스 토큰 만료 시간 
         // TODO: 지금은 테스트로 1주일로 잡았고, 나중에 적절히 수정할 것
-        token.setTtl(7 * 24 * 60 * 60);
+        token.setTtl(7 * 24 * 60 * 60 * 1000);
 
         return token.toJwt();
     }
