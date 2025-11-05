@@ -9,7 +9,6 @@ interface VideoProps {
 }
 
 export const VideoCanvas = ({
-  handleSerialize,
   penColor,
   currentTool,
 }: VideoProps) => {
@@ -48,7 +47,6 @@ export const VideoCanvas = ({
         }}
       >
         <OverlayCanvas
-          handleSerialize={handleSerialize}
           penColor={penColor}
           tool={currentTool}
         />
