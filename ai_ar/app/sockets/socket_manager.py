@@ -80,9 +80,39 @@ async def handle_video_stream(sid, data):
 
 @sio.on("video-frame")
 async def handle_video_frame(sid, data):
+    """
+    Raspi → PC 로 video_frame 이벤트 중계
+    """
     sender_device = device_map.get(sid, "unknown")
     frame = data.get("frame", None)
 
-    print(f"📡 Received 'video_frame:{frame}' from {sender_device}")
+    # print(f"📡 Received 'video_frame:{frame}' from {sender_device}")
 
     await broadcast_to("pc", "video_frame", {"frame": frame})
+
+@sio.on("audio-frame")
+async def handle_audio_frame(sid, data):
+    """
+    Raspi → PC 로 audio_frame 이벤트 중계
+    """
+    sender_device = device_map.get(sid, "unknown")
+    frame = data.get("frame", None)
+
+    # print(f"📡 Received 'audio_frame:{frame}' from {sender_device}")
+
+    await broadcast_to("pc", "audio_frame", {"frame": frame})
+
+
+# === AR 이벤트 ===
+@sio.on("ar-marker")
+async def create_marker(sid, data):
+    """
+    PC에서 생성한 ar 마커 정보 수신
+    """
+    sender_device = device_map.get(sid, "unknown")
+    marker_x = data.get("marker_x", None) # 생성한 마커의 가로축(x축) 좌표 
+    marker_y = data.get("marker_y", None) # 생성한 마커의 세로축(y축) 좌표 
+
+    # 여기 AR 연산 코드 들어가면 됨 
+
+    await sio.emit("marker-created", {"msg": f"marker created!"}, to=sid)    
