@@ -1,4 +1,3 @@
-import React from "react";
 import DrawingPreview from "./DrawingPreview"
 import WorkerHeader from "./WorkerHeader";
 import "../../styles/Communication/WorkerPanel.css"
