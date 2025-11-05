@@ -1,49 +1,97 @@
 import socketio
-import asyncio
-from app.services.camera_service import start_stream, stop_stream
+import subprocess
+import base64
+import threading
+import time
 
-# ASGI 모드용 Socket.IO 서버 생성
-sio = socketio.AsyncServer(
-    async_mode='asgi',
-    cors_allowed_origins='*'
-)
+sio = socketio.Client()
+camera_proc = None
+is_streaming = False
 
-# 이벤트 등록
+
+def stream_camera():
+    global camera_proc, is_streaming
+
+    # rpicam-vid 명령어 구성
+    command = [
+        "rpicam-vid",
+        "--width", "640",
+        "--height", "480",
+        "--framerate", "20",  
+        "--codec", "mjpeg",
+        "--inline",
+        "--quality", "60",   
+        "--flush",             
+        "--timeout", "0",
+        "-o", "-"
+    ]
+
+    print("🎥 Starting rpicam-vid streaming process...")
+    # subprocess로 rpicam 실행 (stdout을 파이프로 연결)
+    camera_proc = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
+
+    buffer = b""
+    boundary = b"\xff\xd8"  # JPEG start marker
+
+    while is_streaming and camera_proc and camera_proc.stdout:
+        chunk = camera_proc.stdout.read(1024)
+        if not chunk:
+            break
+        buffer += chunk
+
+        # JPEG 프레임 단위로 잘라내기
+        while True:
+            start_idx = buffer.find(boundary)
+            end_idx = buffer.find(b"\xff\xd9", start_idx + 2)
+            if start_idx != -1 and end_idx != -1:
+                frame = buffer[start_idx:end_idx + 2]
+                buffer = buffer[end_idx + 2:]
+                frame_b64 = base64.b64encode(frame).decode("utf-8")
+                sio.emit("video-frame", {"frame": frame_b64})
+            else:
+                break
+
+        time.sleep(1 / 15)
+
+    stop_camera()
+    print("🛑 Camera stream stopped")
+
+
+def stop_camera():
+    global camera_proc
+    if camera_proc:
+        try:
+            camera_proc.terminate()
+            camera_proc.wait(timeout=2)
+        except Exception:
+            camera_proc.kill()
+        camera_proc = None
+
+
+# === Socket 이벤트 ===
 @sio.event
-async def connect(sid, environ):
-    print(f"✅ Socket connected: {sid}")
-    await sio.emit("message", {"msg": "Connected to Raspberry Pi"}, to=sid)
+def connect():
+    print("✅ Connected to server")
+    sio.emit("register_device", {"device": "raspi"})
+
 
 @sio.event
-async def disconnect(sid):
-    print(f"❌ Socket disconnected: {sid}")
+def disconnect():
+    print("❌ Disconnected from server")
+    stop_camera()
+
 
 @sio.on("video_stream")
-async def handle_video_stream(sid, data):
-    """
-    클라이언트에서 {"state": "on"} or {"state": "off"} 형태로 요청
-    """
+def on_video_stream(data):
+    global is_streaming
     state = data.get("state", "off")
-    print(f"🎥 Received video_stream event: {state}")
+    print(f"📡 Received video_stream: {state}")
 
-    if state == "on":
-        # ✅ start_stream() 호출 (callback에서 프레임 emit)
-        def emit_frame(b64_frame, sid=None):
-            if sid:
-                asyncio.create_task(
-                    sio.emit("video-frame", {"frame": b64_frame}, to=sid)
-                )
-            else:
-                asyncio.create_task(
-                    sio.emit("video-frame", {"frame": b64_frame})
-                )
-        start_stream(emit_frame)
-        await sio.emit("stream_status", {"result": "started"}, to=sid)
-
-    elif state == "off":
-        # ✅ stop_stream() 호출
-        stop_stream()
-        await sio.emit("stream_status", {"result": "stopped"}, to=sid)
-
-    else:
-        await sio.emit("stream_status", {"result": "unknown state"}, to=sid)
+    if state == "on" and not is_streaming:
+        is_streaming = True
+        threading.Thread(target=stream_camera, daemon=True).start()
+    elif state == "off" and is_streaming:
+        is_streaming = False
+        stop_camera()
