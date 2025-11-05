@@ -1,4 +1,3 @@
-# 📄 main.py — 안정형 단일 카메라 AR (GFTT↔ORB 자동 대응)
 import cv2
 import numpy as np
 import os
@@ -78,7 +77,7 @@ def project_point(world_point, R, t, K, frame_shape):
 def main():
     global K_global, R_total, t_total, last_inlier_old, last_inlier_new, current_method
 
-    video = load_video("../data/3.mp4")
+    video = load_video("../data/test.mp4")
     K_global = np.load(CALIB_PATH) if os.path.exists(CALIB_PATH) else None
     use_pose = K_global is not None
 
@@ -105,7 +104,7 @@ def main():
         # === 주기적 특징점 갱신 ===
         if REFRESH_EVERY and frame_idx > 0 and frame_idx % REFRESH_EVERY == 0:
             prev_pts, current_method = extract_features(prev_gray)
-            print(f"🔄 Refresh features using {current_method} ({len(prev_pts)} pts)")
+            # print(f"🔄 Refresh features using {current_method} ({len(prev_pts)} pts)")
 
         # === Optical Flow 추적 ===
         if prev_pts is not None and len(prev_pts) > 0:

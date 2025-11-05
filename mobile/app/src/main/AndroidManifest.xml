@@ -23,7 +23,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        
+        <activity android:name=".communicate.CallActivity"/>
+        <activity android:name=".communicate.CommunicationActivity" />
+
         <!-- 🌐 WebSocket 서버 Activity (라즈베리파이에서 STT 텍스트 수신) -->
         <activity
             android:name=".MainActivitySttServer"
