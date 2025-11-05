@@ -84,6 +84,8 @@ class SocketIOClient:
             # manager를 통해 종료 신호 전달
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
+        
+        @self.sio.on("server_message")
         async def handle_server_message(data):
             """서버로부터 메시지 수신"""
             msg = data.get("msg", "") if isinstance(data, dict) else str(data)
