@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { TextAlignJustify } from "lucide-react";
 import WorkerCard from "./WorkerCard";
 import "../../styles/Communication/WorkerHeader.css";
