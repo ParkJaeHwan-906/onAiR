@@ -70,8 +70,15 @@ dependencies {
     // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
     implementation("org.java-websocket:Java-WebSocket:1.5.6")
     
+    // HTTP 서버 (라즈베리파이로부터 stt_start 알림 수신)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    
     // JSON 처리
     implementation("org.json:json:20231013")
+    
+    // Retrofit (FastAPI 서버 호출용)
+    implementation "com.squareup.retrofit2:retrofit:2.9.0"
+    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
     
     // ONNX Runtime
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.18.0"

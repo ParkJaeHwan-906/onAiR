@@ -10,6 +10,17 @@ try:
 except Exception:
     Elasticsearch = None
 
+# Optional: Phi-3 (for intent classification)
+try:
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+    PHI3_AVAILABLE = True
+except Exception:
+    PHI3_AVAILABLE = False
+    torch = None
+    AutoModel = None
+    AutoTokenizer = None
+
 def load_jsonl(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
@@ -94,8 +105,30 @@ if settings.USE_CROSS_ENCODER:
 # Elastic (옵션)
 ES = None
 if settings.USE_ELASTIC and Elasticsearch is not None:
-    print(f"🔌 Connecting Elasticsearch: {settings.ES_HOST} / index={settings.ES_INDEX}")
-    ES = Elasticsearch(settings.ES_HOST)
+    try:
+        print(f"🔌 Connecting Elasticsearch: {settings.ES_HOST} / index={settings.ES_INDEX}")
+        ES = Elasticsearch(settings.ES_HOST)
+        
+        # 연결 테스트
+        if not ES.ping():
+            print("⚠️  Warning: Elasticsearch 서버에 연결할 수 없습니다.")
+            print("   Elasticsearch 기능이 비활성화됩니다.")
+            ES = None
+        else:
+            # 인덱스 존재 확인
+            if not ES.indices.exists(index=settings.ES_INDEX):
+                print(f"⚠️  Warning: Elasticsearch 인덱스 '{settings.ES_INDEX}'가 존재하지 않습니다.")
+                print(f"   인덱스를 생성하려면 다음 명령을 실행하세요:")
+                print(f"   python scripts/index_elasticsearch.py")
+                print("   Elasticsearch 기능이 비활성화됩니다.")
+                ES = None
+            else:
+                count = ES.count(index=settings.ES_INDEX)["count"]
+                print(f"✓ Elasticsearch 연결 성공: {count}개 문서 색인됨")
+    except Exception as e:
+        print(f"⚠️  Warning: Elasticsearch 연결 실패: {e}")
+        print("   Elasticsearch 기능이 비활성화됩니다.")
+        ES = None
 
 def embed_texts(texts, is_query=False):
     """
@@ -130,3 +163,107 @@ def embed_texts(texts, is_query=False):
                 show_progress_bar=False, 
                 normalize_embeddings=True
             )
+
+# =======================================
+# Phi-3 Embedding (Intent Classification)
+# =======================================
+
+PHI3_MODEL = None
+PHI3_TOKENIZER = None
+
+if PHI3_AVAILABLE:
+    print("📦 Loading Phi-3 embedding model...")
+    try:
+        PHI3_MODEL = AutoModel.from_pretrained(
+            settings.PHI3_MODEL_NAME,
+            torch_dtype=torch.float32,
+            trust_remote_code=True
+        )
+        PHI3_TOKENIZER = AutoTokenizer.from_pretrained(
+            settings.PHI3_MODEL_NAME,
+            trust_remote_code=True
+        )
+        
+        # 모델을 평가 모드로 설정
+        PHI3_MODEL.eval()
+        
+        # 모델의 hidden_size 확인
+        if hasattr(PHI3_MODEL.config, 'hidden_size'):
+            actual_hidden_size = PHI3_MODEL.config.hidden_size
+            print(f"✓ Phi-3 model loaded: {settings.PHI3_MODEL_NAME}")
+            print(f"✓ Model hidden_size: {actual_hidden_size}")
+            if actual_hidden_size != settings.PHI3_EMBEDDING_DIM:
+                print(f"⚠️  Warning: 설정된 임베딩 차원({settings.PHI3_EMBEDDING_DIM})과 모델 hidden_size({actual_hidden_size})가 다릅니다.")
+        else:
+            print(f"✓ Phi-3 model loaded: {settings.PHI3_MODEL_NAME}")
+    except Exception as e:
+        print(f"⚠️  Warning: Phi-3 model loading failed: {e}")
+        print("   Phi-3 embedding 기능이 비활성화됩니다.")
+        PHI3_MODEL = None
+        PHI3_TOKENIZER = None
+
+def get_phi3_embedding(text: str) -> np.ndarray:
+    """
+    텍스트를 Phi-3 임베딩 벡터로 변환 (3072차원)
+    
+    Args:
+        text: 입력 텍스트
+        
+    Returns:
+        3072차원 numpy 배열 (Float32)
+    """
+    if not PHI3_AVAILABLE or PHI3_MODEL is None or PHI3_TOKENIZER is None:
+        raise RuntimeError("Phi-3 모델이 로드되지 않았습니다. transformers와 torch가 설치되어 있는지 확인하세요.")
+    
+    # 토크나이징
+    inputs = PHI3_TOKENIZER(
+        text,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=512
+    )
+    
+    # GPU 사용 가능시 GPU로 이동
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    PHI3_MODEL.to(device)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    
+    # Forward pass
+    with torch.no_grad():
+        outputs = PHI3_MODEL(**inputs)
+        
+        # 임베딩 추출: 마지막 hidden state의 평균 풀링
+        # shape: [batch_size, seq_len, hidden_size]
+        hidden_states = outputs.last_hidden_state
+        
+        # 평균 풀링 (mean pooling)
+        # attention_mask 고려
+        attention_mask = inputs.get("attention_mask", None)
+        if attention_mask is not None:
+            # attention_mask를 확장하여 hidden_states와 같은 차원으로 만듦
+            mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+            # 마스크된 토큰은 0으로 처리
+            sum_hidden = torch.sum(hidden_states * mask_expanded, dim=1)
+            sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+            embedding = sum_hidden / sum_mask
+        else:
+            # attention_mask가 없으면 평균 풀링
+            embedding = torch.mean(hidden_states, dim=1)
+        
+        # CPU로 이동하고 numpy로 변환
+        embedding = embedding.cpu().numpy().astype(np.float32)
+        
+        # 차원 확인 및 조정 (3072차원으로 정규화)
+        current_dim = embedding.shape[1]
+        if current_dim != settings.PHI3_EMBEDDING_DIM:
+            if current_dim < settings.PHI3_EMBEDDING_DIM:
+                # 패딩 추가 (0으로 채움)
+                padding = np.zeros((embedding.shape[0], settings.PHI3_EMBEDDING_DIM - current_dim), dtype=np.float32)
+                embedding = np.concatenate([embedding, padding], axis=1)
+            elif current_dim > settings.PHI3_EMBEDDING_DIM:
+                # 잘라내기
+                embedding = embedding[:, :settings.PHI3_EMBEDDING_DIM]
+        
+        # 1차원 배열로 변환 (단일 텍스트 입력 가정)
+        return embedding[0]

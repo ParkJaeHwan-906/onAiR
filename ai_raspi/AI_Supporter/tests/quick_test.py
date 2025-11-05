@@ -18,7 +18,7 @@ def check_dependencies():
     """필수 패키지 확인"""
     print_section("📦 의존성 확인")
     
-    required = ['fastapi', 'uvicorn', 'pyaudio', 'sounddevice', 'requests']
+    required = ['fastapi', 'uvicorn', 'pyaudio', 'sounddevice']
     missing = []
     
     for pkg in required:
@@ -74,16 +74,12 @@ def print_test_instructions():
 1️⃣  개별 모듈 테스트:
    python tests/test_modules.py
 
-2️⃣  Webhook 테스트 (별도 터미널):
-   python tests/test_webhook_server.py
-
-3️⃣  WebSocket 클라이언트 테스트 (별도 터미널):
+2️⃣  WebSocket 클라이언트 테스트 (별도 터미널):
    python tests/test_websocket_client.py
 
-4️⃣  전체 시스템 테스트:
-   - 터미널 1: python tests/test_webhook_server.py
-   - 터미널 2: python tests/test_websocket_client.py
-   - 터미널 3: python main.py
+3️⃣  전체 시스템 테스트:
+   - 터미널 1: python tests/test_websocket_client.py
+   - 터미널 2: python main.py
    
    그 다음 "onAir"라고 말하면 전체 흐름이 실행됩니다!
 

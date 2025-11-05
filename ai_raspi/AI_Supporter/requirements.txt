@@ -2,6 +2,7 @@
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 websockets>=12.0
+aiohttp>=3.9.0
 
 # GCP STT
 google-cloud-speech>=2.20.0
@@ -14,9 +15,6 @@ librosa>=0.10.0
 
 # 머신러닝
 tensorflow>=2.13.0
-
-# HTTP 클라이언트
-requests>=2.31.0
 
 # 환경 변수
 python-dotenv>=1.0.0

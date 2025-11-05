@@ -1,6 +1,11 @@
 # Environment variables
 .env
 
+# Credentials (보안 파일)
+credentials/*.json
+credentials/*.key
+credentials/*.pem
+
 # Python
 __pycache__/
 *.py[cod]
@@ -11,6 +16,7 @@ venv/
 env/
 ENV/
 .venv
+.venv/
 
 # IDE
 .vscode/

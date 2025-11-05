@@ -4,9 +4,17 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.onair.mobile.assistant.core.common.SessionManager
+import com.onair.mobile.assistant.data.intent.EmbeddingRepository
 import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
+import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
+import com.onair.mobile.assistant.data.rag.RagRepositoryImpl
 import com.onair.mobile.assistant.data.stt.SttRepositoryImpl
+import com.onair.mobile.assistant.data.stt.SttWebhookServer
 import com.onair.mobile.assistant.data.stt.SttWebSocketServer
+import com.onair.mobile.assistant.data.tts.MediaPlayerController
+import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
+import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.domain.usecase.ClassifyIntentUseCase
 import com.onair.mobile.assistant.domain.usecase.DispatchIntentUseCase
 import com.onair.mobile.assistant.domain.usecase.DispatchResult
@@ -19,17 +27,30 @@ import kotlinx.coroutines.launch
  * 1. Android Studio에서 Run
  * 2. 로그에서 "🚀 WebSocket 서버 시작" 확인
  * 3. 라즈베리파이에서 ws://<안드로이드_IP>:8080/ws/stt 연결
+ * 4. 라즈베리파이에서 POST http://<안드로이드_IP>:8081/webhook/stt_start 알림 전송
  */
 class MainActivitySttServer : AppCompatActivity() {
 
-    private lateinit var server: SttWebSocketServer
+    private lateinit var webSocketServer: SttWebSocketServer
+    private lateinit var webhookServer: SttWebhookServer
     private lateinit var sttRepository: SttRepositoryImpl
     private lateinit var intentRepository: IntentRepositoryImpl
     private lateinit var classifyIntentUseCase: ClassifyIntentUseCase
     private lateinit var dispatchIntentUseCase: DispatchIntentUseCase
+    private lateinit var sessionManager: SessionManager
+    private lateinit var llmRepository: LlmRepositoryImpl
+    private lateinit var ttsRepository: TtsRepositoryImpl
+    private lateinit var mediaPlayerController: MediaPlayerController
+    
+    private var isWaitingForClarification = false
+    private var currentSessionId: String? = null
     
     private val TAG = "MainActivitySttServer"
-    private val WS_PORT = 8080
+    private val WS_PORT = 8080  // WebSocket 서버 포트
+    private val WEBHOOK_PORT = 8081  // HTTP 웹훅 서버 포트
+    
+    // TODO: FastAPI 서버 URL 설정 (예: "http://192.168.0.100:8000")
+    private val BASE_URL = "http://YOUR_FASTAPI_SERVER_URL:8000"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,40 +59,91 @@ class MainActivitySttServer : AppCompatActivity() {
         // STT Repository 초기화
         sttRepository = SttRepositoryImpl(this)
         
+        // Embedding Repository 초기화
+        val embeddingRepository = EmbeddingRepository(baseUrl = BASE_URL)
+        
         // Intent Classifier 초기화
-        intentRepository = IntentRepositoryImpl(this)
+        intentRepository = IntentRepositoryImpl(this, embeddingRepository)
         classifyIntentUseCase = ClassifyIntentUseCase(intentRepository)
         
+        // 세션 관리자 초기화
+        sessionManager = SessionManager()
+        
+        // RAG Repository 초기화
+        val ragRepository = RagRepositoryImpl(BASE_URL)
+        llmRepository = LlmRepositoryImpl(ragRepository)
+        
+        // MediaPlayer Controller 초기화
+        mediaPlayerController = MediaPlayerController(this)
+        
+        // TTS Repository 초기화
+        ttsRepository = TtsRepositoryImpl(this, mediaPlayerController)
+        
         // Intent Dispatcher 초기화
-        // TODO: CV API, Clarification API, LLM API가 준비되면 주입
         dispatchIntentUseCase = DispatchIntentUseCase(
-            detectObjectUseCase = null,  // TODO: DetectObjectUseCase 주입
-            clarifyQuestionUseCase = null,  // TODO: ClarifyQuestionUseCase 주입
-            llmRepository = null  // TODO: LlmRepositoryImpl 주입
+            detectObjectUseCase = null,  // CV API는 선택사항
+            llmRepository = llmRepository,
+            sessionManager = sessionManager
         )
         
-        // WebSocket 서버 시작
-        server = SttWebSocketServer(WS_PORT) { timestamp, text ->
+        // WebSocket 서버 시작 (STT 텍스트 수신용)
+        webSocketServer = SttWebSocketServer(WS_PORT) { timestamp, text ->
             handleSttMessage(timestamp, text)
         }
         
         try {
-            server.start()
+            webSocketServer.start()
             Log.i(TAG, "✅ STT WebSocket 서버 시작: ws://0.0.0.0:$WS_PORT/ws/stt")
-            Log.i(TAG, "📱 안드로이드 기기 IP를 확인하여 라즈베리파이에서 연결하세요")
         } catch (e: Exception) {
             Log.e(TAG, "❌ WebSocket 서버 시작 실패: ${e.message}")
             e.printStackTrace()
         }
+        
+        // HTTP 웹훅 서버 시작 (stt_start 알림 수신용)
+        webhookServer = SttWebhookServer(WEBHOOK_PORT) {
+            handleSttStart()
+        }
+        
+        try {
+            webhookServer.startServer()
+            Log.i(TAG, "✅ HTTP 웹훅 서버 시작: http://0.0.0.0:$WEBHOOK_PORT/webhook/stt_start")
+            Log.i(TAG, "📱 안드로이드 기기 IP를 확인하여 라즈베리파이에서 연결하세요")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ HTTP 웹훅 서버 시작 실패: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
+    /**
+     * 라즈베리파이에서 stt_start 웹훅 알림 수신 시 호출
+     */
+    private fun handleSttStart() {
+        Log.i(TAG, "🎙️ STT 시작 알림 수신 - 라즈베리파이에서 음성 수집 시작")
+        // TODO: 필요 시 UI 업데이트 (예: "듣고 있습니다..." 표시)
+    }
+    
+    /**
+     * 라즈베리파이로부터 STT 텍스트 수신 시 호출
+     */
     private fun handleSttMessage(timestamp: String, text: String) {
         Log.i(TAG, "🧠 STT 텍스트 처리: [$timestamp] $text")
         
         // SttRepository를 통해 텍스트 수신
         sttRepository.receiveFromRaspberryPi(text)
         
-        // Intent Classifier → Intent Dispatcher 호출
+        if (isWaitingForClarification) {
+            // Clarify 입력: Intent 분류 스킵, 바로 RAG API 호출
+            handleClarificationInput(text)
+        } else {
+            // 일반 질문: Intent 분류 수행
+            handleNormalQuestion(text)
+        }
+    }
+    
+    /**
+     * 일반 질문 처리 (최초 질문)
+     */
+    private fun handleNormalQuestion(text: String) {
         lifecycleScope.launch {
             try {
                 // 1. Intent 분류
@@ -88,11 +160,42 @@ class MainActivitySttServer : AppCompatActivity() {
                 e.printStackTrace()
             }
         }
-        
-        // UI 업데이트 (필요 시)
-        runOnUiThread {
-            // TextView 등에 텍스트 표시
-            // textView.text = text
+    }
+    
+    /**
+     * Clarify 입력 처리
+     * Intent 분류 없이 바로 RAG API 호출 (이미 AI_SUPPORTER로 분기됨)
+     */
+    private fun handleClarificationInput(text: String) {
+        lifecycleScope.launch {
+            try {
+                val sessionId = currentSessionId ?: run {
+                    Log.e(TAG, "❌ 세션 ID가 없습니다")
+                    return@launch
+                }
+                
+                Log.i(TAG, "💬 Clarify 입력 수신: $text (sessionId: $sessionId)")
+                
+                // Intent 분류 스킵, 바로 RAG API 호출
+                val ragResponse = llmRepository.generateRagResponse(text, sessionId)
+                
+                if (ragResponse.need_clarify == true) {
+                    // 아직 Clarify 필요
+                    val clarifyGuidance = ragResponse.clarify_guidance ?: ragResponse.ask ?: ""
+                    handleClarifyResponse(clarifyGuidance, ragResponse.options)
+                } else {
+                    // 최종 답변 도착
+                    handleFinalAnswer(ragResponse)
+                    isWaitingForClarification = false
+                    sessionManager.resetSession()
+                    currentSessionId = null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Clarification 처리 실패: ${e.message}")
+                e.printStackTrace()
+                isWaitingForClarification = false
+                currentSessionId = null
+            }
         }
     }
     
@@ -103,14 +206,23 @@ class MainActivitySttServer : AppCompatActivity() {
         when (dispatchResult) {
             is DispatchResult.Success -> {
                 when (dispatchResult.type) {
-                    com.onair.mobile.assistant.domain.entity.IntentType.OPERATOR -> {
+                    IntentType.OPERATOR -> {
                         Log.i(TAG, "✅ Operator 처리 완료: ${dispatchResult.message}")
                         // TODO: RTC 연결 상태 UI 업데이트
                     }
-                    com.onair.mobile.assistant.domain.entity.IntentType.AI_SUPPORTER -> {
-                        Log.i(TAG, "✅ AI Supporter 처리 완료: ${dispatchResult.message}")
-                        // TODO: Vision Analyzer 결과 또는 LLM 응답 처리
-                        // TODO: TTS로 응답 전송
+                    IntentType.AI_SUPPORTER -> {
+                        if (dispatchResult.isClarifyNeeded) {
+                            // Clarify 응답 → 사용자 입력 대기
+                            handleClarifyResponse(dispatchResult.data, dispatchResult.options)
+                            isWaitingForClarification = true
+                            currentSessionId = sessionManager.getCurrentSessionId()
+                        } else {
+                            // 최종 답변 → 오디오 재생
+                            handleFinalAnswer(dispatchResult.data, dispatchResult.audioContent, dispatchResult.mimeType)
+                            isWaitingForClarification = false
+                            sessionManager.resetSession()
+                            currentSessionId = null
+                        }
                     }
                     else -> {}
                 }
@@ -121,13 +233,55 @@ class MainActivitySttServer : AppCompatActivity() {
             }
         }
     }
+    
+    /**
+     * Clarify 응답 처리
+     */
+    private fun handleClarifyResponse(guidance: String, options: List<String>? = null) {
+        Log.i(TAG, "💬 Clarify 질문: $guidance")
+        if (options != null && options.isNotEmpty()) {
+            Log.i(TAG, "📋 Clarify 옵션: ${options.joinToString(", ")}")
+        }
+        // TODO: UI에 Clarify 질문 표시
+    }
+    
+    /**
+     * 최종 답변 처리
+     */
+    private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
+        Log.i(TAG, "✅ 최종 답변: $answer")
+        
+        // 오디오 재생
+        if (audioContent != null && audioContent.isNotBlank()) {
+            lifecycleScope.launch {
+                ttsRepository.playAudio(audioContent, mimeType)
+            }
+        } else {
+            Log.w(TAG, "⚠️ 오디오 파일이 포함되지 않음")
+        }
+        
+        // TODO: UI에 답변 표시
+    }
+    
+    /**
+     * 최종 답변 처리 (RagResponse 직접 사용)
+     */
+    private suspend fun handleFinalAnswer(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
+        val answer = ragResponse.result?.answer ?: ""
+        val audioContent = ragResponse.result?.audio_content
+        val mimeType = ragResponse.result?.mime_type
+        
+        handleFinalAnswer(answer, audioContent, mimeType)
+    }
 
     override fun onDestroy() {
         super.onDestroy()
-        server.stopServer()
+        webSocketServer.stopServer()
+        webhookServer.stopServer()
         sttRepository.cleanup()
         intentRepository.cleanup()
-        Log.i(TAG, "🛑 WebSocket 서버 중지됨")
+        ttsRepository.cleanup()
+        Log.i(TAG, "🛑 서버 중지됨")
     }
 }
 

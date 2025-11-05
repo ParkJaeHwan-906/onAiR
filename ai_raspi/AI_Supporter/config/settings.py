@@ -13,11 +13,14 @@ RATE = 16000
 CHUNK_MS = 100
 CHANNELS = 1
 DEVICE_INDEX = os.getenv("DEVICE_INDEX", None)
-SILENCE_TIMEOUT_SEC = 2.0
-
-# === 앱 서버 설정 ===
-APP_SERVER_URL = os.getenv("APP_SERVER_URL", "http://localhost:8080")
-WEBHOOK_ENDPOINT = os.getenv("WEBHOOK_ENDPOINT", "/api/stt/start")
 
 # === STT 버퍼링 설정 ===
 STT_BUFFER_DURATION_SEC = float(os.getenv("STT_BUFFER_DURATION_SEC", "4.0"))  # 3~5초
+
+# === STT 스트리밍 설정 ===
+SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "3.0"))  # 침묵 타임아웃 (초)
+
+# === FastAPI 서버 설정 ===
+FASTAPI_SERVER_URL = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8001")
+RAG_CHAT_ENDPOINT = os.getenv("RAG_CHAT_ENDPOINT", "/rag/chat")
+WS_CHAT_ENDPOINT = os.getenv("WS_CHAT_ENDPOINT", "/ws/chat")  # WebSocket 엔드포인트

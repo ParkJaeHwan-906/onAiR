@@ -59,16 +59,20 @@ class GcpBufferedStt:
         )
         
         audio = speech.RecognitionAudio(content=audio_data)
-        
+
         print("📤 GCP STT 요청 전송 중...")
         
+        # STT 요청 직후 마이크 종료 (더 이상 음성 수집 불필요)
+        mic.pause()
+        print("🔇 마이크 OFF (STT 요청 전송 완료, Intent 분류 대기 중)")
+
         def blocking_recognize():
             try:
                 response = self.client.recognize(config=config, audio=audio)
                 return response
             except Exception as e:
                 raise e
-        
+
         loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(None, blocking_recognize)
@@ -82,12 +86,15 @@ class GcpBufferedStt:
                     
                     # WebSocket으로 결과 전송
                     await broadcaster(f'{{"type":"final","text":"{transcript}","confidence":{confidence}}}')
+                    # 텍스트 전송 완료 → 마이크는 이미 OFF 상태 (Intent 분류 중간)
             else:
                 print("⚠️ STT 결과가 없습니다.")
                 await broadcaster('{"type":"info","text":"음성이 인식되지 않았습니다."}')
+                # 마이크는 이미 OFF 상태
                 
         except Exception as e:
             error_msg = str(e)
             print(f"❌ STT 오류: {error_msg}")
             await broadcaster(f'{{"type":"error","text":"{error_msg}"}}')
+            # 마이크는 이미 OFF 상태
 

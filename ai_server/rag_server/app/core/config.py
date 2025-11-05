@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     EMB_ENCODING_MODE: str = "query"
     FAISS_METRIC: str = "cosine"
 
-    USE_ELASTIC: bool = False
+    USE_ELASTIC: bool = True  # Hybrid 검색을 위해 기본값을 True로 변경
     ES_HOST: str = "http://localhost:9200"
     ES_INDEX: str = "samkos"
 
@@ -46,6 +46,21 @@ class Settings(BaseSettings):
     # =======================================
     REDIS_URL: str = "redis://localhost:6380/0"
     REDIS_PREFIX: str = "rag_chat"
+
+    # =======================================
+    # 🔤 Phi-3 Embedding (Intent Classification)
+    # =======================================
+    PHI3_MODEL_NAME: str = "microsoft/Phi-3-mini-4k-instruct"
+    PHI3_EMBEDDING_DIM: int = 3072  # Phi-3 임베딩 차원
+
+    # =======================================
+    # 🔊 TTS (Text-to-Speech) - GCP TTS
+    # =======================================
+    GCP_TTS_CREDENTIALS_PATH: str | None = None  # GCP 서비스 계정 JSON 키 파일 경로
+    # 예: credentials/gcp-tts-key.json 또는 절대 경로
+    GCP_TTS_VOICE_NAME: str = "ko-KR-Standard-A"  # 한국어 여성 음성
+    GCP_TTS_LANGUAGE_CODE: str = "ko-KR"
+    GCP_TTS_AUDIO_ENCODING: str = "MP3"  # MP3, LINEAR16, OGG_OPUS 등
 
     class Config:
         env_file = ".env"

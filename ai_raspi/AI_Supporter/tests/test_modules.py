@@ -12,8 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from stt.mic_stream import MicStream
 from stt.wakeword_detector import WakewordDetector
-from stt.webhook_client import send_stt_start_webhook
-from config import settings
 
 def test_mic_stream():
     """마이크 스트림 테스트"""
@@ -73,23 +71,6 @@ def test_wakeword_detector():
     finally:
         detector.stop()
 
-def test_webhook():
-    """Webhook 전송 테스트"""
-    print("\n" + "=" * 50)
-    print("🌐 Webhook 전송 테스트")
-    print("=" * 50)
-    
-    print(f"서버 URL: {settings.APP_SERVER_URL}")
-    print(f"엔드포인트: {settings.WEBHOOK_ENDPOINT}")
-    
-    result = send_stt_start_webhook()
-    if result:
-        print("✅ Webhook 전송 성공")
-    else:
-        print("❌ Webhook 전송 실패")
-        print("   테스트 서버를 실행하려면:")
-        print("   python tests/test_webhook_server.py")
-
 def test_stt_buffered():
     """STT 버퍼링 테스트 (실제 GCP 호출)"""
     print("\n" + "=" * 50)
@@ -128,9 +109,8 @@ def main():
     print("\n테스트할 모듈을 선택하세요:")
     print("1. 마이크 스트림 테스트")
     print("2. Wakeword 감지기 테스트")
-    print("3. Webhook 전송 테스트")
-    print("4. STT 버퍼링 테스트 (GCP 호출)")
-    print("5. 전체 테스트")
+    print("3. STT 버퍼링 테스트 (GCP 호출)")
+    print("4. 전체 테스트")
     print("0. 종료")
     
     choice = input("\n선택: ").strip()
@@ -140,12 +120,9 @@ def main():
     elif choice == "2":
         test_wakeword_detector()
     elif choice == "3":
-        test_webhook()
-    elif choice == "4":
         test_stt_buffered()
-    elif choice == "5":
+    elif choice == "4":
         test_mic_stream()
-        test_webhook()
         test_wakeword_detector()
         print("\n✅ 전체 테스트 완료")
     elif choice == "0":
