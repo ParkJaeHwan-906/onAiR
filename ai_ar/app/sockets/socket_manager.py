@@ -1,5 +1,9 @@
 # 📄 app/sockets/socket_manager.py
 import socketio
+import os
+import cv2
+import numpy as np
+from datetime import datetime
 
 # 비동기 Socket.IO 서버 생성
 sio = socketio.AsyncServer(
@@ -53,7 +57,6 @@ async def broadcast_to(device_types, event: str, payload: dict):
     특정 디바이스 타입(하나 또는 여러 개)에 이벤트 전송
     - device_types: 문자열('raspi') 또는 리스트(['raspi', 'mobile'])
     """
-    # 단일 문자열로 들어온 경우 리스트로 변환
     if isinstance(device_types, str):
         device_types = [device_types]
 
@@ -65,24 +68,41 @@ async def broadcast_to(device_types, event: str, payload: dict):
 
     print(f"📡 Broadcasted '{event}' to {sent_count} clients ({device_types})")
 
-# === 이벤트 중계 ===
+
+# === video_stream ===
 @sio.on("video_stream")
 async def handle_video_stream(sid, data):
     """
-    PC/Mobile → Raspi로 video_stream 이벤트 중계
+    PC/Mobile → Raspi로 영상 스트리밍 제어 신호 전달
     """
     sender_device = device_map.get(sid, "unknown")
     state = data.get("state", "off")
 
     print(f"📡 Received 'video_stream:{state}' from {sender_device}")
-
     await broadcast_to("raspi", "video_stream", {"state": state})
 
+
+# === video-frame (라즈베리 → 서버 프레임 전송) ===
 @sio.on("video-frame")
 async def handle_video_frame(sid, data):
+    """
+    라즈베리파이에서 binary 형태로 전송된 JPEG 프레임 처리
+    """
     sender_device = device_map.get(sid, "unknown")
-    frame = data.get("frame", None)
 
-    print(f"📡 Received 'video_frame:{frame}' from {sender_device}")
+    if not data:
+        return
 
-    await broadcast_to("pc", "video_frame", {"frame": frame})
+    # data는 bytes (JPEG 이미지)
+    np_data = np.frombuffer(data, np.uint8)
+    frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        print("⚠️ Failed to decode frame")
+        return
+
+    print(f"🎞️ Received frame from {sender_device}")
+
+    # 동시에 PC 클라이언트에게 브로드캐스트
+    _, jpeg_bytes = cv2.imencode('.jpg', frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
