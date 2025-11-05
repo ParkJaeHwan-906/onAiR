@@ -1,59 +1,91 @@
-# 📄 app/sockets/socket_manager.py
 import socketio
-import cv2
+import subprocess
 import base64
 import threading
-from app.services.camera_service import start_stream, stop_stream
+import time
 
-# Socket.IO 클라이언트 객체 생성
 sio = socketio.Client()
-cap = None
+camera_proc = None
 is_streaming = False
 
-# 카메라 스레드 함수
+
 def stream_camera():
-    global cap, is_streaming
+    global camera_proc, is_streaming
 
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    cap.set(cv2.CAP_PROP_FPS, 15)
+    # rpicam-vid 명령어 구성
+    command = [
+        "rpicam-vid",
+        "--width", "640",
+        "--height", "480",
+        "--framerate", "20",  
+        "--codec", "mjpeg",
+        "--inline",
+        "--quality", "60",   
+        "--flush",             
+        "--timeout", "0",
+        "-o", "-"
+    ]
 
-    print("🎥 Camera streaming started")
+    print("🎥 Starting rpicam-vid streaming process...")
+    # subprocess로 rpicam 실행 (stdout을 파이프로 연결)
+    camera_proc = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
 
-    while is_streaming and cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
+    buffer = b""
+    boundary = b"\xff\xd8"  # JPEG start marker
+
+    while is_streaming and camera_proc and camera_proc.stdout:
+        chunk = camera_proc.stdout.read(1024)
+        if not chunk:
             break
+        buffer += chunk
 
-        # JPEG 인코딩
-        _, buffer = cv2.imencode('.jpg', frame)
-        frame_b64 = base64.b64encode(buffer).decode('utf-8')
+        # JPEG 프레임 단위로 잘라내기
+        while True:
+            start_idx = buffer.find(boundary)
+            end_idx = buffer.find(b"\xff\xd9", start_idx + 2)
+            if start_idx != -1 and end_idx != -1:
+                frame = buffer[start_idx:end_idx + 2]
+                buffer = buffer[end_idx + 2:]
+                frame_b64 = base64.b64encode(frame).decode("utf-8")
+                sio.emit("video-frame", {"frame": frame_b64})
+            else:
+                break
 
-        # Socket 이벤트 전송
-        sio.emit("frame-video", {"frame": frame_b64})
+        time.sleep(1 / 15)
 
-        # 15fps 정도 유지
-        cv2.waitKey(int(1000 / 15))
+    stop_camera()
+    print("🛑 Camera stream stopped")
 
-    cap.release()
-    print("🛑 Camera streaming stopped")
 
-# 서버 연결 이벤트
+def stop_camera():
+    global camera_proc
+    if camera_proc:
+        try:
+            camera_proc.terminate()
+            camera_proc.wait(timeout=2)
+        except Exception:
+            camera_proc.kill()
+        camera_proc = None
+
+
+# === Socket 이벤트 ===
 @sio.event
 def connect():
     print("✅ Connected to server")
-    # 연결 후 디바이스 타입 등록
     sio.emit("register_device", {"device": "raspi"})
-    
+
+
 @sio.event
 def disconnect():
-    print("❌ Disconnected from EC2 Socket Server")
+    print("❌ Disconnected from server")
+    stop_camera()
+
 
 @sio.on("video_stream")
 def on_video_stream(data):
     global is_streaming
-
     state = data.get("state", "off")
     print(f"📡 Received video_stream: {state}")
 
@@ -62,3 +94,4 @@ def on_video_stream(data):
         threading.Thread(target=stream_camera, daemon=True).start()
     elif state == "off" and is_streaming:
         is_streaming = False
+        stop_camera()
