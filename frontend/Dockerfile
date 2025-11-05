@@ -3,7 +3,7 @@
 # Node.js 18버전의 Alpine Linux 기반 이미지 사용 
 # Alpine은 경량화된 리눅스 배포판 
 # AS builder : 해당 스테이지를 'builder'라고 지정 
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # 컨테이너 내부에서 /app 디렉토리를 작업 디렉토리로 설정
 # 이후 모든 명령어가 해당 디렉토리에서 실행 
@@ -27,7 +27,7 @@ RUN npm run build
 # =============== Runtime Stage ===============
 
 # 빌드 스테이지와 같은 베이스 이미지 사용 
-FROM node:18-alpine
+FROM node:22-alpine
 
 # 컨테이너 내부의 작업 디렉토리를 /app으로 설정 
 WORKDIR /app
