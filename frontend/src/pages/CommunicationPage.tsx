@@ -3,8 +3,10 @@ import { LiveKitRoom } from "@livekit/components-react";
 import VideoFrame from "../components/Communication/VideoFrame";
 import WorkerPanel from "../components/Communication/WorkerPanel";
 import "../styles/Communication/CommunicationPage.css";
+import { useSocket } from "../utils/socketContext";
 
 export const CommunicationPage = () => {
+  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
   const handleSerialize = (lines : DrawingLine[]) => {
     const json = JSON.stringify(lines)
     console.log(json);    
