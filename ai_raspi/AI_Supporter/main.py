@@ -7,6 +7,7 @@ from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
+from stt.socketio_client import SocketIOClient
 from server.app import app, manager
 from config import settings
 
@@ -27,7 +28,7 @@ def run_stt_loop():
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     
     참고: 마이크는 항상 켜져있고, 버퍼링 STT 후 Intent 분류 중간에만 OFF됩니다.
-    웹소켓 연결은 외부(앞단 팀원)에서 생성되어 manager.set_websocket()으로 등록됩니다.
+    Socket.IO 클라이언트가 자동으로 서버에 연결되어 디바이스 등록을 수행합니다.
     모드 전환은 Android에서 HTTP POST /api/stt/mode 로 {"mode": "streaming"} 전송하면 됩니다.
     """
     # 마이크 초기화 및 시작 (항상 켜져있음)
@@ -38,16 +39,35 @@ def run_stt_loop():
     # 마이크 인스턴스를 manager에 등록 (FastAPI 엔드포인트에서 접근 가능하도록)
     manager.set_mic_stream(mic)
     
+    # Socket.IO 클라이언트 초기화 및 연결
+    socketio_client = SocketIOClient()
+    manager.set_socketio_client(socketio_client)
+    
+    # 이벤트 루프 생성
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Socket.IO 연결 (비동기로 실행)
+    async def connect_socketio():
+        """Socket.IO 서버 연결"""
+        try:
+            connected = await socketio_client.connect()
+            if connected:
+                print(f"✅ Socket.IO 서버 연결 성공: {settings.SOCKETIO_SERVER_URL}")
+            else:
+                print(f"⚠️ Socket.IO 서버 연결 실패: {settings.SOCKETIO_SERVER_URL}")
+        except Exception as e:
+            print(f"❌ Socket.IO 연결 오류: {e}")
+    
+    # Socket.IO 연결 실행
+    loop.run_until_complete(connect_socketio())
+    
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
     streaming_stt = GcpStreamingStt()
     
     # Wakeword 감지기 초기화
     init_wakeword_detector()
-    
-    # 이벤트 루프 생성
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
     async def broadcast(msg):
         """WebSocket으로 메시지 브로드캐스트"""
@@ -102,6 +122,8 @@ def run_stt_loop():
     except KeyboardInterrupt:
         print("🛑 종료 중...")
         streaming_stt.stop()
+        # Socket.IO 연결 종료
+        loop.run_until_complete(socketio_client.disconnect())
         mic.stop()
         stop_wakeword_detector()
         print("✅ 종료 완료")

@@ -1,33 +1,34 @@
 """
-웹소켓 전송 관리자
-이미 연결된 웹소켓을 통해 STT 결과를 전송하고, 모드 전환 명령을 받습니다.
+Socket.IO 전송 관리자
+Socket.IO 클라이언트를 통해 STT 결과를 전송하고, 모드 전환 명령을 받습니다.
 """
 import asyncio
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self):
-        self.websocket = None
+        self.socketio_client = None  # Socket.IO 클라이언트 인스턴스
         self.lock = asyncio.Lock()
         self.stt_mode = "buffered"  # "buffered" 또는 "streaming"
         self.mic_stream = None  # 마이크 스트림 인스턴스
 
-    def set_websocket(self, websocket):
+    def set_socketio_client(self, socketio_client):
         """
-        외부에서 연결된 웹소켓을 등록합니다.
+        Socket.IO 클라이언트를 등록합니다.
         
         Args:
-            websocket: 이미 연결된 웹소켓 객체 (send_text 메서드를 가진 객체)
+            socketio_client: SocketIOClient 인스턴스
         """
-        self.websocket = websocket
-        logger.info("✅ 웹소켓이 등록되었습니다.")
+        self.socketio_client = socketio_client
+        logger.info("✅ Socket.IO 클라이언트가 등록되었습니다.")
 
-    def clear_websocket(self):
-        """등록된 웹소켓을 제거합니다."""
-        self.websocket = None
-        logger.info("웹소켓이 제거되었습니다.")
+    def clear_socketio_client(self):
+        """등록된 Socket.IO 클라이언트를 제거합니다."""
+        self.socketio_client = None
+        logger.info("Socket.IO 클라이언트가 제거되었습니다.")
 
     def set_stt_mode(self, mode: str):
         """
@@ -60,27 +61,43 @@ class ConnectionManager:
         """등록된 마이크 스트림 인스턴스를 반환합니다."""
         return self.mic_stream
 
-    async def broadcast(self, message: str):
+    async def broadcast(self, message):
         """
-        등록된 웹소켓을 통해 STT 결과를 전송합니다.
+        Socket.IO 클라이언트를 통해 STT 결과를 전송합니다.
         
         Args:
-            message: 전송할 JSON 문자열 메시지
+            message: 전송할 메시지 (딕셔너리 또는 JSON 문자열)
+                딕셔너리 예: {"type": "final", "text": "안녕하세요", "confidence": 0.95}
+                JSON 문자열 예: '{"type":"final","text":"안녕하세요","confidence":0.95}'
         """
         async with self.lock:
-            if self.websocket is None:
-                logger.warning("⚠️ 웹소켓이 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
+            if self.socketio_client is None:
+                logger.warning("⚠️ Socket.IO 클라이언트가 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
+                return
+            
+            if not self.socketio_client.is_connected():
+                logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 메시지를 전송할 수 없습니다.")
                 return
             
             try:
-                # 웹소켓 객체가 send_text 메서드를 가지는 경우
-                if hasattr(self.websocket, 'send_text'):
-                    await self.websocket.send_text(message)
-                # 일반적인 웹소켓 객체인 경우
-                elif hasattr(self.websocket, 'send'):
-                    await self.websocket.send(message)
+                # 메시지 타입에 따라 처리
+                if isinstance(message, dict):
+                    # 이미 딕셔너리인 경우 그대로 사용
+                    stt_data = message
+                elif isinstance(message, str):
+                    # JSON 문자열인 경우 파싱
+                    try:
+                        stt_data = json.loads(message)
+                    except json.JSONDecodeError:
+                        logger.error(f"❌ 잘못된 JSON 형식: {message}")
+                        return
                 else:
-                    logger.error("❌ 웹소켓 객체에 전송 메서드를 찾을 수 없습니다.")
+                    logger.error(f"❌ 지원하지 않는 메시지 타입: {type(message)}")
+                    return
+                
+                # Socket.IO로 STT 결과 전송
+                success = await self.socketio_client.emit_stt_result(stt_data)
+                if not success:
+                    logger.warning("⚠️ STT 결과 전송 실패")
             except Exception as e:
-                logger.error(f"❌ 웹소켓 전송 오류: {e}")
-                self.websocket = None
+                logger.error(f"❌ Socket.IO 전송 오류: {e}")

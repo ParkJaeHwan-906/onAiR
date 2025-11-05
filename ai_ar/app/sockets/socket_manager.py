@@ -106,3 +106,120 @@ async def handle_video_frame(sid, data):
     # 동시에 PC 클라이언트에게 브로드캐스트
     _, jpeg_bytes = cv2.imencode('.jpg', frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    
+
+# === STT 결과 수신 및 FastAPI 서버로 전달 ===
+@sio.on("stt_result")
+async def handle_stt_result(sid, data):
+    """
+    라즈베리파이에서 전송된 버퍼링 STT 결과를 수신하여:
+    1. 모바일로 브로드캐스트 (Intent 분류용)
+    2. FastAPI 서버로 전달 (임베딩/처리용)
+    
+    Args:
+        sid: 클라이언트 세션 ID
+        data: STT 결과 딕셔너리
+            {
+                "type": "final" | "interim" | "error" | "info",
+                "text": "인식된 텍스트",
+                "confidence": 0.95 (optional),
+                "session_id": "uuid" (optional)  # Streaming STT용
+            }
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print(f"⚠️ STT 결과는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    stt_type = data.get("type", "unknown")
+    stt_text = data.get("text", "")
+    confidence = data.get("confidence")
+    
+    print(f"📝 STT 결과 수신 [raspi]: type={stt_type}, text={stt_text[:50]}...")
+    
+    # 1. 모바일로 브로드캐스트 (Intent 분류용)
+    await broadcast_to("mobile", "stt_result", data)
+    print(f"📤 STT 결과를 모바일로 전달 완료")
+    
+    # 2. FastAPI 서버로 전달 (임베딩/처리용)
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8000")
+            endpoint = f"{fastapi_url}/api/stt/buffered"
+            
+            # session_id 포함 (Streaming STT용)
+            stt_data = {
+                **data,  # type, text, confidence
+                "session_id": data.get("session_id")  # Clarify 세션 ID (있는 경우)
+            }
+            
+            response = await client.post(
+                endpoint,
+                json=stt_data,
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                print(f"✅ FastAPI 서버로 STT 결과 전달 성공")
+            else:
+                print(f"⚠️ FastAPI 서버 응답 오류: {response.status_code}")
+    except Exception as e:
+        print(f"❌ FastAPI 서버 전달 오류: {e}")
+
+# === Clarify 입력 수신 및 FastAPI 서버로 전달 ===
+@sio.on("clarify_input")
+async def handle_clarify_input(sid, data):
+    """
+    모바일에서 전송된 Clarify 입력을 수신하여 FastAPI 서버로 전달
+    
+    Args:
+        sid: 클라이언트 세션 ID
+        data: Clarify 입력 딕셔너리
+            {
+                "text": "사용자 입력 텍스트",
+                "session_id": "세션 ID",
+                "turn_id": 1 (optional),
+                "action": "continue" | "skip" | "cancel" (optional)
+            }
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ Clarify 입력은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    text = data.get("text", "")
+    session_id = data.get("session_id", "")
+    
+    print(f"💬 Clarify 입력 수신 [mobile]: text={text[:50]}..., session_id={session_id}")
+    
+    # FastAPI 서버로 전달
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8000")
+            endpoint = f"{fastapi_url}/api/clarify/response"
+            
+            response = await client.post(
+                endpoint,
+                json={
+                    "session_id": session_id,
+                    "turn_id": data.get("turn_id", 1),
+                    "response": text,
+                    "action": data.get("action", "continue")
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                # FastAPI에서 이미 socket_manager로 브로드캐스트하므로
+                # 여기서는 별도 브로드캐스트 불필요
+                print(f"✅ Clarify 응답 처리 완료")
+            else:
+                print(f"⚠️ FastAPI 서버 응답 오류: {response.status_code}")
+    except Exception as e:
+        print(f"❌ FastAPI 서버 전달 오류: {e}")

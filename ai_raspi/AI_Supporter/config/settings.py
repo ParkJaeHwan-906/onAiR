@@ -24,3 +24,6 @@ SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "3.0"))  # 침묵 �
 FASTAPI_SERVER_URL = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8001")
 RAG_CHAT_ENDPOINT = os.getenv("RAG_CHAT_ENDPOINT", "/rag/chat")
 WS_CHAT_ENDPOINT = os.getenv("WS_CHAT_ENDPOINT", "/ws/chat")  # WebSocket 엔드포인트
+
+# === Socket.IO 서버 설정 ===
+SOCKETIO_SERVER_URL = os.getenv("SOCKETIO_SERVER_URL", "http://localhost:5000")  # Socket.IO 서버 URL
