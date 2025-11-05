@@ -1,8 +1,10 @@
+import logging
+logging.getLogger('socketio').setLevel(logging.DEBUG)
+logging.getLogger('engineio').setLevel(logging.DEBUG)
+
 import socketio
 import subprocess
-import base64
 import threading
-import time
 
 sio = socketio.Client()
 camera_proc = None
@@ -31,10 +33,8 @@ def stream_camera():
         stderr=subprocess.DEVNULL,
         bufsize=0  # 즉시 flush
     )
-
     buffer = b""
     boundary = b"\xff\xd8" 
-    frame_count = 0
     while is_streaming and camera_proc and camera_proc.stdout:
         chunk = camera_proc.stdout.read(1024)
         if not chunk:
@@ -48,8 +48,7 @@ def stream_camera():
             if start_idx != -1 and end_idx != -1:
                 frame = buffer[start_idx:end_idx + 2]
                 buffer = buffer[end_idx + 2:]
-                sio.emit("video-frame", frame)
-                frame_count += 1
+                sio.emit("video_frame", frame)
             else:
                 break
 
