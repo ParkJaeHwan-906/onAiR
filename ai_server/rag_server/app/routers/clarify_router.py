@@ -7,35 +7,49 @@ socket_manager.py가 FastAPI를 호출하여 Clarify 처리를 수행합니다.
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+import asyncio
+import logging
 from app.services import memory
 from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style, make_clarify_prompt
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
+from app.utils.retry import retry_with_backoff
 
 router = APIRouter(prefix="/api/clarify", tags=["Clarify"])
+logger = logging.getLogger(__name__)
 
 # Clarify 세션 추적 (session_id → 현재 Clarify 턴 정보)
 clarify_sessions: Dict[str, Dict[str, Any]] = {}
 
+# 처리 중인 세션 추적 (중복 처리 방지)
+processing_sessions: set = set()
+
 
 def get_socket_manager():
-    """ai_ar의 socket_manager에서 broadcast_to 함수 가져오기"""
-    try:
-        import sys
-        import os
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir))))
-        ai_ar_path = os.path.join(project_root, "ai_ar")
-        
-        if os.path.exists(ai_ar_path) and ai_ar_path not in sys.path:
-            sys.path.insert(0, ai_ar_path)
-        
-        from app.sockets.socket_manager import broadcast_to
-        return broadcast_to
-    except ImportError as e:
-        print(f"⚠️ socket_manager를 찾을 수 없습니다: {e}")
-        return None
+    """ai_ar의 socket_manager에서 broadcast_to 함수 가져오기 (재시도 로직 포함)"""
+    import sys
+    import os
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            current_file_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir))))
+            ai_ar_path = os.path.join(project_root, "ai_ar")
+            
+            if os.path.exists(ai_ar_path) and ai_ar_path not in sys.path:
+                sys.path.insert(0, ai_ar_path)
+            
+            from app.sockets.socket_manager import broadcast_to
+            return broadcast_to
+        except ImportError as e:
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(1)  # 1초 대기 후 재시도
+                continue
+            logger.error(f"⚠️ socket_manager를 찾을 수 없습니다 (시도 {attempt + 1}/{max_retries}): {e}")
+            return None
 
 
 class StreamingSTTRequest(BaseModel):
@@ -59,10 +73,22 @@ class ClarifyResponseRequest(BaseModel):
 
 async def process_clarify_turn(session_id: str, query: str, force_green: bool = False):
     """
-    Clarify 턴 처리 및 결과를 socket_manager로 브로드캐스트
+    Clarify 턴 처리 및 결과를 socket_manager로 브로드캐스트 (에러 핸들링 개선)
     """
     broadcast_to = get_socket_manager()
     if not broadcast_to:
+        logger.error("❌ Socket.IO 서버에 연결할 수 없습니다.")
+        # 에러 발생 시 모바일에게 알림
+        try:
+            # 재시도하여 broadcast_to 가져오기
+            broadcast_to = get_socket_manager()
+            if broadcast_to:
+                await broadcast_to("mobile", "clarify_error", {
+                    "session_id": session_id,
+                    "message": "Socket.IO 서버 연결 실패"
+                })
+        except Exception:
+            pass
         raise HTTPException(status_code=503, detail="Socket.IO 서버에 연결할 수 없습니다.")
     
     # 히스토리 로드
@@ -141,17 +167,43 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
             "gate_decision": gate_decision
         })
         
-        # 모바일로 Clarify 턴 전송
-        await broadcast_to("mobile", "clarify_turn", {
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "status": "clarify",
-            "gate_decision": gate_decision,
-            "question": clarified_result.get("guide", ""),
-            "examples": clarified_result.get("examples", []),
-            "evidence_trace": evidence_stats.get("evidence_trace", {}),
-            "missing_info": evidence_stats.get("missing_info", [])
-        })
+        # 모바일로 Clarify 턴 전송 (에러 핸들링)
+        try:
+            await broadcast_to("mobile", "clarify_turn", {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "status": "clarify",
+                "gate_decision": gate_decision,
+                "question": clarified_result.get("guide", ""),
+                "examples": clarified_result.get("examples", []),
+                "evidence_trace": evidence_stats.get("evidence_trace", {}),
+                "missing_info": evidence_stats.get("missing_info", [])
+            })
+            logger.info(f"📤 Clarify 턴 {turn_id} 전송 [session={session_id}]: {gate_decision}")
+        except Exception as e:
+            logger.error(f"❌ Clarify 턴 전송 실패: {e}")
+            # 재시도
+            try:
+                await retry_with_backoff(
+                    broadcast_to,
+                    max_attempts=2,
+                    initial_delay=0.5,
+                    exceptions=(Exception,),
+                    device_types="mobile",
+                    event="clarify_turn",
+                    payload={
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "status": "clarify",
+                        "gate_decision": gate_decision,
+                        "question": clarified_result.get("guide", ""),
+                        "examples": clarified_result.get("examples", []),
+                        "evidence_trace": evidence_stats.get("evidence_trace", {}),
+                        "missing_info": evidence_stats.get("missing_info", [])
+                    }
+                )
+            except Exception as retry_error:
+                logger.error(f"❌ Clarify 턴 전송 재시도 실패: {retry_error}")
         
         print(f"📤 Clarify 턴 {turn_id} 전송 [session={session_id}]: {gate_decision}")
     
@@ -187,22 +239,64 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
         memory.clear_history(session_id)
         clarify_sessions.pop(session_id, None)
         
-        # 모바일로 최종 답변 전송
-        await broadcast_to("mobile", "final_answer", {
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "status": "completed",
-            "answer": answer_text,
-            "audio_content": tts_result.get("audio_content") if tts_result else None,
-            "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
-            "citations": [
-                {
-                    "section": h["source"]["section"],
-                    "pages": h["source"]["pages"],
-                }
-                for h in used_hits[:3]
-            ]
-        })
+        # 모바일로 최종 답변 전송 (에러 핸들링)
+        try:
+            await broadcast_to("mobile", "final_answer", {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "status": "completed",
+                "answer": answer_text,
+                "audio_content": tts_result.get("audio_content") if tts_result else None,
+                "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
+                "citations": [
+                    {
+                        "section": h["source"]["section"],
+                        "pages": h["source"]["pages"],
+                    }
+                    for h in used_hits[:3]
+                ]
+            })
+            
+            # 🆕 라즈베리파이로 Streaming STT 종료 신호 전송
+            try:
+                await broadcast_to("raspi", "stop_streaming_stt", {
+                    "session_id": session_id,
+                    "reason": "final_answer_completed"
+                })
+                logger.info(f"🛑 Streaming STT 종료 신호 전송: session_id={session_id}")
+            except Exception as e:
+                logger.error(f"❌ Streaming STT 종료 신호 전송 실패: {e}")
+            
+            logger.info(f"✅ 최종 답변 생성 완료 [session={session_id}]")
+        except Exception as e:
+            logger.error(f"❌ 최종 답변 전송 실패: {e}")
+            # 재시도
+            try:
+                await retry_with_backoff(
+                    broadcast_to,
+                    max_attempts=2,
+                    initial_delay=0.5,
+                    exceptions=(Exception,),
+                    device_types="mobile",
+                    event="final_answer",
+                    payload={
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "status": "completed",
+                        "answer": answer_text,
+                        "audio_content": tts_result.get("audio_content") if tts_result else None,
+                        "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
+                        "citations": [
+                            {
+                                "section": h["source"]["section"],
+                                "pages": h["source"]["pages"],
+                            }
+                            for h in used_hits[:3]
+                        ]
+                    }
+                )
+            except Exception as retry_error:
+                logger.error(f"❌ 최종 답변 전송 재시도 실패: {retry_error}")
         
         print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
 
@@ -210,7 +304,7 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
 @router.post("/streaming")
 async def handle_streaming_stt(request: StreamingSTTRequest = Body(...)):
     """
-    Streaming STT 결과 수신 및 처리
+    Streaming STT 결과 수신 및 처리 (비동기 Task로 분리)
     
     socket_manager의 handle_stt_result에서 호출됩니다.
     """
@@ -221,7 +315,7 @@ async def handle_streaming_stt(request: StreamingSTTRequest = Body(...)):
     if not stt_text:
         raise HTTPException(status_code=400, detail="텍스트가 비어있습니다.")
     
-    # Redis 세션에 STT 텍스트 추가
+    # Redis 세션에 STT 텍스트 추가 (동기 처리, 빠름)
     memory.append_event(session_id, {
         "role": "user",
         "type": "streaming_stt",
@@ -232,11 +326,45 @@ async def handle_streaming_stt(request: StreamingSTTRequest = Body(...)):
         }
     })
     
-    # type="final"이면 Clarify 처리 시작
+    # type="final"이면 Clarify 처리 시작 (비동기 Task로 분리)
     if stt_type == "final":
-        await process_clarify_turn(session_id, stt_text)
+        # 중복 처리 방지
+        if session_id in processing_sessions:
+            return {"success": True, "message": "이미 처리 중인 세션입니다."}
+        
+        processing_sessions.add(session_id)
+        
+        # 비동기 Task로 실행 (STT 수신을 블로킹하지 않음)
+        asyncio.create_task(
+            process_clarify_turn_async(session_id, stt_text)
+        )
+        
+        return {"success": True, "message": f"Clarify 처리 시작: '{stt_text[:50]}...'"}
     
     return {"success": True, "message": f"Streaming STT 수신 완료: '{stt_text[:50]}...'"}
+
+
+async def process_clarify_turn_async(session_id: str, query: str):
+    """
+    Clarify 턴 처리 (비동기 Task로 실행)
+    """
+    try:
+        await process_clarify_turn(session_id, query)
+    except Exception as e:
+        logger.error(f"❌ Clarify 처리 오류 [session={session_id}]: {e}")
+        # 에러 발생 시 모바일에게 알림
+        broadcast_to = get_socket_manager()
+        if broadcast_to:
+            try:
+                await broadcast_to("mobile", "clarify_error", {
+                    "session_id": session_id,
+                    "message": f"Clarify 처리 중 오류 발생: {str(e)}"
+                })
+            except Exception:
+                pass
+    finally:
+        # 처리 완료 후 세션 제거
+        processing_sessions.discard(session_id)
 
 
 @router.post("/process")

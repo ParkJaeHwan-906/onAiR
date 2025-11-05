@@ -20,6 +20,9 @@ import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.domain.usecase.ClassifyIntentUseCase
 import com.onair.mobile.assistant.domain.usecase.DispatchIntentUseCase
 import com.onair.mobile.assistant.domain.usecase.DispatchResult
+import com.onair.mobile.assistant.core.model.dto.EmbeddingResultDto
+import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
+import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import kotlinx.coroutines.launch
 
 /**
@@ -95,7 +98,7 @@ class MainActivitySttServer : AppCompatActivity() {
             sessionManager = sessionManager
         )
         
-        // Socket.IO 클라이언트 시작 (Socket.IO 서버에서 stt_result 및 clarify_response 이벤트 수신)
+        // Socket.IO 클라이언트 시작 (Socket.IO 서버에서 이벤트 수신)
         socketIoSttClient = SocketIoSttClient(
             serverUrl = SOCKET_IO_SERVER_URL,
             onSttResult = { text, type, confidence ->
@@ -103,8 +106,20 @@ class MainActivitySttServer : AppCompatActivity() {
                 handleSttMessage(timestamp, text)
             },
             onClarifyResponse = { ragResponse ->
-                // Clarify 응답 수신 처리
+                // Clarify 응답 수신 처리 (레거시)
                 handleClarifyResponseFromSocket(ragResponse)
+            },
+            onEmbeddingResult = { embeddingResult ->
+                // 버퍼링 STT 후 Phi-3 임베딩 수신 (Intent 분류용)
+                handleEmbeddingResult(embeddingResult)
+            },
+            onClarifyTurn = { clarifyTurn ->
+                // Clarify 질문/답변 턴 수신
+                handleClarifyTurn(clarifyTurn)
+            },
+            onFinalAnswer = { finalAnswer ->
+                // 최종 답변 수신
+                handleFinalAnswerFromSocket(finalAnswer)
             }
         )
         
@@ -265,7 +280,111 @@ class MainActivitySttServer : AppCompatActivity() {
     }
     
     /**
-     * Socket.IO로부터 Clarify 응답 수신 처리
+     * Socket.IO로부터 Embedding 결과 수신 처리 (버퍼링 STT 후)
+     * Intent 분류를 위해 임베딩을 직접 사용
+     */
+    private fun handleEmbeddingResult(embeddingResult: EmbeddingResultDto) {
+        Log.i(TAG, "📩 임베딩 결과 수신: text=${embeddingResult.text}, dimension=${embeddingResult.dimension}")
+        
+        lifecycleScope.launch {
+            try {
+                // 임베딩을 사용하여 Intent 분류 수행
+                val embeddingArray = embeddingResult.embedding.toFloatArray()
+                val intentResult = intentRepository.classifyWithEmbedding(
+                    embeddingArray,
+                    embeddingResult.text
+                )
+                
+                Log.i(TAG, "✅ Intent 분류 완료: ${intentResult.intentType.value} (신뢰도: ${intentResult.confidence})")
+                
+                // Intent 분기 처리
+                val dispatchResult = dispatchIntentUseCase(intentResult)
+                handleDispatchResult(dispatchResult)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 임베딩 기반 Intent 처리 실패: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Socket.IO로부터 Clarify 턴 수신 처리
+     */
+    private fun handleClarifyTurn(clarifyTurn: ClarifyTurnDto) {
+        Log.i(TAG, "💬 Clarify 턴 수신: session_id=${clarifyTurn.session_id}, turn_id=${clarifyTurn.turn_id}, status=${clarifyTurn.status}")
+        
+        if (clarifyTurn.status == "error") {
+            Log.e(TAG, "❌ Clarify 턴 오류: ${clarifyTurn.message}")
+            // TODO: 에러 처리 UI 업데이트
+            return
+        }
+        
+        if (clarifyTurn.gate_decision == "GREEN") {
+            // GREEN이면 최종 답변으로 처리 (하지만 final_answer 이벤트가 별도로 올 수 있음)
+            Log.d(TAG, "✅ Clarify 턴 GREEN - 최종 답변 대기 중")
+            // final_answer 이벤트를 기다림
+        } else {
+            // RED/YELLOW: Clarify 질문 표시
+            val question = clarifyTurn.question ?: ""
+            val examples = clarifyTurn.examples ?: emptyList()
+            
+            handleClarifyResponse(question, examples)
+            isWaitingForClarification = true
+            currentSessionId = clarifyTurn.session_id
+            currentTurnId = clarifyTurn.turn_id  // turn_id 추적
+        }
+    }
+    
+    /**
+     * Socket.IO로부터 최종 답변 수신 처리
+     */
+    private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
+        Log.i(TAG, "✅ 최종 답변 수신: session_id=${finalAnswer.session_id}, answer=${finalAnswer.answer.take(50)}...")
+        
+        handleFinalAnswer(
+            answer = finalAnswer.answer,
+            audioContent = finalAnswer.audio_content,
+            mimeType = finalAnswer.audio_encoding
+        )
+        
+        isWaitingForClarification = false
+        sessionManager.resetSession()
+        currentSessionId = null
+        currentTurnId = 1  // 초기화
+    }
+    
+    /**
+     * Clarify 텍스트 입력 전송
+     * 
+     * 사용자가 텍스트로 Clarify 응답을 입력할 때 호출합니다.
+     * Socket.IO를 통해 FastAPI로 전송됩니다.
+     * 
+     * @param text 사용자 입력 텍스트
+     * @param action "continue" | "skip" | "cancel"
+     */
+    fun sendClarifyTextInput(text: String, action: String = "continue") {
+        val sessionId = currentSessionId
+        if (sessionId == null) {
+            Log.w(TAG, "⚠️ 세션 ID가 없습니다. Clarify 응답을 전송할 수 없습니다.")
+            return
+        }
+        
+        val success = socketIoSttClient.sendClarifyTextResponse(
+            text = text,
+            sessionId = sessionId,
+            turnId = currentTurnId,
+            action = action
+        )
+        
+        if (success) {
+            Log.i(TAG, "✅ Clarify 텍스트 응답 전송 완료: $text (turn_id=$currentTurnId)")
+        } else {
+            Log.e(TAG, "❌ Clarify 텍스트 응답 전송 실패")
+        }
+    }
+    
+    /**
+     * Socket.IO로부터 Clarify 응답 수신 처리 (레거시)
      */
     private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
         if (ragResponse.need_clarify == true) {
@@ -291,6 +410,39 @@ class MainActivitySttServer : AppCompatActivity() {
             Log.i(TAG, "📋 Clarify 옵션: ${options.joinToString(", ")}")
         }
         // TODO: UI에 Clarify 질문 표시
+    }
+    
+    /**
+     * Clarify 텍스트 입력 전송
+     * 
+     * 사용자가 텍스트로 Clarify 응답을 입력할 때 호출합니다.
+     * 
+     * @param text 사용자 입력 텍스트
+     * @param action "continue" | "skip" | "cancel"
+     */
+    fun sendClarifyTextInput(text: String, action: String = "continue") {
+        val sessionId = currentSessionId
+        if (sessionId == null) {
+            Log.w(TAG, "⚠️ 세션 ID가 없습니다. Clarify 응답을 전송할 수 없습니다.")
+            return
+        }
+        
+        // ClarifyTurnDto에서 turn_id를 추적해야 하므로, 이를 저장하는 로직이 필요합니다.
+        // 임시로 1로 설정 (실제로는 마지막 받은 ClarifyTurnDto의 turn_id를 사용해야 함)
+        val turnId = 1  // TODO: 실제 turn_id를 추적하도록 수정
+        
+        val success = socketIoSttClient.sendClarifyTextResponse(
+            text = text,
+            sessionId = sessionId,
+            turnId = turnId,
+            action = action
+        )
+        
+        if (success) {
+            Log.i(TAG, "✅ Clarify 텍스트 응답 전송 완료: $text")
+        } else {
+            Log.e(TAG, "❌ Clarify 텍스트 응답 전송 실패")
+        }
     }
     
     /**

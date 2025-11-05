@@ -40,7 +40,7 @@ def run_stt_loop():
     manager.set_mic_stream(mic)
     
     # Socket.IO 클라이언트 초기화 및 연결
-    socketio_client = SocketIOClient()
+    socketio_client = SocketIOClient(manager=manager)  # manager 전달
     manager.set_socketio_client(socketio_client)
     
     # 이벤트 루프 생성
@@ -65,6 +65,9 @@ def run_stt_loop():
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
     streaming_stt = GcpStreamingStt()
+    
+    # Streaming STT 인스턴스를 manager에 등록 (종료 신호 처리용)
+    manager.set_streaming_stt_instance(streaming_stt)
     
     # Wakeword 감지기 초기화
     init_wakeword_detector()
@@ -94,9 +97,15 @@ def run_stt_loop():
                     mic.resume()
                     print("🔊 마이크 ON (스트리밍 모드 시작)")
                 
-                ws_url = settings.FASTAPI_SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
-                print(f"📤 FastAPI 서버 WebSocket 연결: {ws_url}{settings.WS_CHAT_ENDPOINT}")
-                await streaming_stt.run(mic)  # broadcaster는 사용하지 않음 (FastAPI WebSocket으로 직접 전송)
+                # Streaming STT 인스턴스에 Socket.IO 클라이언트 설정
+                streaming_stt.socketio_client = socketio_client
+                
+                # 세션 ID 생성 (Clarify 세션용)
+                import uuid
+                session_id = str(uuid.uuid4())
+                
+                print(f"📤 Socket.IO를 통해 Streaming STT 전송 시작 (session_id={session_id})")
+                await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
                 # 스트리밍 종료 후 마이크는 켜둠 (다음 Wakeword 대기)
                 print("🟢 스트리밍 모드 종료, 마이크는 계속 ON")
                 

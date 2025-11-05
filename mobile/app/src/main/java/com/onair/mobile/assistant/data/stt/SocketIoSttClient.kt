@@ -2,6 +2,9 @@ package com.onair.mobile.assistant.data.stt
 
 import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.RagResponse
+import com.onair.mobile.assistant.core.model.dto.EmbeddingResultDto
+import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
+import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
 import io.socket.client.IO
 import io.socket.client.Socket
@@ -13,16 +16,22 @@ import java.net.URISyntaxException
  * 
  * Socket.IO 서버에서 다음 이벤트를 수신:
  * - "stt_result": 버퍼링 STT 결과 (Intent 분류용)
- * - "clarify_response": Clarify 응답 (FastAPI에서 생성된 Gemini/GPT 응답)
+ * - "embedding_result": 버퍼링 STT 후 Phi-3 임베딩 수신 (Intent 분류용)
+ * - "clarify_turn": Clarify 질문/답변 턴 수신
+ * - "final_answer": 최종 답변 수신
+ * - "clarify_response": Clarify 응답 (레거시, clarify_turn과 final_answer로 대체 예정)
  * 
  * 주의:
  * - Clarify 입력은 모바일에서 전송하지 않음
- * - 라즈베리파이 Streaming STT → FastAPI (직접) → FastAPI가 Socket.IO 서버로 clarify_response 전송
+ * - 라즈베리파이 Streaming STT → FastAPI (직접) → FastAPI가 Socket.IO 서버로 clarify_turn/final_answer 전송
  */
 class SocketIoSttClient(
     private val serverUrl: String,  // 예: "http://192.168.0.100:5000"
     private val onSttResult: (String, String, String?) -> Unit,  // (text, type, confidence)
-    private val onClarifyResponse: ((RagResponse) -> Unit)? = null  // Clarify 응답 콜백 (선택사항)
+    private val onClarifyResponse: ((RagResponse) -> Unit)? = null,  // Clarify 응답 콜백 (레거시)
+    private val onEmbeddingResult: ((EmbeddingResultDto) -> Unit)? = null,  // 임베딩 결과 콜백
+    private val onClarifyTurn: ((ClarifyTurnDto) -> Unit)? = null,  // Clarify 턴 콜백
+    private val onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null  // 최종 답변 콜백
 ) {
     private val TAG = "SocketIoSttClient"
     private var socket: Socket? = null
@@ -83,13 +92,64 @@ class SocketIoSttClient(
                 }
             }
             
-            // clarify_response 이벤트 수신 (Clarify 응답)
+            // embedding_result 이벤트 수신 (버퍼링 STT 후 Phi-3 임베딩)
+            socket?.on("embedding_result") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.d(TAG, "📩 임베딩 결과 수신: $jsonString")
+                        
+                        val embeddingResult = gson.fromJson(jsonString, EmbeddingResultDto::class.java)
+                        onEmbeddingResult?.invoke(embeddingResult)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ 임베딩 결과 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            // clarify_turn 이벤트 수신 (Clarify 질문/답변 턴)
+            socket?.on("clarify_turn") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.d(TAG, "📩 Clarify 턴 수신: $jsonString")
+                        
+                        val clarifyTurn = gson.fromJson(jsonString, ClarifyTurnDto::class.java)
+                        onClarifyTurn?.invoke(clarifyTurn)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Clarify 턴 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            // final_answer 이벤트 수신 (최종 답변)
+            socket?.on("final_answer") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.d(TAG, "📩 최종 답변 수신: $jsonString")
+                        
+                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
+                        onFinalAnswer?.invoke(finalAnswer)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            // clarify_response 이벤트 수신 (Clarify 응답 - 레거시)
             socket?.on("clarify_response") { args ->
                 try {
                     val data = args[0] as? JSONObject
                     if (data != null) {
                         val jsonString = data.toString()
-                        Log.d(TAG, "📩 Clarify 응답 수신: $jsonString")
+                        Log.d(TAG, "📩 Clarify 응답 수신 (레거시): $jsonString")
                         
                         val ragResponse = gson.fromJson(jsonString, RagResponse::class.java)
                         onClarifyResponse?.invoke(ragResponse)
@@ -130,6 +190,64 @@ class SocketIoSttClient(
             Log.d(TAG, "📝 디바이스 등록: mobile")
         } catch (e: Exception) {
             Log.e(TAG, "❌ 디바이스 등록 실패: ${e.message}")
+        }
+    }
+    
+    /**
+     * Clarify 입력 텍스트 전송
+     * 
+     * 사용자가 텍스트로 Clarify 응답을 입력할 때 사용합니다.
+     * FastAPI의 /api/clarify/response 엔드포인트로 HTTP POST 요청을 보냅니다.
+     * 
+     * @param text 사용자 입력 텍스트
+     * @param sessionId Clarify 세션 ID
+     * @param turnId 현재 Clarify 턴 ID
+     * @param action "continue" | "skip" | "cancel"
+     * @param fastApiUrl FastAPI 서버 URL (예: "http://192.168.0.100:8000")
+     * @return 전송 성공 여부
+     */
+    fun sendClarifyTextResponse(
+        text: String,
+        sessionId: String,
+        turnId: Int,
+        action: String = "continue",
+        fastApiUrl: String
+    ): Boolean {
+        // HTTP POST로 FastAPI에 직접 전송 (ai_ar 폴더 수정 불가로 인해 직접 전송)
+        return try {
+            val client = okhttp3.OkHttpClient()
+            val json = JSONObject().apply {
+                put("session_id", sessionId)
+                put("turn_id", turnId)
+                put("response", text)
+                put("action", action)
+            }
+            
+            val requestBody = okhttp3.RequestBody.create(
+                okhttp3.MediaType.parse("application/json; charset=utf-8"),
+                json.toString()
+            )
+            
+            val request = okhttp3.Request.Builder()
+                .url("$fastApiUrl/api/clarify/response")
+                .post(requestBody)
+                .build()
+            
+            val response = client.newCall(request).execute()
+            val success = response.isSuccessful
+            
+            if (success) {
+                Log.i(TAG, "📤 Clarify 텍스트 응답 전송 완료: session_id=$sessionId, turn_id=$turnId, text=$text")
+            } else {
+                Log.e(TAG, "❌ Clarify 응답 전송 실패: HTTP ${response.code()}")
+            }
+            
+            response.close()
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Clarify 응답 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
         }
     }
     

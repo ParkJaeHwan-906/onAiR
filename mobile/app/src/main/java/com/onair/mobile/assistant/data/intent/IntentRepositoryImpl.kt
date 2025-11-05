@@ -50,6 +50,25 @@ class IntentRepositoryImpl(
         }
     }
 
+    /**
+     * 임베딩을 직접 받아서 Intent 분류 수행
+     * Socket.IO로부터 embedding_result 이벤트 수신 시 사용
+     */
+    suspend fun classifyWithEmbedding(embedding: FloatArray, text: String): IntentClassificationDto {
+        return try {
+            Log.d(TAG, "🧠 ONNX 모델로 Intent 분류 중 (임베딩 직접 사용)...")
+            dataSource.classifyWithEmbedding(embedding, text)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Intent 분류 실패: ${e.message}")
+            e.printStackTrace()
+            IntentClassificationDto(
+                intentType = com.onair.mobile.assistant.domain.entity.IntentType.UNKNOWN,
+                confidence = 0.0f,
+                rawText = text
+            )
+        }
+    }
+
     fun cleanup() {
         dataSource.cleanup()
     }

@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+import logging
 from app.core.model_loader import get_phi3_embedding
+from app.utils.retry import retry_with_backoff
 
 router = APIRouter(prefix="/api/stt", tags=["STT"])
+logger = logging.getLogger(__name__)
 
 class STTResultRequest(BaseModel):
     type: str  # "final" | "interim" | "error" | "info"
@@ -60,23 +63,36 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
             try:
                 import httpx
                 async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        "http://localhost:8000/api/clarify/streaming",
-                        json={
-                            "session_id": request.session_id,
-                            "type": stt_type,
-                            "text": stt_text,
-                            "confidence": request.confidence
-                        },
-                        timeout=30.0
+                    # 재시도 로직 포함
+                    async def call_clarify_api():
+                        response = await client.post(
+                            "http://localhost:8000/api/clarify/streaming",
+                            json={
+                                "session_id": request.session_id,
+                                "type": stt_type,
+                                "text": stt_text,
+                                "confidence": request.confidence
+                            },
+                            timeout=30.0
+                        )
+                        response.raise_for_status()
+                        return response
+                    
+                    response = await retry_with_backoff(
+                        call_clarify_api,
+                        max_attempts=3,
+                        initial_delay=1.0,
+                        max_delay=5.0,
+                        exceptions=(httpx.TimeoutException, httpx.HTTPStatusError, Exception)
                     )
+                    
                     if response.status_code == 200:
                         return STTResultResponse(
                             success=True,
                             message=f"Streaming STT 처리 완료: '{stt_text[:50]}...'"
                         )
             except Exception as e:
-                print(f"⚠️ Clarify 처리 중 오류: {e}")
+                logger.error(f"⚠️ Clarify 처리 중 오류: {e}")
                 return STTResultResponse(
                     success=False,
                     message=f"Clarify 처리 실패: {str(e)}"
@@ -103,20 +119,41 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                     
                     from app.sockets.socket_manager import broadcast_to
                     
-                    # 모바일로 임베딩 전송
-                    await broadcast_to("mobile", "embedding_result", {
-                        "text": stt_text,
-                        "embedding": embedding_list,
-                        "dimension": len(embedding_list),
-                        "confidence": request.confidence
-                    })
-                    
-                    print(f"✅ STT 텍스트 처리 완료: '{stt_text[:50]}...' → 모바일로 임베딩 전송")
+                    # 모바일로 임베딩 전송 (에러 핸들링 및 재시도)
+                    try:
+                        await broadcast_to("mobile", "embedding_result", {
+                            "text": stt_text,
+                            "embedding": embedding_list,
+                            "dimension": len(embedding_list),
+                            "confidence": request.confidence
+                        })
+                        logger.info(f"✅ STT 텍스트 처리 완료: '{stt_text[:50]}...' → 모바일로 임베딩 전송")
+                    except Exception as e:
+                        logger.error(f"❌ 임베딩 전송 실패: {e}, 재시도 중...")
+                        # 재시도
+                        try:
+                            await retry_with_backoff(
+                                broadcast_to,
+                                max_attempts=2,
+                                initial_delay=0.5,
+                                exceptions=(Exception,),
+                                device_types="mobile",
+                                event="embedding_result",
+                                payload={
+                                    "text": stt_text,
+                                    "embedding": embedding_list,
+                                    "dimension": len(embedding_list),
+                                    "confidence": request.confidence
+                                }
+                            )
+                            logger.info(f"✅ 임베딩 전송 재시도 성공")
+                        except Exception as retry_error:
+                            logger.error(f"❌ 임베딩 전송 재시도 실패: {retry_error}")
                     
                 except ImportError as e:
-                    print(f"⚠️ socket_manager를 찾을 수 없습니다: {e}. 임베딩만 반환합니다.")
+                    logger.warning(f"⚠️ socket_manager를 찾을 수 없습니다: {e}. 임베딩만 반환합니다.")
                 except Exception as e:
-                    print(f"⚠️ Socket.IO 전송 중 오류 발생: {e}. 임베딩은 반환합니다.")
+                    logger.warning(f"⚠️ Socket.IO 전송 중 오류 발생: {e}. 임베딩은 반환합니다.")
                 
                 return STTResultResponse(
                     success=True,
