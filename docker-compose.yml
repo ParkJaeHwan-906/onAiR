@@ -39,10 +39,54 @@ services:
     expose: 
       - "3000"
     networks:
+      - onair-network # 커스텀 네트워크 사용
+
+  ai_server:
+    container_name: fastapi
+    build: ./ai_server/rag_server
+    expose:
+      - "8000"
+    networks:
       - onair-network # 커스텀 네트워크 사용 
+    volumes:
+      # GCP TTS 크레덴셜 파일 마운트 (보안상 이미지에 포함하지 않음)
+      # Jenkins에서 파일 경로를 환경변수로 전달: GCP_TTS_CREDENTIALS_PATH
+      - ${GCP_TTS_CREDENTIALS_PATH}:/app/credentials/tts-key.json:ro
+    environment:
+      # data & embedding
+      - JSONL_PATH=${JSONL_PATH}
+      - FAISS_INDEX_PATH=${FAISS_INDEX_PATH}
+      - EMB_MODEL_NAME=${EMB_MODEL_NAME}
+      - FAISS_METRIC=cosine
+      - EMB_ENCODING_MODE=query
+      # Hybrid / Rerank options
+      - USE_ELASTIC=false
+      - ES_HOST=${ES_HOST}
+      - ES_INDEX=${ES_INDEX}
+      - USE_CROSS_ENCODER=true
+      - CE_MODEL_NAME=${CE_MODEL_NAME}
+      - CE_MAXLEN=256
+      - HYBRID_ALPHA=0.82
+      - RERANK_TOP_K=6
+      - RERANK_WEIGHT=0.6
+      - TOP_K=8
+      # LLM 
+      - LLM_PROVIDER=gms
+      - GMS_API_KEY=${GMS_API_KEY}
+      - GMS_MODEL_GATE=gemini-1.5-flash
+      - GMS_MODEL_GENERATOR=gpt-4o
+      # Answerability Gate Thresholds
+      - ANSW_MIN_DOCS=2
+      - ANSW_MIN_HYBRID=0.12
+      - ANSW_MIN_RERANK=5.2
+      - ANSW_MIN_QUERY_LEN=6
+      # TTS
+      - GCP_TTS_CREDENTIALS_PATH=/app/credentials/tts-key.json
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PREFIX=rag_chat
 
 # 도커 네트워크 설정 
 networks:
   onair-network:
     external: true  # 이미 생성된 네트워크 사용
-
