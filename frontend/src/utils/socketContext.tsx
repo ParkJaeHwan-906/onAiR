@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
-// 1. 서버 주소 (FastAPI 서버 주소로 변경하세요)
-const SOCKET_URL = 'http://localhost:8000'; // 예: "http://127.0.0.1:8000" 또는 실제 배포 주소
+// 1. 서버 주소 (환경변수에서 가져오기)
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 // --- 타입 정의 ---
 // 서버 -> 클라이언트로 보내는 이벤트 (리스너: socket.on)
