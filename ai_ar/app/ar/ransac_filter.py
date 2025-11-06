@@ -4,7 +4,7 @@ import numpy as np
 def ransac_filter(
     good_prev, good_next,
     K=None, distCoeffs=None,
-    threshold=1.0,
+    threshold=3.0,
     prob=0.999,
     auto_model=True,
     visualize=False,

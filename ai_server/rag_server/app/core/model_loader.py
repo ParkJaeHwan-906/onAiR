@@ -177,11 +177,17 @@ if PHI3_AVAILABLE:
         # Phi-3는 CausalLM 모델이므로 AutoModelForCausalLM 사용
         from transformers import AutoModelForCausalLM
         
+        # transformers 버전 호환성: torch_dtype 사용 (dtype는 deprecated)
+        # 일부 버전에서는 dtype 파라미터를 지원하지 않으므로 torch_dtype 사용
         PHI3_MODEL = AutoModelForCausalLM.from_pretrained(
             settings.PHI3_MODEL_NAME,
-            dtype=torch.float32,
+            torch_dtype=torch.float32,
             trust_remote_code=True
         )
+        
+        # 모델을 float32로 명시적 변환 (안전장치)
+        PHI3_MODEL = PHI3_MODEL.to(dtype=torch.float32)
+        
         PHI3_TOKENIZER = AutoTokenizer.from_pretrained(
             settings.PHI3_MODEL_NAME,
             trust_remote_code=True
