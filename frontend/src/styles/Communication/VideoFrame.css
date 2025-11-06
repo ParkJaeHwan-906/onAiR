@@ -1,5 +1,5 @@
 .video-frame {
-  width: 972px;
+  width: 1000px;
   height: 961px;
   background-color: #ffffff;
   border-radius: 16px;
@@ -15,7 +15,7 @@
 }
 
 .video-canvas-wrap {
-  width: 940px;
+  width: 968px;
   height: 857px;
   display: flex;
   justify-content: center;
