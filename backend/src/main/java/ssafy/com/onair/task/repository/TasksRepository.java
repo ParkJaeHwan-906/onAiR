@@ -106,7 +106,7 @@ public interface TasksRepository {
                 `solution` = #{solution}
             WHERE `id` = #{taskId};
             """)
-    Integer cancelTaskAsAdmin(Long taskId);
+    Integer cancelTaskAsAdmin(Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
@@ -124,7 +124,7 @@ public interface TasksRepository {
             WHERE `id` = #{taskId}
             AND `user_account_id` = #{userAccountId};
             """)
-    Integer cancelTaskAsWorker(Long userAccountId, Long taskId);
+    Integer cancelTaskAsWorker(Long userAccountId, Long taskId, String solution);
 
     @Select("""
             SELECT
@@ -133,4 +133,23 @@ public interface TasksRepository {
             WHERE id = #{taskId};
             """)
     Optional<Long> selectEquipmentIdById(Long taskId);
+
+    @Select("""
+            SELECT
+            t.id AS 'id',
+            t.equipment_id AS 'equipmentId',
+            e.`name` AS 'equipmentName',
+            t.`request` AS 'request',
+            t.user_account_id AS 'userAccountId',
+            u.`name` AS 'userName',
+            t.`action` AS 'action',
+            t.`solution` AS 'solution',
+            t.updated_at AS 'lastUpdateTime'
+            FROM `tasks` t
+            JOIN `equipments` e ON e.id = t.equipment_id
+            LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
+            LEFT JOIN `users` u ON u.id = ua.user_id
+            WHERE t.id = #{taskId}
+            """)
+    TaskListDto getTaskDetail(Long taskId);
 }
