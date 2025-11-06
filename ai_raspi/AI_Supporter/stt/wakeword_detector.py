@@ -6,16 +6,41 @@ import threading
 import queue
 import sounddevice as sd
 import numpy as np
-import tensorflow as tf
-import librosa
+import scipy.signal
+import tflite_runtime.interpreter as tflite
 from collections import deque
 import time
 import os
 
 SAMPLE_RATE = 16000
-DURATION = 1.0  # 1초 창
+DURATION = 1.0
+N_FFT = 400
+HOP_LENGTH = 160
 N_MELS = 40
-WAKEWORD_THRESHOLD = 0.75
+WAKEWORD_THRESHOLD = 0.6
+LABELS = ["onair", "negative"]
+
+
+# Mel 필터 계산
+
+def hz_to_mel(hz): return 2595 * np.log10(1 + hz / 700.0)
+def mel_to_hz(mel): return 700 * (10**(mel / 2595.0) - 1)
+
+def mel_filterbank(n_mels=N_MELS, n_fft=N_FFT, sr=SAMPLE_RATE, fmin=0, fmax=None):
+    fmax = fmax or sr / 2
+    mel_points = np.linspace(hz_to_mel(fmin), hz_to_mel(fmax), n_mels + 2)
+    hz_points = mel_to_hz(mel_points)
+    bin_points = np.floor((n_fft + 1) * hz_points / sr).astype(int)
+    fbanks = np.zeros((n_mels, n_fft // 2 + 1))
+    for i in range(1, n_mels + 1):
+        left, center, right = bin_points[i - 1], bin_points[i], bin_points[i + 1]
+        for j in range(left, center):
+            fbanks[i - 1, j] = (j - left) / (center - left)
+        for j in range(center, right):
+            fbanks[i - 1, j] = (right - j) / (right - center)
+    return fbanks
+
+MEL_FB = mel_filterbank()
 
 class WakewordDetector:
     def __init__(self, model_path=None):
@@ -42,7 +67,7 @@ class WakewordDetector:
     def _load_model(self):
         """TFLite 모델 로드"""
         try:
-            self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
+            self.interpreter = tflite.Interpreter(model_path=self.model_path)
             self.interpreter.allocate_tensors()
             self.input_details = self.interpreter.get_input_details()[0]
             self.output_details = self.interpreter.get_output_details()[0]
@@ -53,24 +78,29 @@ class WakewordDetector:
             self.interpreter = None
     
     def extract_features(self, audio):
-        """오디오에서 특징 추출"""
-        mel = librosa.feature.melspectrogram(
-            y=audio, sr=SAMPLE_RATE, n_fft=400, hop_length=160, n_mels=N_MELS
+        _, _, Zxx = scipy.signal.stft(
+            audio, fs=SAMPLE_RATE, window="hann",
+            nperseg=N_FFT, noverlap=N_FFT - HOP_LENGTH
         )
-        mel_db = librosa.power_to_db(mel, ref=np.max).T
+        power = np.abs(Zxx) ** 2
+        power = power / np.sum(np.hanning(N_FFT)**2)
+        mel = np.dot(MEL_FB, power)
+        mel_norm = mel / (np.max(mel) + 1e-6)
+        mel_db = 10 * np.log10(mel_norm + 1e-10)
+        mel_db = np.clip(mel_db, -80, 0)
+        mel_db = mel_db.T
         mel_db = np.pad(mel_db, ((0, max(0, 98 - mel_db.shape[0])), (0, 0)))[:98, :]
-        mel_db = np.expand_dims(mel_db, (0, -1)).astype(np.float32)
-        return mel_db
+        return np.expand_dims(mel_db, (0, -1)).astype(np.float32)
     
     def predict_wakeword(self, audio_chunk):
-        """Wakeword 예측"""
         if self.interpreter is None:
             return None
-        
+
         features = self.extract_features(audio_chunk)
         self.interpreter.set_tensor(self.input_details['index'], features)
         self.interpreter.invoke()
         pred = self.interpreter.get_tensor(self.output_details['index'])[0]
+
         return pred
     
     def _detection_loop(self):
