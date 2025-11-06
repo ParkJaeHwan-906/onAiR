@@ -211,7 +211,7 @@ export const OverlayCanvas = ({
   return (
     <>
       <Stage
-        width={940}
+        width={968}
         height={857}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
