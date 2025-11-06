@@ -10,8 +10,8 @@ function TopBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = async () => {
+    await logoutUser(); // async로 변경
     window.location.href = "/";
   };
 

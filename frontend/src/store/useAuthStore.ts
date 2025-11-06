@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { login, getUserInfo } from "../api/auth";
+import { checkIn, checkOut } from "../api/user";
 
 interface User {
   email: string;
@@ -48,6 +49,13 @@ export const useAuthStore = create<AuthState>((set) => ({
             refreshToken,
             isAuthenticated: true,
           });
+          
+          // 로그인 시 자동으로 출근 처리 (온라인 상태로 변경)
+          try {
+            await checkIn();
+          } catch (error: any) {
+            // 이미 출근처리 되었거나 에러가 발생해도 무시 (로그인은 성공)
+          }
         }
       } else {
         throw new Error(res.message || "로그인 실패");
@@ -59,7 +67,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   // 로그아웃
-  logoutUser: () => {
+  logoutUser: async () => {
+    // 로그아웃 시 자동으로 퇴근 처리 (오프라인 상태로 변경)
+    try {
+      await checkOut();
+    } catch (error: any) {
+      // 출근 기록이 없거나 에러가 발생해도 무시 (로그아웃은 진행)
+    }
+    
     localStorage.clear();
     set({
       user: null,
@@ -90,6 +105,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isRestoring: false,
         });
+        
+        // 새로고침 시에는 출근 처리를 하지 않음
+        // (이미 로그인 시 출근 처리가 되었거나, 로그아웃 후 재로그인 시에만 출근 처리)
+        // getUserInfo()로 받은 정보에 online 상태가 포함되어 있으므로 그대로 사용
       } else {
         localStorage.clear();
         set({ isRestoring: false });

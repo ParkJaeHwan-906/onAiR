@@ -6,20 +6,31 @@ import { sendConnectionRequest, getLivekitToken } from "../../api/webrtc";
 import { useNavigate } from "react-router-dom";
 import WorkAdd from "../Work/WorkAdd";
 import Modal from "../Work/Modal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSSEStore } from "../../store/useSSEStore";
+import { getCompanyEquipmentList } from "../../api/equipment";
+import { assignEquipment, checkIn, checkOut } from "../../api/user";
+import type { Equipment } from "../../types/equipment";
 
 type EmployeeDetailProps = {
   employee: Employee | null;
 };
 
 function EmployeeDetail({ employee }: EmployeeDetailProps) {
-  const { myInfo } = useUserStore();
+  const { myInfo, fetchEmployees, fetchMyInfo } = useUserStore();
   const isMine = myInfo?.userAccountId === employee?.userAccountId;
   const isAdmin = myInfo?.role === "관리자";
   const navigate = useNavigate();
   const [showRequestBox, setShowRequestBox] = useState(false);
   const { isConnected, connect } = useSSEStore();
+  
+  // 설비 지정 관련 상태
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
+  const [isEquipmentDropdownOpen, setIsEquipmentDropdownOpen] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [isCheckingInOut, setIsCheckingInOut] = useState(false);
+  const equipmentDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // 요청 기능 사용 전, SSE 연결이 없으면 선연결
   useEffect(() => {
@@ -27,6 +38,80 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       connect();
     }
   }, [isConnected, connect]);
+  
+  // 관리자가 직원을 선택했을 때 설비 목록 조회
+  useEffect(() => {
+    if (isAdmin && employee) {
+      fetchEquipments();
+      // 현재 직원의 설비 ID 설정
+      setSelectedEquipmentId(employee.equipmentId || null);
+    }
+  }, [isAdmin, employee]);
+  
+  // 설비 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    if (!isEquipmentDropdownOpen) {
+      return;
+    }
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        isEquipmentDropdownOpen &&
+        equipmentDropdownRef.current &&
+        !equipmentDropdownRef.current.contains(target)
+      ) {
+        setIsEquipmentDropdownOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isEquipmentDropdownOpen]);
+  
+  const fetchEquipments = async () => {
+    try {
+      const res = await getCompanyEquipmentList();
+      if (res.success && res.data) {
+        setEquipments(res.data);
+      }
+    } catch (error) {
+      console.error('설비 목록 조회 실패:', error);
+    }
+  };
+  
+  const handleAssignEquipment = async () => {
+    if (!employee || !isAdmin) return;
+    
+    if (!selectedEquipmentId) {
+      alert('설비를 선택해주세요.');
+      return;
+    }
+    
+    try {
+      setIsAssigning(true);
+      const res = await assignEquipment(employee.userAccountId, selectedEquipmentId);
+      
+      if (res.success) {
+        alert('설비가 성공적으로 지정되었습니다.');
+        // 직원 목록 새로고침
+        if (fetchEmployees) {
+          await fetchEmployees(null);
+          // 직원 목록 새로고침 후 선택한 직원 정보도 업데이트
+          // (useUserStore의 employees 배열이 업데이트되므로 부모 컴포넌트에서 처리 필요)
+        }
+      } else {
+        alert(res.message || '설비 지정에 실패했습니다.');
+      }
+    } catch (error: any) {
+      console.error('설비 지정 실패:', error);
+      alert(error.response?.data?.message || '설비 지정 중 오류가 발생했습니다.');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   // description(요청 사유) 받도록 수정
   const handleConnectionRequest = async (description: string) => {
@@ -100,10 +185,71 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         </div>
 
         {isAdmin && (
-          <div className="detail-item">
-            <dt>담당 설비</dt>
-            <dd>{employee.equipmentName || "미지정"}</dd>
-          </div>
+          <>
+            <div className="detail-item">
+              <dt>담당 설비</dt>
+              <dd>{employee.equipmentName || "미지정"}</dd>
+            </div>
+            <div className="detail-item">
+              <dt>설비 지정</dt>
+              <dd>
+                <div className="equipment-assign-wrapper" ref={equipmentDropdownRef}>
+                  <button
+                    type="button"
+                    className={`equipment-select-trigger${isEquipmentDropdownOpen ? ' open' : ''}`}
+                    onClick={() => setIsEquipmentDropdownOpen((prev) => !prev)}
+                    disabled={isAssigning}
+                  >
+                    {selectedEquipmentId
+                      ? equipments.find(eq => eq.id === selectedEquipmentId)?.name || '설비를 선택하세요'
+                      : '설비를 선택하세요'}
+                  </button>
+                  {isEquipmentDropdownOpen && (
+                    <ul className="equipment-select-dropdown">
+                      <li>
+                        <button
+                          type="button"
+                          className={`equipment-select-option${selectedEquipmentId === null ? ' selected' : ''}`}
+                          onClick={() => {
+                            setSelectedEquipmentId(null);
+                            setIsEquipmentDropdownOpen(false);
+                          }}
+                        >
+                          <span>설비 없음</span>
+                        </button>
+                      </li>
+                      {equipments.map((equipment) => (
+                        <li key={equipment.id}>
+                          <button
+                            type="button"
+                            className={`equipment-select-option${equipment.id === selectedEquipmentId ? ' selected' : ''}`}
+                            onClick={() => {
+                              setSelectedEquipmentId(equipment.id);
+                              setIsEquipmentDropdownOpen(false);
+                            }}
+                          >
+                            <span className="equipment-select-option-title">
+                              {equipment.name}
+                            </span>
+                            <span className="equipment-select-option-meta">
+                              {equipment.category}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  className="equipment-assign-button"
+                  onClick={handleAssignEquipment}
+                  disabled={isAssigning || !selectedEquipmentId}
+                >
+                  {isAssigning ? '지정 중...' : '설비 지정'}
+                </button>
+              </dd>
+            </div>
+          </>
         )}
 
         {!isAdmin && isMine && (
@@ -160,7 +306,52 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         </>
       )}
 
-      {!isAdmin && <button className="connect-button">정보 수정</button>}
+      {!isAdmin && isMine && (
+        <>
+          <button 
+            className="connect-button" 
+            onClick={async () => {
+              if (isCheckingInOut) return;
+              
+              try {
+                setIsCheckingInOut(true);
+                
+                if (employee.online) {
+                  // 퇴근 처리
+                  await checkOut();
+                  alert("퇴근 처리되었습니다.");
+                } else {
+                  // 출근 처리
+                  await checkIn();
+                  alert("출근 처리되었습니다.");
+                }
+                
+                // 내 정보 새로고침 (작업자가 자신의 정보를 볼 때)
+                if (fetchMyInfo) {
+                  await fetchMyInfo();
+                }
+                
+                // 직원 목록 새로고침 (관리자가 볼 때를 위해)
+                if (fetchEmployees) {
+                  await fetchEmployees(null);
+                }
+              } catch (error: any) {
+                const errorMessage = error.response?.data?.message || error.message || "처리 중 오류가 발생했습니다.";
+                alert(errorMessage);
+              } finally {
+                setIsCheckingInOut(false);
+              }
+            }}
+            disabled={isCheckingInOut}
+          >
+            {isCheckingInOut 
+              ? "처리 중..." 
+              : employee.online 
+              ? "퇴근" 
+              : "출근"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

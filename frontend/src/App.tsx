@@ -4,6 +4,7 @@ import AppLayout from "./components/Layout/AppLayout";
 import HomePage from "./pages/HomePage";
 import EmployeePage from "./pages/EmployeePage";
 import WorkPage from "./pages/WorkPage";
+import EquipmentPage from "./pages/EquipmentPage";
 import { CommunicationPage } from "./pages/CommunicationPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -32,6 +33,7 @@ function App() {
         <Route path="communication" element={<CommunicationPage />} />
         <Route path="employees" element={<EmployeePage />} />
         <Route path="work" element={<WorkPage />} />
+        <Route path="equipment" element={<EquipmentPage />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

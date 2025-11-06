@@ -29,6 +29,19 @@ function EmployeePage() {
     }
   }, [myInfo]);
 
+  // 직원 목록이 업데이트되면 선택한 직원 정보도 업데이트
+  const { employees } = useUserStore();
+  useEffect(() => {
+    if (selectedEmployee && employees.length > 0) {
+      const updatedEmployee = employees.find(
+        (emp) => emp.userAccountId === selectedEmployee.userAccountId
+      );
+      if (updatedEmployee) {
+        setSelectedEmployee(updatedEmployee);
+      }
+    }
+  }, [employees]);
+
   // 관리자 여부 판단
   const isAdmin = myInfo?.role === "관리자";
   // EmployeeDetail에 보낼 영역 -> 관리자면 선택한 직원, 사용자면 내 정보
