@@ -33,9 +33,15 @@ function WorkBig({ refreshKey, onTaskUpdated }: WorkBigProps) {
 
   // 변경시간을 대한민국 시간(KST)으로 변환
   const formatTime = (dateTimeString: string) => {
-    const date = new Date(dateTimeString); // UTC 기준
-    const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-    return kst.toISOString().substring(11, 19); // HH:mm:ss
+    if (!dateTimeString) return "-";
+
+    const utcDate = new Date(dateTimeString); // 백엔드에서 UTC 기준으로 전달됨
+    const kstDate = new Date(utcDate.getTime() + 9 * 60 * 60 * 1000); // +9시간
+
+    const hours = String(kstDate.getHours()).padStart(2, "0");
+    const minutes = String(kstDate.getMinutes()).padStart(2, "0");
+
+    return `${hours}시 ${minutes}분`;
   };
 
   const fetchTasks = async () => {
