@@ -19,7 +19,7 @@ def stream_camera():
     "rpicam-vid",
     "--width", "640",
     "--height", "480",
-    "--framerate", "12",       # 12~15fps가 Zero 2W에서 안정적
+    "--framerate", "5",       # 12~15fps가 Zero 2W에서 안정적
     "--codec", "mjpeg",
     "--quality", "60",         # 품질 낮추면 네트워크 지연 급감
     "--timeout", "0",

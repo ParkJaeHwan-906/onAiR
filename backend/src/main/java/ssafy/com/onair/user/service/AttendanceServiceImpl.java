@@ -23,10 +23,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         try {
             attendanceRepository.insertCheckIn(userAccountId, LocalDate.now(), LocalDateTime.now());
             userAccountsRepository.updateUserStateCheckIn(userAccountId);
-            return "정상적으로 출근처리 되었습니다.";
         } catch (Exception e) {
-            throw new IllegalArgumentException("이미 출근처리 되었습니다.");
+            userAccountsRepository.updateUserStateCheckIn(userAccountId);
+//            throw new IllegalArgumentException("이미 출근처리 되었습니다.");
         }
+        return "정상적으로 출근처리 되었습니다.";
     }
 
     @Transactional
