@@ -16,6 +16,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
+        maven {
+            url = uri("https://aiinfra.pkgs.visualstudio.com/_packaging/ORT-Nightly/maven/v1")
+            name = "ORT-Nightly"
+        }
+
+        maven { url 'https://jitpack.io' }
     }
 }
 

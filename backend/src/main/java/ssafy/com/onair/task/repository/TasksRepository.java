@@ -34,6 +34,7 @@ public interface TasksRepository {
             LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
             LEFT JOIN `users` u ON u.id = ua.user_id
             WHERE t.company_id = #{companyId}
+            AND DATE_FORMAT(t.created_at, "%Y-%m-%d") = DATE_FORMAT(NOW(), "%Y-%m-%d")
             <if test="equipmentId != null">
                 AND t.equipment_id = #{equipmentId}
             </if>
@@ -45,6 +46,7 @@ public interface TasksRepository {
     List<TaskListDto> getTaskListAsAdmin(Long companyId, Long equipmentId, Integer action);
 
     @Select("""
+            <script>
             SELECT
             t.id AS 'id',
             t.equipment_id AS 'equipmentId',
@@ -60,10 +62,17 @@ public interface TasksRepository {
             LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
             LEFT JOIN `users` u ON u.id = ua.user_id
             WHERE t.company_id = #{companyId}
-            AND t.equipment_id = #{equipmentId}
-            AND t.action = 1;
+            AND DATE_FORMAT(t.created_at, "%Y-%m-%d") = DATE_FORMAT(NOW(), "%Y-%m-%d")
+            AND t.user_account_id = #{userAccountId}
+            <if test="equipmentId != null">
+                AND t.equipment_id = #{equipmentId}
+            </if>
+            <if test="action != null">
+                AND t.action = #{action}
+            </if>
+            </script>
             """)
-    List<TaskListDto> getTaskListAsWorker(Long companyId, Long equipmentId);
+    List<TaskListDto> getTaskListAsWorker(Long companyId, Long equipmentId, Long userAccountId, Integer action);
 
     @Select("""
             SELECT id FROM `tasks`
@@ -85,33 +94,37 @@ public interface TasksRepository {
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 3
+                `action` = 3,
+                `solution` = #{solution}
             WHERE `id` = #{taskId};
             """)
-    Integer endTaskAsAdmin(Long taskId);
+    Integer endTaskAsAdmin(Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 0
+                `action` = 0,
+                `solution` = #{solution}
             WHERE `id` = #{taskId};
             """)
-    Integer cancelTaskAsAdmin(Long taskId);
+    Integer cancelTaskAsAdmin(Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 3
+                `action` = 3,
+                `solution` = #{solution}
             WHERE `id` = #{taskId}
             AND `user_account_id` = #{userAccountId};
             """)
-    Integer endTaskAsWorker(Long userAccountId, Long taskId);
+    Integer endTaskAsWorker(Long userAccountId, Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 0
+                `action` = 0,
+                `solution` = #{solution}
             WHERE `id` = #{taskId}
             AND `user_account_id` = #{userAccountId};
             """)
-    Integer cancelTaskAsWorker(Long userAccountId, Long taskId);
+    Integer cancelTaskAsWorker(Long userAccountId, Long taskId, String solution);
 
     @Select("""
             SELECT
@@ -120,4 +133,23 @@ public interface TasksRepository {
             WHERE id = #{taskId};
             """)
     Optional<Long> selectEquipmentIdById(Long taskId);
+
+    @Select("""
+            SELECT
+            t.id AS 'id',
+            t.equipment_id AS 'equipmentId',
+            e.`name` AS 'equipmentName',
+            t.`request` AS 'request',
+            t.user_account_id AS 'userAccountId',
+            u.`name` AS 'userName',
+            t.`action` AS 'action',
+            t.`solution` AS 'solution',
+            t.updated_at AS 'lastUpdateTime'
+            FROM `tasks` t
+            JOIN `equipments` e ON e.id = t.equipment_id
+            LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
+            LEFT JOIN `users` u ON u.id = ua.user_id
+            WHERE t.id = #{taskId}
+            """)
+    TaskListDto getTaskDetail(Long taskId);
 }

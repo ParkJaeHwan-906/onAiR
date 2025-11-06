@@ -1,0 +1,12 @@
+.topbar-container {
+  box-sizing: border-box;
+  width: 100%;
+  height: 72px;
+  background-color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 32px;
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.08);
+}

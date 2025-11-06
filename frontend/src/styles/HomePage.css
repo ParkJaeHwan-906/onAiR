@@ -1,0 +1,18 @@
+.home-wrapper {
+  box-sizing: border-box;
+  width: 1664px;
+  height: 1011px;
+  background-color: #F5F6F8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+}
+
+.component-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+}
