@@ -24,4 +24,12 @@ public class SignupRequestDto {
     private String email;
     @NotBlank(message = "비밀번호는 필수입니다.")
     private String password;
+
+    public void replaceRegex() {
+        this.phone = this.phone.replace("-", "").replace(" ", "");
+        this.name = this.name.replace(" ", "");
+        this.part = this.part.replace(" ", "");
+
+        this.companyName = this.companyName == null ? null : this.companyName.replace(" ", "");
+    }
 }

@@ -17,6 +17,8 @@
     "event-source-polyfill": "^1.0.31",
     "konva": "^10.0.8",
     "livekit-client": "^2.15.14",
+    "lodash": "^4.17.21",
+    "lodash.throttle": "^4.1.1",
     "lucide-react": "^0.548.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@types/lodash.throttle": "^4.1.9",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",

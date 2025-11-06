@@ -10,19 +10,19 @@ import {
   Arrow,
 } from "react-konva";
 import type { DrawingLine } from "../../types/DrawingLine";
-// import { ratchet } from "livekit-client";
+import { useRoomContext } from "@livekit/components-react";
+import { throttle } from "lodash";
 
 interface CanvasProps {
-  handleSerialize: (lines: DrawingLine[]) => void;
   penColor: string;
   tool?: string;
 }
 
 export const OverlayCanvas = ({
-  handleSerialize,
   penColor,
   tool = "pen",
 }: CanvasProps) => {
+
   const [lines, setLines] = useState<DrawingLine[]>([]);
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
   const [currentShape, setCurrentShape] = useState<any | null>(null); // 드래그 중 도형
@@ -31,7 +31,22 @@ export const OverlayCanvas = ({
   );
   const isDrawing = useRef(false);
   const startPos = useRef<{ x: number; y: number } | null>(null);
-
+  const room = useRoomContext()
+  const sendDrawingData = (data: object) => {
+      if (!room) return
+  
+      const jsonString = JSON.stringify(data)
+      const byteArray = new TextEncoder().encode(jsonString)
+      console.log(">>> [Web] SENDING DATA:", jsonString);
+      room.localParticipant.publishData(byteArray, {
+        reliable: false,
+      })
+    }
+  
+    const throttledSendDrawMove = throttle(
+      (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
+    )
+  
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const pos = e.target.getStage()?.getPointerPosition();
@@ -46,6 +61,11 @@ export const OverlayCanvas = ({
         ...prev,
         { tool, color: penColor, points: [pos.x, pos.y] },
       ]);
+      sendDrawingData({
+      event: 'draw-start',
+      x: pos.x,
+      y: pos.y
+    })
     } else if (["circle", "square", "triangle", "arrow"].includes(tool)) {
       startPos.current = pos;
       setCurrentShape({
@@ -78,6 +98,7 @@ export const OverlayCanvas = ({
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
+      throttledSendDrawMove(pos.x, pos.y)
     } else if (startPos.current && currentShape) {
       setCurrentShape({
         ...currentShape,
@@ -96,6 +117,7 @@ export const OverlayCanvas = ({
     }
     isDrawing.current = false;
     startPos.current = null;
+    sendDrawingData({event: 'draw-end'})
   };
 
   // ------------------------------- 삭제 -------------------------------
