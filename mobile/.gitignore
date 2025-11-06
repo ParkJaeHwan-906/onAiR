@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Service Account Key (GCP)
+app/src/main/assets/stt-key.json
+
+# Optional: exclude all assets if not needed
+# app/src/main/assets/
