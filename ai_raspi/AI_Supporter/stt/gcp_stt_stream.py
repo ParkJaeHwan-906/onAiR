@@ -19,10 +19,15 @@ class GcpStreamingStt:
         self.rate = settings.RATE
         self.client = speech.SpeechClient()
         self._stop = False
-        self.silence_timeout = settings.SILENCE_TIMEOUT_SEC if hasattr(settings, 'SILENCE_TIMEOUT_SEC') else 3.0
+        self.silence_timeout = settings.SILENCE_TIMEOUT_SEC if hasattr(settings, 'SILENCE_TIMEOUT_SEC') else 2.5
         self.socketio_client = socketio_client
         self.session_id = None  # Clarify 세션 ID
         self.stop_sessions = set()  # 종료할 세션 ID 집합
+        # 타이머 기반 침묵 감지용 변수
+        self.last_activity_time = None  # 마지막 STT 결과 수신 시간
+        self.force_final_sent = False  # 강제 final 이벤트 전송 플래그
+        self.monitor_task = None  # 침묵 모니터링 태스크
+        self.last_interim_text = ""  # 마지막 interim 결과 저장 (침묵 타임아웃 시 사용)
 
     async def run(self, mic, broadcaster=None, session_id: str = None):
         """
@@ -44,6 +49,7 @@ class GcpStreamingStt:
         # 세션 ID 설정
         self.session_id = session_id or str(uuid.uuid4())
         print(f"🔗 Streaming STT 세션 시작: session_id={self.session_id}")
+        print(f"⏱️ 침묵 타임아웃: {self.silence_timeout}초")
 
         try:
             config = speech.RecognitionConfig(
@@ -59,9 +65,17 @@ class GcpStreamingStt:
 
             last_voice_ts = time.time()
             self._stop = False
+            self.force_final_sent = False
+            self.last_activity_time = time.time()  # 초기화
+            self.last_interim_text = ""  # 초기화
 
             loop = asyncio.get_running_loop()
             results_queue: asyncio.Queue = asyncio.Queue()
+            
+            # 침묵 모니터링 태스크 시작
+            self.monitor_task = asyncio.create_task(
+                self._monitor_silence(results_queue, loop)
+            )
 
             def gen():
                 """오디오 청크 생성기"""
@@ -89,6 +103,12 @@ class GcpStreamingStt:
                             confidence = result.alternatives[0].confidence if hasattr(result.alternatives[0], 'confidence') else None
                             msg_type = "final" if result.is_final else "interim"
                             
+                            # STT 결과 수신 시 활동 시간 갱신 (침묵 타이머 리셋)
+                            asyncio.run_coroutine_threadsafe(
+                                self._update_activity_time(),
+                                loop
+                            )
+                            
                             # 중간 결과 또는 최종 결과 전송
                             asyncio.run_coroutine_threadsafe(
                                 results_queue.put({
@@ -98,6 +118,13 @@ class GcpStreamingStt:
                                 }),
                                 loop
                             )
+                            
+                            # GCP STT가 final을 반환하면 강제 final 플래그 설정
+                            if result.is_final:
+                                asyncio.run_coroutine_threadsafe(
+                                    self._set_force_final(),
+                                    loop
+                                )
 
                         # 침묵 타임아웃은 무시 (서비스 종료 신호까지 계속 대기)
                         # 마이크는 계속 켜져있고 다음 입력을 기다림
@@ -139,6 +166,8 @@ class GcpStreamingStt:
                     # 최종 결과만 Socket.IO로 전송
                     if msg_type == "final":
                         print(f"📝 STT 최종 결과: {txt}")
+                        self.force_final_sent = True  # final 수신 시 플래그 설정
+                        
                         # Socket.IO로 전송 (session_id 포함)
                         success = await self.socketio_client.emit_streaming_stt(
                             text=txt,
@@ -148,17 +177,48 @@ class GcpStreamingStt:
                         )
                         if not success:
                             print("⚠️ Socket.IO 전송 실패")
+                        break  # final 수신 시 루프 종료
                     
                     # 로그 출력 (interim 결과도 표시)
                     if msg_type == "interim":
                         print(f"🔄 STT 중간 결과: {txt}")
+                        self.last_interim_text = txt  # 마지막 interim 결과 저장 (침묵 타임아웃 시 사용)
                         
                 elif msg_type in ("info", "error"):
                     print(f"⚠️ {msg_type}: {txt}")
+                elif msg_type == "silence_timeout":
+                    # 침묵 타임아웃으로 인한 강제 final
+                    print(f"🕓 침묵 타임아웃 감지 → 발화 종료 처리")
+                    # 마지막 interim 결과 사용 (없으면 빈 문자열)
+                    final_text = txt if txt else self.last_interim_text
+                    print(f"   사용할 텍스트: '{final_text}'")
+                    self.force_final_sent = True
+                    
+                    # Socket.IO로 전송 (session_id 포함)
+                    success = await self.socketio_client.emit_streaming_stt(
+                        text=final_text,
+                        msg_type="final",
+                        confidence=confidence,
+                        session_id=self.session_id
+                    )
+                    if not success:
+                        print("⚠️ Socket.IO 전송 실패")
+                    break  # 강제 final 수신 시 루프 종료
 
         finally:
+            # 침묵 모니터링 태스크 취소
+            if self.monitor_task:
+                self.monitor_task.cancel()
+                try:
+                    await self.monitor_task
+                except asyncio.CancelledError:
+                    pass
+            
             # 세션 ID 초기화 (다음 대화를 위해)
             self.session_id = None
+            self.last_activity_time = None
+            self.force_final_sent = False
+            self.last_interim_text = ""
             print("🟢 Streaming STT 세션 종료")
 
     def stop(self):
@@ -174,3 +234,63 @@ class GcpStreamingStt:
     def set_session_id(self, session_id: str):
         """세션 ID 설정"""
         self.session_id = session_id
+    
+    async def _update_activity_time(self):
+        """STT 결과 수신 시 활동 시간 갱신 (침묵 타이머 리셋)"""
+        self.last_activity_time = time.time()
+    
+    async def _set_force_final(self):
+        """GCP STT가 final을 반환했을 때 플래그 설정"""
+        self.force_final_sent = True
+    
+    async def _monitor_silence(self, results_queue: asyncio.Queue, loop):
+        """
+        침묵 감지 모니터링: 일정 시간동안 STT 결과가 없으면 종료 처리
+        
+        Args:
+            results_queue: STT 결과 큐
+            loop: 이벤트 루프
+        """
+        check_interval = 0.2  # 200ms마다 확인
+        
+        while not self.force_final_sent and not self._stop:
+            try:
+                await asyncio.sleep(check_interval)
+                
+                # 세션 종료 신호 확인
+                if self.session_id and self.session_id in self.stop_sessions:
+                    break
+                
+                if self._stop:
+                    break
+                
+                # 활동 시간 확인
+                if self.last_activity_time is None:
+                    continue
+                
+                elapsed = time.time() - self.last_activity_time
+                
+                # 침묵 타임아웃 발생 시 강제 final 이벤트 발생
+                if elapsed >= self.silence_timeout:
+                    print(f"🕓 침묵 {elapsed:.1f}초 경과 (타임아웃: {self.silence_timeout}초) → 발화 종료 처리")
+                    
+                    # 강제 final 이벤트를 큐에 추가
+                    # 마지막 interim 결과는 메인 루프에서 self.last_interim_text 사용
+                    asyncio.run_coroutine_threadsafe(
+                        results_queue.put({
+                            "type": "silence_timeout",
+                            "text": "",  # 마지막 interim 결과는 메인 루프에서 사용
+                            "confidence": None,
+                            "reason": "silence_timeout"
+                        }),
+                        loop
+                    )
+                    
+                    self.force_final_sent = True
+                    break
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"⚠️ 침묵 모니터링 오류: {e}")
+                break

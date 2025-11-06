@@ -113,11 +113,12 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                     current_file_dir = os.path.dirname(os.path.abspath(__file__))
                     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir))))
                     ai_ar_path = os.path.join(project_root, "ai_ar")
+                    ai_ar_app_path = os.path.join(ai_ar_path, "app")
                     
-                    if os.path.exists(ai_ar_path) and ai_ar_path not in sys.path:
-                        sys.path.insert(0, ai_ar_path)
+                    if os.path.exists(ai_ar_app_path) and ai_ar_app_path not in sys.path:
+                        sys.path.insert(0, ai_ar_app_path)
                     
-                    from app.sockets.socket_manager import broadcast_to
+                    from sockets.socket_manager import broadcast_to
                     
                     # 모바일로 임베딩 전송 (에러 핸들링 및 재시도)
                     try:
@@ -163,6 +164,7 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                 )
                 
             except RuntimeError as e:
+                logger.error(f"❌ Phi-3 모델이 사용 불가능합니다: {str(e)}")
                 return STTResultResponse(
                     success=False,
                     message=f"Phi-3 모델이 사용 불가능합니다: {str(e)}"
