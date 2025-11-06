@@ -83,8 +83,10 @@ async def handle_video_stream(sid, data):
 
 
 # === video-frame (라즈베리 → 서버 프레임 전송) ===
-@sio.on("video-frame")
+@sio.on("video_frame")
 async def handle_video_frame(sid, data):
+    print("프레임 들어옴")
+    # from app.ar import motion_core
     """
     라즈베리파이에서 binary 형태로 전송된 JPEG 프레임 처리
     """
@@ -96,16 +98,28 @@ async def handle_video_frame(sid, data):
     # data는 bytes (JPEG 이미지)
     np_data = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-
+    print("프레임")
+    print(frame)
     if frame is None:
         print("⚠️ Failed to decode frame")
         return
 
     print(f"🎞️ Received frame from {sender_device}")
 
-    # 동시에 PC 클라이언트에게 브로드캐스트
+    # ✅ 모션 계산 수행 (카메라 위치 추정)
+    # result = await motion_core.process_frame(frame, sid=sid)
+
+    # ✅ 계산 결과 확인 로그
+    # if result["status"] == "ok":
+    #     x, y, z = result["x"], result["y"], result["z"]
+    #     print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+    # else:
+    #     print(f"⚠️ Motion estimation status: {result['status']}")
+
+    # 동시에 PC 클라이언트에게 원본 프레임 브로드캐스트
     _, jpeg_bytes = cv2.imencode('.jpg', frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+<<<<<<< HEAD
     
 
 # === STT 결과 수신 및 FastAPI 서버로 전달 ===
@@ -223,3 +237,4 @@ async def handle_clarify_input(sid, data):
                 print(f"⚠️ FastAPI 서버 응답 오류: {response.status_code}")
     except Exception as e:
         print(f"❌ FastAPI 서버 전달 오류: {e}")
+

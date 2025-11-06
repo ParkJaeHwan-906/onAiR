@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import os
-from app.sockets.socket_manager import sio  # ✅ Socket.IO 가져오기
+from app.sockets.socket_manager import sio 
 from app.ar.feature_extractor import extract_features
 from app.ar.feature_tracker import track_features
 from app.ar.ransac_filter import ransac_filter
