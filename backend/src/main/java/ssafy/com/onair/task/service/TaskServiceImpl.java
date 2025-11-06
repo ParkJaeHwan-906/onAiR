@@ -57,7 +57,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public Boolean endTask(CustomUserDetails user, TaskStatusChangeRequestDto request) {
         //        TODO : 상태 확인은 나중에 추가
-        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.endTaskAsAdmin(request.getTaskId()) : tasksRepository.endTaskAsWorker(user.getUserAccountId(), request.getTaskId())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
+        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.endTaskAsAdmin(request.getTaskId(), request.getSolution()) : tasksRepository.endTaskAsWorker(user.getUserAccountId(), request.getTaskId(), request.getSolution())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
         sseManager.taskEnd(user.getCompanyId(), user.getUserInfo().getEquipmentId(), mkTaskStatusChange(request.getTaskId()));
         return true;
     }
