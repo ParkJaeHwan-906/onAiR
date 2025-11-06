@@ -21,7 +21,10 @@ from datetime import datetime
 from app.ar import motion_core
 
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
-sio: Optional[socketio.AsyncServer] = None
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins='*',
+)
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
@@ -30,10 +33,8 @@ device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, history, ... } }
 
 
-def init_socketio(sio_instance: socketio.AsyncServer):
+def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
-    global sio
-    sio = sio_instance
     
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
     sio.on("connect")(handle_connect)
@@ -43,6 +44,7 @@ def init_socketio(sio_instance: socketio.AsyncServer):
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
+    sio.on("video_frame")(handle_video_frame)  
     
     print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
