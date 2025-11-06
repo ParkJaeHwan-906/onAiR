@@ -2,77 +2,104 @@
   width: 788px;
   height: 628px;
   border-radius: 16px;
-  background-color: #FFFFFF;
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
+  background-color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
+  align-items: center;
+  padding-top: 25px;
 }
 
 .home-big-header {
+  width: 748px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 25px;
+  padding: 0;
+  margin-bottom: 20px;
+  box-sizing: border-box;
 }
 
 .title {
   font-family: 'NotoSansKR';
   font-size: 20px;
   font-weight: 800;
-  color: #2E2E2E;
+  color: #3b4a6b;
 }
 
-.list-header {
-  box-sizing: border-box;
+/* 리스트 전체 박스 */
+.home-table {
+  width: 748px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 리스트 헤더 */
+.home-table .list-header {
   width: 100%;
-  height: 52px;
+  height: 69px;
   display: flex;
-  flex-direction: row;
   align-items: center;
-  flex-shrink: 0;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 8px 8px 0 0;
 }
 
-.list-header > div {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: 25px;
-  font-size: 14px;
+.home-table .list-header > div {
+  font-family: "NotoSansKR";
+  font-size: 16px;
   font-weight: 600;
-  color: #2E2E2E;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+  box-sizing: border-box;
 }
 
-.first {
+/* 컬럼 너비 */
+.home-table .col-worker {
   width: 20%;
-  height: 100%;
 }
 
-.list-body {
-  flex: 1 1 auto;
+.home-table .col-content {
+  width: 40%;
+}
+
+.home-table .col-status {
+  width: 20%;
+}
+
+.home-table .col-time {
+  width: 20%;
+}
+
+/* 리스트 본문 */
+.home-table .list-body {
+  width: 100%;
+  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
-.list-body::-webkit-scrollbar {
+.home-table .list-body::-webkit-scrollbar {
   display: none;
 }
 
-.second {
-  width: 38.5%;
-  height: 100%;
+/* 빈 데이터 메시지 */
+.home-table .list-body .no-data {
+  text-align: center;
+  padding: 40px 0;
+  font-family: "NotoSansKR";
+  font-size: 16px;
+  color: #9ca3af;
 }
 
-.third {
-  width: 24.5%;
-  height: 100%;
-}
-
-.list-header > .fourth {
-  width: 17%;
-  height: 100%;
-  justify-content: flex-end;
-  padding-left: 0;
-  padding-right: 25px;
+/* HomeBig 내부 work-row 스타일 조정 */
+.home-table .list-body .work-row {
+  width: 748px;
 }
