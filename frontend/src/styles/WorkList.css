@@ -1,42 +1,110 @@
-.work-wrapper {
-  box-sizing: border-box;
-  width: 100%;
-  height: 56px;
+.work-row {
   display: flex;
-  flex-direction: row;
   align-items: center;
-  border-top: 1px solid #E5E7EB;
-  flex-shrink: 0;
+  width: 1048px;
+  height: 69px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 16px;
+  color: #111827;
+  transition: background-color 0.2s ease;
 }
 
-.work-wrapper > div {
+.work-row:hover {
+  background-color: #f3f4f6;
+}
+
+.work-row > div {
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
   box-sizing: border-box;
+}
+
+/* 컬럼 너비 (헤더와 동일) */
+.col-worker {
+  width: 15%;
+}
+
+.col-content {
+  width: 30%;
+}
+
+.col-status {
+  width: 12%;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding-left: 25px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #2E2E2E;
+  padding-left: 16px;
+  box-sizing: border-box;
 }
 
-.work-wrapper > .fourth {
-  width: 17%;
-  height: 100%;
-  justify-content: flex-end;
-  padding-left: 0;
-  padding-right: 25px;
+.col-time {
+  width: 13%;
 }
 
-.third > .action-wrapper {
-  width: fit-content;
-  height: 27px;
-  display: inline-flex;
+.col-solution {
+  width: 20%;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.col-actions {
+  width: 20%;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border-radius: 16px;
+  gap: 8px;
+  justify-content: flex-start;
+  padding-left: 16px;
+  box-sizing: border-box;
+}
+
+.action-button {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.complete-button {
+  background-color: #3B4A6B;
+  color: white;
+}
+
+.complete-button:hover {
+  background-color: #2d3a56;
+}
+
+.cancel-button {
+  background-color: #ef4444;
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: #dc2626;
+}
+
+.action-separator {
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.no-action {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+/* 상태 배지 */
+.col-status .status-badge {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1;
+  min-width: 60px;
+  text-align: center;
 }

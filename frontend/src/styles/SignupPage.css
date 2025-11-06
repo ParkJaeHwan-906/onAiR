@@ -1,0 +1,138 @@
+.signup-page-wrapper {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f5f6f8;
+  font-family: "NotoSansKR";
+}
+
+.signup-form {
+  width: 100%;
+  max-width: 420px;
+  background-color: #ffffff;
+  border-radius: 20px;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.signup-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.signup-logo img {
+  width: 200px;
+  height: auto;
+}
+
+.signup-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #3b4a6b;
+}
+
+/* 이메일 + 버튼 한 줄 배치 */
+.signup-email-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.signup-email-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.signup-input {
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  padding: 0 16px;
+  font-size: 16px;
+  color: #111827;
+  box-sizing: border-box;
+  padding: 0 80px 0 16px;
+}
+
+.signup-input:focus {
+  outline: 2px solid #3b4a6b;
+  border-color: #eef4ff;
+}
+
+.signup-input:not(:placeholder-shown) {
+  background-color: #e8f0fe;
+}
+
+.signup-submit-redundancy {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background-color: #3b4a6b;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.signup-submit-redundancy:hover {
+  box-shadow: 0 6px 12px rgba(59, 74, 107, 0.25);
+}
+
+/* 회원가입 버튼 */
+.signup-submit {
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background-color: #3b4a6b;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.signup-submit:hover {
+  box-shadow: 0 10px 24px rgba(59, 74, 107, 0.25);
+}
+
+/* 에러 / 성공 메시지 */
+.signup-error {
+  color: #dc2626;
+  font-size: 13px;
+  text-align: left;
+  margin: 0;
+}
+
+.signup-success {
+  color: #16a34a;
+  font-size: 13px;
+  text-align: left;
+  margin: 0;
+}
+
+.signup-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
