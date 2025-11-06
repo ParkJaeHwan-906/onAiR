@@ -10,7 +10,7 @@ const SOCKET_URL = 'http://localhost:8000'; // 예: "http://127.0.0.1:8000" 또�
 interface ServerToClientEvents {
   server_message: (data: { msg: string }) => void;
   pong: (data: { msg: string }) => void;
-  video_frame: (data: { frame: string }) => void;
+  video_frame: (data: ArrayBuffer) => void;
   audio_frame: (data: { frame: string }) => void;
   'marker-created': (data: { msg: string }) => void;
 }
