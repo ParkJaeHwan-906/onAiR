@@ -1,5 +1,5 @@
 // 도면 표시 컴포넌트
-import React from "react";
+// import React from "react";
 import "../../styles/Communication/DrawingPreview.css";
 
 const DrawingPreview = () => {
