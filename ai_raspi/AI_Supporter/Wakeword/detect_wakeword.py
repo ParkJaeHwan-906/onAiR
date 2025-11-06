@@ -58,7 +58,7 @@ def callback(indata, frames, time_info, status):
         if label == "onair" and conf > 0.75:
             print(f"Wakeword Detected! ({conf*100:.1f}%)")
 
-print("🎙️ Listening for wakeword 'onair' ... (press Ctrl+C to stop)")
+print("Listening for wakeword 'onair' ... (press Ctrl+C to stop)")
 with sd.InputStream(callback=callback, channels=1, samplerate=SAMPLE_RATE):
     while True:
         pass

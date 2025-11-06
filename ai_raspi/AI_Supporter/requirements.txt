@@ -12,10 +12,11 @@ google-cloud-speech>=2.20.0
 pyaudio>=0.2.13
 sounddevice>=0.4.6
 numpy>=1.24.0
-librosa>=0.10.0
+scipy>=1.11.0
+soundfile>=0.12.1
 
 # 머신러닝
-tensorflow>=2.13.0
+tflite-runtime==2.14.0
 
 # 환경 변수
 python-dotenv>=1.0.0

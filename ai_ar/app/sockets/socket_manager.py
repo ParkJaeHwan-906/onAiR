@@ -15,6 +15,8 @@ sio = socketio.AsyncServer(
     ping_interval=10    # 기본값 25초 → 조금 짧게 하여 안정적 유지
 )
 
+print(f"🔔 [DEBUG] Socket.IO 서버 인스턴스 생성 완료")
+
 # 클라이언트별 디바이스 타입 저장용
 device_map = {}   # { sid: "raspi" / "mobile" / "pc" }
 
@@ -134,8 +136,11 @@ async def handle_video_frame(sid, data):
     
 
 # === STT 결과 수신 및 FastAPI 서버로 전달 ===
+print(f"🔔 [DEBUG] stt_result 이벤트 핸들러 등록 시작")
+
 @sio.on("stt_result")
 async def handle_stt_result(sid, data):
+    print(f"🔔 [DEBUG] ⭐⭐⭐ handle_stt_result 함수가 호출되었습니다! ⭐⭐⭐")
     """
     라즈베리파이에서 전송된 버퍼링 STT 결과를 수신하여:
     1. 모바일로 브로드캐스트 (Intent 분류용)
@@ -151,7 +156,11 @@ async def handle_stt_result(sid, data):
                 "session_id": "uuid" (optional)  # Streaming STT용
             }
     """
+    print(f"🔔 [DEBUG] handle_stt_result 호출됨! sid={sid}, data={data}")
+    print(f"🔔 [DEBUG] device_map={device_map}")
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"🔔 [DEBUG] sender_device={sender_device}")
     
     # 라즈베리파이에서만 받음
     if sender_device != "raspi":
@@ -181,18 +190,32 @@ async def handle_stt_result(sid, data):
                 "session_id": data.get("session_id")  # Clarify 세션 ID (있는 경우)
             }
             
+            print(f"📡 FastAPI 서버로 STT 결과 전달 시도: {endpoint}")
+            print(f"   데이터: {stt_data}")
+            
             response = await client.post(
                 endpoint,
                 json=stt_data,
-                timeout=5.0
+                timeout=30.0  # 타임아웃 증가 (임베딩 추출 시간 고려)
             )
             
             if response.status_code == 200:
+                result = response.json()
                 print(f"✅ FastAPI 서버로 STT 결과 전달 성공")
+                print(f"   응답: {result.get('message', 'N/A')}")
             else:
                 print(f"⚠️ FastAPI 서버 응답 오류: {response.status_code}")
+                print(f"   응답 내용: {response.text[:200]}")
+    except httpx.ConnectError as e:
+        print(f"❌ FastAPI 서버 연결 실패: {e}")
+        print(f"   FastAPI 서버가 실행 중인지 확인하세요: {fastapi_url}")
+    except httpx.TimeoutException as e:
+        print(f"❌ FastAPI 서버 요청 타임아웃: {e}")
+        print(f"   임베딩 추출에 시간이 오래 걸리고 있습니다.")
     except Exception as e:
         print(f"❌ FastAPI 서버 전달 오류: {e}")
+        import traceback
+        traceback.print_exc()
 
 # === Clarify 입력 수신 및 FastAPI 서버로 전달 ===
 @sio.on("clarify_input")
