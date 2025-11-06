@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 3
+names: ['AHU', 'boiler', 'chiller']
+
+roboflow:
+  workspace: boiler-chiller
+  project: object-detection-ueasf
+  version: 4
+  license: Private
+  url: https://app.roboflow.com/boiler-chiller/object-detection-ueasf/4
