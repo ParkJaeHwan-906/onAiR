@@ -2,11 +2,102 @@
   box-sizing: border-box;
   width: 100%;
   height: 72px;
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  padding: 0 32px;
   box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-right: 32px;
+  position: relative;
+}
+
+.topbar-icon {
+  position: relative;
+  cursor: pointer;
+  color: #1f2937;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: #ef4444;
+  border-radius: 50%;
+}
+
+.topbar-profile {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.topbar-profile:hover {
+  box-shadow: 0 6px 12px rgba(59, 74, 107, 0.25);
+}
+
+.topbar-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* 드롭다운 메뉴 */
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: 60px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  min-width: 140px;
+  z-index: 10;
+}
+
+.profile-menu p {
+  margin: 0;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.profile-menu p:hover {
+  background-color: #f3f4f6;
+}
+
+.topbar-login-link {
+  color: #3b4a6b;
+  font-weight: 400;
+  cursor: pointer;
+  margin-left: 6px;
+  padding: 8px 16px; /* hover 시 배경이 자연스럽게 보이도록 여백 추가 */
+  border-radius: 8px;
+  transition: all 0.2s ease-in-out;
+}
+
+/* hover 시 밝은 배경 + 그림자 */
+.topbar-login-link:hover {
+  background-color: #f3f4f6;
+}
+
+/* 클릭 시 살짝 눌림 느낌 */
+.topbar-login-link:active {
+  transform: translateY(0);
+  box-shadow: none;
 }

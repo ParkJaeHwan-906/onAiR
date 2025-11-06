@@ -3,17 +3,16 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #F5F6F8;
-  font-family: 'NotoSansKR';
+  background-color: #f5f6f8;
+  font-family: "NotoSansKR";
 }
 
 .login-form {
   width: 100%;
   max-width: 420px;
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   border-radius: 20px;
   padding: 40px 48px;
-  box-shadow: 0 12px 32px rgba(239, 146, 146, 0.25);
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -31,34 +30,26 @@
   height: auto;
 }
 
-.login-title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 800;
-  color: #2E2E2E;
-  text-align: center;
-}
-
 .login-label {
   display: flex;
   flex-direction: column;
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #3B4A6B;
+  color: #3b4a6b;
 }
 
 .login-input {
   height: 48px;
   border-radius: 12px;
-  border: 1px solid #D1D5DB;
+  border: 1px solid #d1d5db;
   padding: 0 16px;
   font-size: 16px;
   color: #111827;
 }
 
 .login-input:focus {
-  outline: 2px solid #3B4A6B;
+  outline: 2px solid #3b4a6b;
   border-color: transparent;
 }
 
@@ -66,8 +57,8 @@
   height: 48px;
   border: none;
   border-radius: 12px;
-  background-color: #3B4A6B;
-  color: #FFFFFF;
+  background-color: #3b4a6b;
+  color: #ffffff;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
@@ -75,6 +66,40 @@
 }
 
 .login-submit:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(59, 74, 107, 0.25);
+  box-shadow: 0 6px 12px rgba(59, 74, 107, 0.25);
+}
+
+.login-error {
+  color: #dc2626;
+  font-size: 13px;
+  text-align: left;
+  margin: 0;
+}
+
+.login-success {
+  color: #16a34a;
+  font-size: 13px;
+  text-align: left;
+  margin: 0;
+}
+
+.login-signup-link {
+  /* text-align: center; */
+  /* font-size: 14px; */
+  /* color: #6b7280; */
+  /* margin-top: 8px; */
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.login-link {
+  color: #3b4a6b;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.login-link:hover {
+  text-decoration: underline;
 }

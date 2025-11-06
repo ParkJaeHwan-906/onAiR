@@ -10,6 +10,16 @@
   font-family: 'NotoSansKR';
 }
 
+/* 모달 내부에서는 Modal이 레이아웃을 담당 → WorkAdd 외곽 스타일 제거 */
+.modal-content .work-add {
+  width: 100%;
+  height: auto;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
 .work-add-header {
   display: flex;
   justify-content: space-between;
@@ -39,6 +49,10 @@
   border: none;
   background-color: #ECEDF1;
   padding: 15px;
+  font-family: 'NotoSansKR';
+  font-size: 14px;
+  font-weight: 400;
+  color: #2E2E2E;
 }
 
 .request-body::placeholder {
