@@ -42,7 +42,7 @@ public class TaskController {
     }
 
     @PatchMapping("/assign")
-    public ResponseEntity<ApiResponse<Boolean>> assignTaskToWorker(@AuthenticationPrincipal CustomUserDetails user) {
+    public ResponseEntity<ApiResponse<TaskListDto>> assignTaskToWorker(@AuthenticationPrincipal CustomUserDetails user) {
         return ResponseEntity.ok(ApiResponse.success(taskService.assignTaskToWorker(user)));
     }
 
