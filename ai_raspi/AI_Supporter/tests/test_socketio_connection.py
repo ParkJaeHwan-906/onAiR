@@ -31,7 +31,7 @@ class SocketIOTestClient:
             print(f"   시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
             # 디바이스 등록 (mobile 타입으로 등록)
-            await self.sio.emit('register_device', {'device_type': 'mobile'})
+            await self.sio.emit('register_device', {'device': 'mobile'})
             print("   📱 디바이스 등록 완료 (타입: mobile)")
         
         @self.sio.on('disconnect')
@@ -99,7 +99,8 @@ class SocketIOTestClient:
         """Socket.IO 서버 연결"""
         try:
             print(f"\n📡 Socket.IO 서버 연결 시도: {self.url}")
-            await self.sio.connect(self.url)
+            # Socket.IO 경로는 /ws로 설정 (ai_ar/app/main.py에서 socketio_path="/ws" 사용)
+            await self.sio.connect(self.url, socketio_path="/ws")
             return True
         except Exception as e:
             print(f"❌ 연결 실패: {e}")
