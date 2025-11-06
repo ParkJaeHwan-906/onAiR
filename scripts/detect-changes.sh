@@ -26,5 +26,10 @@ if echo "$CHANGED_FILES" | grep -q "^frontend/"; then
     SERVICES="$SERVICES frontend"
 fi
 
+# ai_server 변경 감지
+if echo "$CHANGED_FILES" | grep -q "^ai_server/"; then
+    SERVICES="$SERVICES ai_server"
+fi
+
 # 변경된 서비스 출력
 echo "$SERVICES" | xargs
