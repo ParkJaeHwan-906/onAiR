@@ -41,3 +41,5 @@ __pycache__/
 *.png
 *.jpeg
 *.txt
+*.mp4
+*.wav
