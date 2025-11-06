@@ -94,29 +94,33 @@ public interface TasksRepository {
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 3
+                `action` = 3,
+                `solution` = #{solution}
             WHERE `id` = #{taskId};
             """)
-    Integer endTaskAsAdmin(Long taskId);
+    Integer endTaskAsAdmin(Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 0
+                `action` = 0,
+                `solution` = #{solution}
             WHERE `id` = #{taskId};
             """)
     Integer cancelTaskAsAdmin(Long taskId);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 3
+                `action` = 3,
+                `solution` = #{solution}
             WHERE `id` = #{taskId}
             AND `user_account_id` = #{userAccountId};
             """)
-    Integer endTaskAsWorker(Long userAccountId, Long taskId);
+    Integer endTaskAsWorker(Long userAccountId, Long taskId, String solution);
 
     @Update("""
             UPDATE `tasks` SET
-                `action` = 0
+                `action` = 0,
+                `solution` = #{solution}
             WHERE `id` = #{taskId}
             AND `user_account_id` = #{userAccountId};
             """)
