@@ -19,7 +19,7 @@ uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000 --reload
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-#### 방법 2: 별도 서버 실행 (선택사항)
+#### 방법 2: 별도 서버 실행 (선택 사항)
 Socket.IO 서버와 FastAPI 서버를 별도로 실행할 수도 있습니다.
 
 ```bash
@@ -131,20 +131,61 @@ echo %GOOGLE_APPLICATION_CREDENTIALS%  # Windows
 ✅ AI_SUPPORTER 전체 플로우 테스트 완료!
 ```
 
-## 🚀 빠른 시작
+## 🚀 빠른 시작 (Windows PowerShell)
 
-```bash
-# 1. 서버 실행 (터미널 1)
-cd ai_server/rag_server
+### 단계 1: 터미널 1 - 서버 실행
+
+PowerShell을 열고:
+
+```powershell
+# 작업 디렉토리로 이동
+cd C:\Users\SSAFY\Documents\S13P31A407\ai_server\rag_server
+
+# FastAPI + Socket.IO 서버 실행
 uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000 --reload
+```
 
-# 2. 테스트 실행 (터미널 2)
-cd ai_raspi/AI_Supporter
-python tests/test_ai_supporter_full_flow.py \
-    --audio tests/stt_buffer.wav \
-    --socketio-url http://localhost:8000 \
+**✅ 성공 확인:**
+- `✅ Socket.IO 통합 활성화됨` 메시지 확인
+- `INFO:     Uvicorn running on http://0.0.0.0:8000` 확인
+- 이 터미널은 계속 켜두세요!
+
+### 단계 2: 터미널 2 - 테스트 실행
+
+**새로운 PowerShell 창**을 열고:
+
+```powershell
+# 작업 디렉토리로 이동
+cd C:\Users\SSAFY\Documents\S13P31A407\ai_raspi\AI_Supporter
+
+# 테스트 실행 (PowerShell에서는 백틱 ` 사용)
+python tests/test_ai_supporter_full_flow.py `
+    --audio tests/stt_buffer.wav `
+    --socketio-url http://localhost:8000 `
     --fastapi-url http://localhost:8000
 ```
+
+**또는 한 줄로:**
+```powershell
+cd C:\Users\SSAFY\Documents\S13P31A407\ai_raspi\AI_Supporter; python tests/test_ai_supporter_full_flow.py --audio tests/stt_buffer.wav --socketio-url http://localhost:8000 --fastapi-url http://localhost:8000
+```
+
+### 단계 3: 결과 확인
+
+**터미널 2에서 다음 메시지들이 순서대로 나타나야 합니다:**
+
+1. ✅ 모바일 클라이언트: Socket.IO 서버 연결 성공
+2. ✅ 라즈베리파이 클라이언트: Socket.IO 서버 연결 성공
+3. 📩 [모바일] 임베딩 결과 수신!
+4. 🧠 [모바일] Intent 분류 완료: AI_SUPPORTER
+5. 🎤 [라즈베리파이] Streaming STT 시작...
+6. ❓ [모바일] Clarify 턴 수신!
+7. ✅ [모바일] 최종 답변 수신!
+8. ✅ AI_SUPPORTER 전체 플로우 테스트 완료!
+
+## 📖 상세 가이드
+
+더 자세한 가이드는 `TEST_GUIDE_DETAILED.md` 파일을 참고하세요.
 
 준비 완료! 🎉
 

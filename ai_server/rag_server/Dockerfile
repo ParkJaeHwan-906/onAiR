@@ -23,7 +23,8 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # PyTorch CPU 버전 먼저 설치 (리눅스/EC2 환경용)
 # requirements.txt에서는 --index-url 옵션을 사용할 수 없으므로 여기서 처리
-RUN pip install --no-cache-dir torch==2.4.0+cpu torchvision==0.19.0+cpu torchaudio==2.4.0+cpu \
+# torchaudio는 사용하지 않으므로 제거 (이미지 크기 최적화)
+RUN pip install --no-cache-dir torch==2.4.0+cpu torchvision==0.19.0+cpu \
     --index-url https://download.pytorch.org/whl/cpu
 
 # 나머지 의존성 설치 (torch 제외)
