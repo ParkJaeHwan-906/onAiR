@@ -6,6 +6,7 @@ const navItems = [
   { id: 'communication', label: '커뮤니케이션 관리', icon: '/icons/text.png', to: '/communication' },
   { id: 'staff', label: '직원 관리', icon: '/icons/profile.png', to: '/employees' },
   { id: 'work', label: '작업 관리', icon: '/icons/list.png', to: '/work' },
+  { id: 'equipment', label: '설비 관리', icon: '/icons/box.png', to: '/equipment' },
 ]
 
 function SideBar() {

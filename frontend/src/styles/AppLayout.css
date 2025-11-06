@@ -1,7 +1,7 @@
 .app-layout {
   display: flex;
   width: 1664px;
-  background-color: #F5F6F8;
+  background-color: #f5f6f8;
 }
 
 .app-layout-content {
@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #F5F6F8;
+  background-color: #f5f6f8;
 }
 
 .app-layout-main {
