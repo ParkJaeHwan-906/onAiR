@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useSocket } from "../../utils/socketContext";
 import {
   Eraser,
   Circle,
@@ -29,6 +30,8 @@ const ControlBar = ({
   penColor,
   setPenColor,
 }: ControlBarProps) => {
+  // socket 인스턴스 가져오기
+  const socket = useSocket(); 
   // 열려있는 메뉴: color, shape, eraser, none
   const [openMenu, setOpenMenu] = useState<
     "none" | "color" | "shape" | "eraser"
@@ -172,6 +175,7 @@ const ControlBar = ({
           className="icon-button end-call"
           onClick={() => {
             setOpenMenu("none");
+            socket.emit('video_stream', { state: 'on' });
           }}
         >
           <Phone className="icon end-call-icon" size={18} />

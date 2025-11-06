@@ -10,6 +10,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
+import { SocketProvider } from './utils/socketContext'
 
 function App() {
   const restoreSession = useAuthStore((state) => state.restoreSession);
@@ -28,7 +29,11 @@ function App() {
     <Routes>
       <Route path="/" element={<LoginPage />} />
       <Route path="signup" element={<SignupPage />} />
-      <Route element={<AppLayout />}>
+      <Route element={
+          <SocketProvider>
+            <AppLayout />
+          </SocketProvider>
+        }>
         <Route path="home" element={<HomePage />} />
         <Route path="communication" element={<CommunicationPage />} />
         <Route path="employees" element={<EmployeePage />} />
