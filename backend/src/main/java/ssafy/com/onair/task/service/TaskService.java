@@ -11,7 +11,7 @@ import java.util.List;
 public interface TaskService {
     Boolean registTask(CustomUserDetails user, InsertTaskRequestDto request);
     List<TaskListDto> getTaskList(CustomUserDetails user, Long equipmentId, Integer action);
-    Boolean assignTaskToWorker(CustomUserDetails user);
+    TaskListDto assignTaskToWorker(CustomUserDetails user);
     Boolean endTask(CustomUserDetails user, TaskStatusChangeRequestDto request);
     Boolean cancelTask(CustomUserDetails user, TaskStatusChangeRequestDto request);
 

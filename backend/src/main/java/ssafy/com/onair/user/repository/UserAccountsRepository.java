@@ -38,6 +38,7 @@ public interface UserAccountsRepository {
             ua.id AS 'userAccountId',
             ua.company_id AS 'companyId',
             c.`name` AS 'company',
+            ua.`part` AS 'part',
             u.name AS 'name',
             u.phone AS 'phone',
             u.birth AS 'birth',

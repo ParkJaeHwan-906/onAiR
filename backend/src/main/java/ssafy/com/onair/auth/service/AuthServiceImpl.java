@@ -40,6 +40,7 @@ public class AuthServiceImpl implements AuthService{
         try {
             log.info("회원가입 요청 : {}", request.getEmail());
             request = companyService.fillCompanyInfo(request, companyUID);
+            request.replaceRegex();
             usersRepository.insertUser(request.getName(), request.getBirth(), request.getPhone());
             userAccountsRepository.insertUserAccounts(usersRepository.getLastUserIdx(), request.getCompanyId(), request.getPart(), request.getEmail(), securityConfig.passwordEncoder().encode(request.getPassword()), request.getRoleId());
             return true;
