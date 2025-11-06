@@ -25,43 +25,39 @@ export const VideoCanvas = ({
   useEffect(() => {
     if(!socket) return;
 
-    let frameCount = 0;
-    let lastLogTime = performance.now();
-
-    const handleVideoFrame = (data: {frame: string}) => {
+    const handleVideoFrame = (data: ArrayBuffer) => {
       // 2. 리렌더링 없이 DOM 조작으로 이미지 교체
       if(imgRef.current){
-        imgRef.current.src = `data:image/jpeg;base64,${data.frame}`;
+        // ArrayBuffer를 Blob으로 변환
+        const blob = new Blob([data], { type: 'image/jpeg' });
+        // 이전 Blob URL 정리 (메모리 누수 방지)
+        if (imgRef.current.src.startsWith('blob:')) {
+          URL.revokeObjectURL(imgRef.current.src);
+        }
+        const imageUrl = URL.createObjectURL(blob);
+        
+        imgRef.current.src = imageUrl;
 
         // 첫 프레임 수신 시 연결 상태 업데이트(한번만 실행됨)
         if(!isConnected){
           setIsConnected(true);
         }
       }
-
-      // === 🔍 디버깅 코드 시작 ===
-      frameCount++;
-      const now = performance.now();
-      // 1초마다 로그 출력
-      if (now - lastLogTime >= 1000) {
-        const fps = frameCount;
-        // Base64 길이로 대략적인 이미지 크기(KB) 계산
-        const sizeInKB = (data.frame.length * 0.75) / 1024;
-        
-        console.log(`📺 수신 FPS: ${fps} | 프레임 크기: 약 ${sizeInKB.toFixed(1)} KB`);
-
-        frameCount = 0;
-        lastLogTime = now;
-      }
-      // === 🔍 디버깅 코드 끝 ===
-      
     }
 
     // 서버로부터 video_frame 이벤트 수신
     socket.on('video_frame', handleVideoFrame);
 
+    // cleanup 시점에 사용할 ref 값 저장
+    const currentImgRef = imgRef.current;
+
     return () => {
       socket.off('video_frame', handleVideoFrame); // clean up
+      
+      // Blob URL 정리 (메모리 누수 방지)
+      if (currentImgRef && currentImgRef.src.startsWith('blob:')) {
+        URL.revokeObjectURL(currentImgRef.src);
+      }
     };
   }, [socket, isConnected]);
 
