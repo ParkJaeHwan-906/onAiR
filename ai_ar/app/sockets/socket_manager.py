@@ -119,7 +119,6 @@ async def handle_video_frame(sid, data):
     # 동시에 PC 클라이언트에게 원본 프레임 브로드캐스트
     _, jpeg_bytes = cv2.imencode('.jpg', frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-<<<<<<< HEAD
     
 
 # === STT 결과 수신 및 FastAPI 서버로 전달 ===
