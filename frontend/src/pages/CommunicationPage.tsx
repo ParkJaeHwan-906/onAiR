@@ -9,8 +9,10 @@ import "../styles/Communication/CommunicationPage.css";
 
 export const CommunicationPage = () => {
   const location = useLocation();
-  const { token, roomName } = location.state || {};
-  const [connected, setConnected] = useState(false);
+  // const { token, roomName } = location.state || {};
+  // const [connected, setConnected] = useState(false);
+  const { token } = location.state || {};
+  const [, setConnected] = useState(false);
 
   const handleSerialize = (lines: DrawingLine[]) => {
     const json = JSON.stringify(lines);
