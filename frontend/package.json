@@ -13,6 +13,8 @@
     "@livekit/components-react": "^2.9.15",
     "@livekit/components-styles": "^1.1.6",
     "@nivo/pie": "^0.99.0",
+    "axios": "^1.13.1",
+    "event-source-polyfill": "^1.0.31",
     "konva": "^10.0.8",
     "livekit-client": "^2.15.14",
     "lodash": "^4.17.21",
@@ -21,7 +23,8 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.2.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
