@@ -23,10 +23,12 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const navigate = useNavigate();
   const [showRequestBox, setShowRequestBox] = useState(false);
   const { isConnected, connect } = useSSEStore();
-  
+
   // 설비 지정 관련 상태
   const [equipments, setEquipments] = useState<Equipment[]>([]);
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(
+    null
+  );
   const [isEquipmentDropdownOpen, setIsEquipmentDropdownOpen] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isCheckingInOut, setIsCheckingInOut] = useState(false);
@@ -38,7 +40,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       connect();
     }
   }, [isConnected, connect]);
-  
+
   // 관리자가 직원을 선택했을 때 설비 목록 조회
   useEffect(() => {
     if (isAdmin && employee) {
@@ -47,13 +49,13 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       setSelectedEquipmentId(employee.equipmentId || null);
     }
   }, [isAdmin, employee]);
-  
+
   // 설비 드롭다운 외부 클릭 감지
   useEffect(() => {
     if (!isEquipmentDropdownOpen) {
       return;
     }
-    
+
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
@@ -64,13 +66,13 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         setIsEquipmentDropdownOpen(false);
       }
     };
-    
-    document.addEventListener('mousedown', handleClickOutside);
+
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isEquipmentDropdownOpen]);
-  
+
   const fetchEquipments = async () => {
     try {
       const res = await getCompanyEquipmentList();
@@ -78,24 +80,27 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         setEquipments(res.data);
       }
     } catch (error) {
-      console.error('설비 목록 조회 실패:', error);
+      console.error("설비 목록 조회 실패:", error);
     }
   };
-  
+
   const handleAssignEquipment = async () => {
     if (!employee || !isAdmin) return;
-    
+
     if (!selectedEquipmentId) {
-      alert('설비를 선택해주세요.');
+      alert("설비를 선택해주세요.");
       return;
     }
-    
+
     try {
       setIsAssigning(true);
-      const res = await assignEquipment(employee.userAccountId, selectedEquipmentId);
-      
+      const res = await assignEquipment(
+        employee.userAccountId,
+        selectedEquipmentId
+      );
+
       if (res.success) {
-        alert('설비가 성공적으로 지정되었습니다.');
+        alert("설비가 성공적으로 지정되었습니다.");
         // 직원 목록 새로고침
         if (fetchEmployees) {
           await fetchEmployees(null);
@@ -103,11 +108,13 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
           // (useUserStore의 employees 배열이 업데이트되므로 부모 컴포넌트에서 처리 필요)
         }
       } else {
-        alert(res.message || '설비 지정에 실패했습니다.');
+        alert(res.message || "설비 지정에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error('설비 지정 실패:', error);
-      alert(error.response?.data?.message || '설비 지정 중 오류가 발생했습니다.');
+      console.error("설비 지정 실패:", error);
+      alert(
+        error.response?.data?.message || "설비 지정 중 오류가 발생했습니다."
+      );
     } finally {
       setIsAssigning(false);
     }
@@ -193,23 +200,31 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             <div className="detail-item">
               <dt>설비 지정</dt>
               <dd>
-                <div className="equipment-assign-wrapper" ref={equipmentDropdownRef}>
+                <div
+                  className="equipment-assign-wrapper"
+                  ref={equipmentDropdownRef}
+                >
                   <button
                     type="button"
-                    className={`equipment-select-trigger${isEquipmentDropdownOpen ? ' open' : ''}`}
+                    className={`equipment-select-trigger${
+                      isEquipmentDropdownOpen ? " open" : ""
+                    }`}
                     onClick={() => setIsEquipmentDropdownOpen((prev) => !prev)}
                     disabled={isAssigning}
                   >
                     {selectedEquipmentId
-                      ? equipments.find(eq => eq.id === selectedEquipmentId)?.name || '설비를 선택하세요'
-                      : '설비를 선택하세요'}
+                      ? equipments.find((eq) => eq.id === selectedEquipmentId)
+                          ?.name || "설비를 선택하세요"
+                      : "설비를 선택하세요"}
                   </button>
                   {isEquipmentDropdownOpen && (
                     <ul className="equipment-select-dropdown">
                       <li>
                         <button
                           type="button"
-                          className={`equipment-select-option${selectedEquipmentId === null ? ' selected' : ''}`}
+                          className={`equipment-select-option${
+                            selectedEquipmentId === null ? " selected" : ""
+                          }`}
                           onClick={() => {
                             setSelectedEquipmentId(null);
                             setIsEquipmentDropdownOpen(false);
@@ -222,7 +237,11 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
                         <li key={equipment.id}>
                           <button
                             type="button"
-                            className={`equipment-select-option${equipment.id === selectedEquipmentId ? ' selected' : ''}`}
+                            className={`equipment-select-option${
+                              equipment.id === selectedEquipmentId
+                                ? " selected"
+                                : ""
+                            }`}
                             onClick={() => {
                               setSelectedEquipmentId(equipment.id);
                               setIsEquipmentDropdownOpen(false);
@@ -245,7 +264,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
                   onClick={handleAssignEquipment}
                   disabled={isAssigning || !selectedEquipmentId}
                 >
-                  {isAssigning ? '지정 중...' : '설비 지정'}
+                  {isAssigning ? "지정 중..." : "설비 지정"}
                 </button>
               </dd>
             </div>
@@ -308,14 +327,14 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
 
       {!isAdmin && isMine && (
         <>
-          <button 
-            className="connect-button" 
+          <button
+            className="connect-button"
             onClick={async () => {
               if (isCheckingInOut) return;
-              
+
               try {
                 setIsCheckingInOut(true);
-                
+
                 if (employee.online) {
                   // 퇴근 처리
                   await checkOut();
@@ -325,18 +344,21 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
                   await checkIn();
                   alert("출근 처리되었습니다.");
                 }
-                
+
                 // 내 정보 새로고침 (작업자가 자신의 정보를 볼 때)
                 if (fetchMyInfo) {
                   await fetchMyInfo();
                 }
-                
+
                 // 직원 목록 새로고침 (관리자가 볼 때를 위해)
                 if (fetchEmployees) {
                   await fetchEmployees(null);
                 }
               } catch (error: any) {
-                const errorMessage = error.response?.data?.message || error.message || "처리 중 오류가 발생했습니다.";
+                const errorMessage =
+                  error.response?.data?.message ||
+                  error.message ||
+                  "처리 중 오류가 발생했습니다.";
                 alert(errorMessage);
               } finally {
                 setIsCheckingInOut(false);
@@ -344,11 +366,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             }}
             disabled={isCheckingInOut}
           >
-            {isCheckingInOut 
-              ? "처리 중..." 
-              : employee.online 
-              ? "퇴근" 
-              : "출근"}
+            {isCheckingInOut ? "처리 중..." : employee.online ? "퇴근" : "출근"}
           </button>
         </>
       )}
