@@ -32,17 +32,17 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public List<TaskListDto> getTaskList(CustomUserDetails user, Long equipmentId, Integer action) {
         return user.getUserInfo().getRole().equals("관리자") ? tasksRepository.getTaskListAsAdmin(user.getCompanyId(), equipmentId, action) :
-                tasksRepository.getTaskListAsWorker(user.getCompanyId(), user.getUserInfo().getEquipmentId());
+                tasksRepository.getTaskListAsWorker(user.getCompanyId(), user.getUserInfo().getEquipmentId(), user.getUserAccountId(), action);
     }
 
     @Transactional
     @Override
-    public Boolean assignTaskToWorker(CustomUserDetails user) {
+    public TaskListDto assignTaskToWorker(CustomUserDetails user) {
         Long assignTargetTaskId = tasksRepository.getRemainTaskId(user.getCompanyId(), user.getUserInfo().getEquipmentId())
                 .orElseThrow(() -> new IllegalArgumentException("남아있는 업무가 없습니다."));
         if(tasksRepository.assignTaskToWorker(user.getUserAccountId(), assignTargetTaskId) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
         sseManager.taskAssign(user.getCompanyId(), user.getUserInfo().getEquipmentId(), mkTaskAssignMessage(assignTargetTaskId, user.getUserAccountId(), user.getUsername()));
-        return true;
+        return tasksRepository.getTaskDetail(assignTargetTaskId);
     }
 
     private TaskAssignMessageDto mkTaskAssignMessage(Long taskId, Long userAccountId, String userName) {
@@ -57,7 +57,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public Boolean endTask(CustomUserDetails user, TaskStatusChangeRequestDto request) {
         //        TODO : 상태 확인은 나중에 추가
-        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.endTaskAsAdmin(request.getTaskId()) : tasksRepository.endTaskAsWorker(user.getUserAccountId(), request.getTaskId())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
+        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.endTaskAsAdmin(request.getTaskId(), request.getSolution()) : tasksRepository.endTaskAsWorker(user.getUserAccountId(), request.getTaskId(), request.getSolution())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
         sseManager.taskEnd(user.getCompanyId(), user.getUserInfo().getEquipmentId(), mkTaskStatusChange(request.getTaskId()));
         return true;
     }
@@ -66,7 +66,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public Boolean cancelTask(CustomUserDetails user, TaskStatusChangeRequestDto request) {
         //        TODO : 상태 확인은 나중에 추가
-        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.cancelTaskAsAdmin(request.getTaskId()) : tasksRepository.cancelTaskAsWorker(user.getUserAccountId(), request.getTaskId())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
+        if((user.getUserInfo().getRole().equals("관리자") ? tasksRepository.cancelTaskAsAdmin(request.getTaskId(), request.getSolution()) : tasksRepository.cancelTaskAsWorker(user.getUserAccountId(), request.getTaskId(), request.getSolution())) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
         sseManager.taskCancel(user.getCompanyId(), user.getUserInfo().getEquipmentId(), mkTaskStatusChange(request.getTaskId()));
         return true;
     }
