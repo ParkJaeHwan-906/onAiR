@@ -16,6 +16,8 @@ faiss-cpu==1.7.4
 sentence-transformers==3.0.1
 numpy==1.26.4             
 # torch==2.4.0  # Dockerfile에서 CPU 버전으로 별도 설치
+# transformers: 로컬 테스트 완료 버전 (4.57.1)으로 업데이트
+# 4.44.0에서 dtype 파라미터 지원 문제 발생 → 4.57.1로 업데이트
 transformers==4.57.1
 # scipy==1.16.2      # python 3.11 이상       
 scipy==1.15.3  
