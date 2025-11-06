@@ -115,11 +115,11 @@
 }
 
 .submit-button.complete {
-  background-color: #22c55e;
+  background-color: #374151;
 }
 
 .submit-button.complete:hover:not(:disabled) {
-  background-color: #16a34a;
+  background-color: #374151;
 }
 
 .submit-button.cancel {
