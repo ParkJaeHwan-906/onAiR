@@ -12,8 +12,12 @@
   "dependencies": {
     "@livekit/components-react": "^2.9.15",
     "@livekit/components-styles": "^1.1.6",
+    "@nivo/pie": "^0.99.0",
     "konva": "^10.0.8",
     "livekit-client": "^2.15.14",
+    "lodash": "^4.17.21",
+    "lodash.throttle": "^4.1.1",
+    "lucide-react": "^0.548.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.2.0",
@@ -21,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@types/lodash.throttle": "^4.1.9",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
@@ -31,6 +36,7 @@
     "globals": "^16.4.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "web-vitals": "^3.5.0"
   }
 }

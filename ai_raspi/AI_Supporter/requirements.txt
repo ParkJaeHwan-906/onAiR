@@ -1,0 +1,22 @@
+# FastAPI & WebSocket
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+aiohttp>=3.9.0
+python-socketio[asyncio-client]>=5.10.0
+
+# GCP STT
+google-cloud-speech>=2.20.0
+
+# 오디오 처리
+pyaudio>=0.2.13
+sounddevice>=0.4.6
+numpy>=1.24.0
+librosa>=0.10.0
+
+# 머신러닝
+tensorflow>=2.13.0
+
+# 환경 변수
+python-dotenv>=1.0.0
+
