@@ -16,7 +16,7 @@ faiss-cpu==1.7.4
 sentence-transformers==3.0.1
 numpy==1.26.4             
 # torch==2.4.0  # Dockerfile에서 CPU 버전으로 별도 설치
-transformers==4.44.0
+transformers==4.57.1
 # scipy==1.16.2      # python 3.11 이상       
 scipy==1.15.3  
 filterpy==1.4.5           
