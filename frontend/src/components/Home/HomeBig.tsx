@@ -44,6 +44,8 @@ function HomeBig({ title, icon }: HomeBigProps) {
         {dummy.map((item) => (
           <WorkList 
             key={item.id}
+            taskId={item.id}
+            userAccountId={null}
             userName={item.userName}
             request={item.request}
             action={item.action}

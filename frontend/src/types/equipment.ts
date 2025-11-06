@@ -3,4 +3,3 @@ export interface Equipment {
   category: string;
   name: string;
 }
-
