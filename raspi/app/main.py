@@ -17,7 +17,7 @@ app.include_router(control.router)
 # ✅ 연결 / 해제 함수
 def connect_to_socket():
     try:
-        sio.connect("http://192.168.43.199:8000", socketio_path="/ws")
+        sio.connect("http://192.168.1.11:8000", socketio_path="/ws")
         print("✅ Connected manually to EC2 Socket Server")
     except Exception as e:
         print("⚠️ Connection failed:", e)
