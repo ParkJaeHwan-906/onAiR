@@ -109,7 +109,8 @@ class SocketIOClient:
         
         try:
             logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url}")
-            await self.sio.connect(self.server_url, wait_timeout=10)
+            # Socket.IO 경로는 /ws로 설정 (ai_ar/app/main.py에서 socketio_path="/ws" 사용)
+            await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
         except Exception as e:
