@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router
+from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
 
 # Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
 try:
@@ -85,6 +85,11 @@ app.include_router(stt_router.router)
 # Clarify 엔드포인트 (Clarify 처리)
 # clarify_router는 prefix="/api/clarify"를 가지고 있음
 app.include_router(clarify_router.router)
+
+# AR 마커 엔드포인트
+# ar_process는 prefix="/ar"를 가지고 있음
+# 마완성
+app.include_router(ar_process.router)
 
 @app.get("/")
 def root():

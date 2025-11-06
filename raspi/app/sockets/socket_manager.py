@@ -1,96 +1,144 @@
-import logging
-logging.getLogger('socketio').setLevel(logging.DEBUG)
-logging.getLogger('engineio').setLevel(logging.DEBUG)
+# 📄 app/sockets/socket_manager.py
 
-import socketio
-import subprocess
+import io
+import time
 import threading
+import socketio
+from datetime import datetime
+from threading import Condition
+from picamera2 import Picamera2
+from picamera2.encoders import JpegEncoder
+from picamera2.outputs import FileOutput
 
-sio = socketio.Client()
-camera_proc = None
+# ===== Socket.IO 설정 =====
+SERVER_URL = "http://192.168.1.11:8000"   # EC2 서버 IP
+SOCKET_PATH = "/ws"
+sio = socketio.Client(reconnection=True, reconnection_attempts=0)  # 무한 재연결
+
+# ===== Picamera2 스트리밍 출력 버퍼 =====
+class StreamingOutput(io.BufferedIOBase):
+    def __init__(self):
+        self.frame = None
+        self.timestamp = None
+        self.condition = Condition()
+
+    def write(self, buf):
+        with self.condition:
+            self.frame = buf
+            self.timestamp = int(time.time() * 1000)
+            self.condition.notify_all()
+        return len(buf)
+
+# ===== 카메라 제어 클래스 =====
+class CameraService:
+    def __init__(self):
+        self.picam2 = Picamera2()
+        self.video_config = self.picam2.create_video_configuration(
+            main={"size": (640, 480), "format": "RGB888"}
+        )
+        self.picam2.configure(self.video_config)
+        self.output = StreamingOutput()
+        self.encoder = JpegEncoder(q=40)
+        self.file_output = FileOutput(self.output)
+        self.is_streaming = False
+
+    def start_streaming(self):
+        if not self.is_streaming:
+            try:
+                print("🎥 Starting Picamera2 streaming...")
+                self.picam2.start_recording(self.encoder, self.file_output)
+                self.is_streaming = True
+            except Exception as e:
+                print("⚠️ Camera start error:", e)
+                self.is_streaming = False
+
+    def stop_streaming(self):
+        if self.is_streaming:
+            try:
+                print("🛑 Stopping camera stream...")
+                self.picam2.stop_recording()
+            except Exception as e:
+                print("⚠️ Camera stop error:", e)
+            self.is_streaming = False
+
+    def get_frame(self):
+        with self.output.condition:
+            self.output.condition.wait()
+            return self.output.frame
+
+# ===== 글로벌 인스턴스 =====
+camera = CameraService()
 is_streaming = False
+stop_signal = threading.Event()
 
+# ===== 스트리밍 스레드 =====
+def stream_loop():
+    global is_streaming
+    print("🚀 Stream thread started")
+    while not stop_signal.is_set():
+        if not is_streaming:
+            time.sleep(0.1)
+            continue
 
-def stream_camera():
-    global camera_proc, is_streaming
-
-    # rpicam-vid 명령어 구성
-    command = [
-    "rpicam-vid",
-    "--width", "640",
-    "--height", "480",
-    "--framerate", "5",       # 12~15fps가 Zero 2W에서 안정적
-    "--codec", "mjpeg",
-    "--quality", "60",         # 품질 낮추면 네트워크 지연 급감
-    "--timeout", "0",
-    "--segment", "1",          # <— 각 프레임 단위로 stdout 플러시
-    "-o", "-"
-    ]
-    print("🎥 Starting rpicam-vid streaming process...")
-    camera_proc = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        bufsize=0  # 즉시 flush
-    )
-    buffer = b""
-    boundary = b"\xff\xd8" 
-    while is_streaming and camera_proc and camera_proc.stdout:
-        chunk = camera_proc.stdout.read(1024)
-        if not chunk:
-            break
-        buffer += chunk
-
-        # JPEG 프레임 단위로 잘라내기
-        while True:
-            start_idx = buffer.find(boundary)
-            end_idx = buffer.find(b"\xff\xd9", start_idx + 2)
-            if start_idx != -1 and end_idx != -1:
-                frame = buffer[start_idx:end_idx + 2]
-                buffer = buffer[end_idx + 2:]
+        frame = camera.get_frame()
+        if frame:
+            try:
                 sio.emit("video_frame", frame)
-            else:
+            except Exception as e:
+                print("⚠️ Emit failed:", e)
+                stop_streaming_safe()
                 break
+        time.sleep(0.05)  # 약 20fps
+    print("🔚 Stream thread exiting")
 
-        # time.sleep(1 / 15)
+# ===== 안전한 종료 함수 =====
+def stop_streaming_safe():
+    global is_streaming
+    is_streaming = False
+    camera.stop_streaming()
 
-    stop_camera()
-    print("🛑 Camera stream stopped")
-
-
-def stop_camera():
-    global camera_proc
-    if camera_proc:
-        try:
-            camera_proc.terminate()
-            camera_proc.wait(timeout=2)
-        except Exception:
-            camera_proc.kill()
-        camera_proc = None
-
-
-# === Socket 이벤트 ===
+# ===== Socket 이벤트 =====
 @sio.event
 def connect():
-    print("✅ Connected to server")
+    global is_streaming
+    print("✅ Connected to EC2 server")
     sio.emit("register_device", {"device": "raspi"})
 
+    # 연결 시 자동 스트리밍 시작
+    is_streaming = True
+    camera.start_streaming()
 
 @sio.event
 def disconnect():
     print("❌ Disconnected from server")
-    stop_camera()
+    stop_streaming_safe()
 
+# ===== 예외 핸들링 =====
+@sio.event
+def connect_error(data):
+    print("⚠️ Connection failed:", data)
+    stop_streaming_safe()
 
-@sio.on("video_stream")
-def on_video_stream(data):
-    global is_streaming
-    state = data.get("state", "off")
-    print(f"📡 Received video_stream: {state}")
+@sio.event
+def reconnect_error():
+    print("⚠️ Reconnection error, will retry...")
+    stop_streaming_safe()
 
-    if state == "on" and not is_streaming:
-        is_streaming = True
-        threading.Thread(target=stream_camera, daemon=True).start()
-    elif state == "off" and is_streaming:
-        is_streaming = False
-        stop_camera()
+# ===== 메인 실행 =====
+if __name__ == "__main__":
+    threading.Thread(target=stream_loop, daemon=True).start()
+
+    while True:
+        try:
+            print(f"🔌 Connecting to {SERVER_URL}{SOCKET_PATH} ...")
+            sio.connect(SERVER_URL, socketio_path=SOCKET_PATH)
+            sio.wait()
+        except KeyboardInterrupt:
+            print("🛑 Interrupted by user")
+            stop_signal.set()
+            stop_streaming_safe()
+            break
+        except Exception as e:
+            print("⚠️ Connection failed, retrying in 5s:", e)
+            stop_streaming_safe()
+            time.sleep(5)
