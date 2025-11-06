@@ -25,7 +25,7 @@ def load_jsonl(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
-print("📦 Loading data, embedding model, FAISS index...")
+print("Loading data, embedding model, FAISS index...")
 DATA = load_jsonl(settings.JSONL_PATH)
 
 # 각 row에 내부 id 부여(FAISS 인덱스와 동일 인덱스 사용)
@@ -174,9 +174,12 @@ PHI3_TOKENIZER = None
 if PHI3_AVAILABLE:
     print("📦 Loading Phi-3 embedding model...")
     try:
-        PHI3_MODEL = AutoModel.from_pretrained(
+        # Phi-3는 CausalLM 모델이므로 AutoModelForCausalLM 사용
+        from transformers import AutoModelForCausalLM
+        
+        PHI3_MODEL = AutoModelForCausalLM.from_pretrained(
             settings.PHI3_MODEL_NAME,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             trust_remote_code=True
         )
         PHI3_TOKENIZER = AutoTokenizer.from_pretrained(
@@ -231,11 +234,18 @@ def get_phi3_embedding(text: str) -> np.ndarray:
     
     # Forward pass
     with torch.no_grad():
-        outputs = PHI3_MODEL(**inputs)
+        # use_cache=False로 설정하여 cache 관련 오류 방지
+        outputs = PHI3_MODEL(**inputs, use_cache=False, output_hidden_states=True)
         
         # 임베딩 추출: 마지막 hidden state의 평균 풀링
         # shape: [batch_size, seq_len, hidden_size]
-        hidden_states = outputs.last_hidden_state
+        # output_hidden_states=True이면 hidden_states가 있음
+        if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+            # 마지막 레이어의 hidden state 사용
+            hidden_states = outputs.hidden_states[-1]
+        else:
+            # last_hidden_state 사용 (기본)
+            hidden_states = outputs.last_hidden_state
         
         # 평균 풀링 (mean pooling)
         # attention_mask 고려
