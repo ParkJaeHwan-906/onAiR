@@ -1,4 +1,5 @@
-import '../../styles/EmployeeList.css'
+import "../../styles/EmployeeList.css";
+import { formatPhone } from "../../utils/formatPhone";
 
 type EmployeeListProps = {
   name: string;
@@ -6,42 +7,38 @@ type EmployeeListProps = {
   part: string;
   email: string;
   online: boolean;
+  equipmentName: string;
   onSelect: () => void;
-}
+};
 
-const backColors = ['#F4C0C0', '#B6E7C8']
-const fontColors = ['#EF4444', '#22C55E']
-
-function EmployeeList ({name, phone, part, email, online, onSelect}: EmployeeListProps) {
-  const backColor = online ? backColors[1] : backColors[0]
-  const fontColor = online ? fontColors[1] : fontColors[0]
-
+function EmployeeList({
+  name,
+  phone,
+  part,
+  email,
+  online,
+  equipmentName,
+  onSelect,
+}: EmployeeListProps) {
   return (
-    <>
-      <div className='employee-wrapper'>
-        <div className='first'>
-          {name}
-        </div>
-        <div className='second'>
-          {part}
-        </div>
-        <div className='third'>
-          <div className='online-wrapper' style={{backgroundColor: backColor, color: fontColor }}>
-            {online ? '온라인' : '오프라인'}
-          </div>
-        </div>
-        <div className='fourth'>
-          {email}
-        </div>
-        <div className='fifth'>
-          {phone}
-        </div>
-        <button type="button" onClick={onSelect}>
+    <div className="employee-row">
+      <div className="col-name">{name}</div>
+      <div className="col-phone">{formatPhone(phone)}</div>
+      <div className="col-part">{part}</div>
+      <div className="col-email">{email}</div>
+      <div className="col-equipment">{equipmentName}</div>
+      <div className="col-status">
+        <span className={online ? "online" : "offline"}>
+          {online ? "온라인" : "오프라인"}
+        </span>
+      </div>
+      <div className="col-view">
+        <button className="view-btn" onClick={onSelect}>
           보기
         </button>
       </div>
-    </>
+    </div>
   );
 }
 
-export default EmployeeList
+export default EmployeeList;
