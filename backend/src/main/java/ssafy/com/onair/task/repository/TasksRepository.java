@@ -34,6 +34,7 @@ public interface TasksRepository {
             LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
             LEFT JOIN `users` u ON u.id = ua.user_id
             WHERE t.company_id = #{companyId}
+            AND DATE_FORMAT(t.created_at, "%Y-%m-%d") = DATE_FORMAT(NOW(), "%Y-%m-%d")
             <if test="equipmentId != null">
                 AND t.equipment_id = #{equipmentId}
             </if>
@@ -45,6 +46,7 @@ public interface TasksRepository {
     List<TaskListDto> getTaskListAsAdmin(Long companyId, Long equipmentId, Integer action);
 
     @Select("""
+            <script>
             SELECT
             t.id AS 'id',
             t.equipment_id AS 'equipmentId',
@@ -60,10 +62,17 @@ public interface TasksRepository {
             LEFT JOIN `user_accounts` ua ON ua.id = t.user_account_id
             LEFT JOIN `users` u ON u.id = ua.user_id
             WHERE t.company_id = #{companyId}
-            AND t.equipment_id = #{equipmentId}
-            AND t.action = 1;
+            AND DATE_FORMAT(t.created_at, "%Y-%m-%d") = DATE_FORMAT(NOW(), "%Y-%m-%d")
+            AND t.user_account_id = #{userAccountId}
+            <if test="equipmentId != null">
+                AND t.equipment_id = #{equipmentId}
+            </if>
+            <if test="action != null">
+                AND t.action = #{action}
+            </if>
+            </script>
             """)
-    List<TaskListDto> getTaskListAsWorker(Long companyId, Long equipmentId);
+    List<TaskListDto> getTaskListAsWorker(Long companyId, Long equipmentId, Long userAccountId, Integer action);
 
     @Select("""
             SELECT id FROM `tasks`
