@@ -35,6 +35,11 @@ clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, his
 
 def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
+    if sio is None:
+        print("❌ ERROR: sio 인스턴스가 None입니다!")
+        return
+    
+    print(f"🔍 Socket.IO 서버 인스턴스 확인: {sio}")
     
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
     sio.on("connect")(handle_connect)
@@ -85,9 +90,18 @@ async def broadcast_to(device_types, event: str, payload: dict):
 
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
-    print(f"✅ Client connected: {sid}")
-    if sio:
-        await sio.emit("server_message", {"msg": "Connected"}, to=sid)
+    try:
+        print(f"✅ Client connected: {sid}")
+        if sio:
+            await sio.emit("server_message", {"msg": "Connected"}, to=sid)
+        # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
+        return True
+    except Exception as e:
+        print(f"❌ Connection error for {sid}: {e}")
+        import traceback
+        traceback.print_exc()
+        # 예외 발생 시 연결 거부
+        return False
 
 
 async def handle_disconnect(sid):
