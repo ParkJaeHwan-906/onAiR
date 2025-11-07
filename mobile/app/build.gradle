@@ -21,6 +21,10 @@ android {
 
         // ✅ Orchestrator와의 연결 설정
         testInstrumentationRunnerArguments clearPackageData: 'true'
+        
+        // BuildConfig 필드 (환경 변수에서 읽거나 기본값 사용)
+        // 주의: 프로덕션에서는 빈 문자열로 설정하고, 로그인 API를 통해 토큰을 받아야 합니다
+        buildConfigField "String", "DEFAULT_ACCESS_TOKEN", "\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMyIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNzYyNDc3NjI1LCJleHAiOjE3NjI5MDk2MjV9.CHd-R8t2-HORjihxrRIEASjTg09nrZksOQ3rxG2o43E\""
     }
 
     buildTypes {
@@ -32,6 +36,7 @@ android {
     buildFeatures {
         compose true
         viewBinding true
+        buildConfig = true  // BuildConfig 생성 활성화
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -109,8 +114,7 @@ dependencies {
     // OkHttp (WebSocket 클라이언트용)
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
 
-    // ONNX Runtime
-    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.18.0"
+    // ONNX Runtime 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
     testImplementation "junit:junit:4.13.2"
 
@@ -139,8 +143,7 @@ dependencies {
     implementation libs.java.websocket
     // JSON 처리
     implementation libs.json
-    // ONNX Runtime
-    implementation libs.onnxruntime.android
+    // ONNX Runtime 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
     testImplementation libs.junit
 

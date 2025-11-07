@@ -1,8 +1,10 @@
 package com.onair.mobile.assistant.data.stt
 
 import android.util.Log
+import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
+import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.core.model.dto.RagResponse
-import com.onair.mobile.assistant.core.model.dto.EmbeddingResultDto
+import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
@@ -16,10 +18,11 @@ import java.net.URISyntaxException
  * 
  * Socket.IO 서버에서 다음 이벤트를 수신:
  * - "stt_result": 버퍼링 STT 결과 (Intent 분류용)
- * - "embedding_result": 버퍼링 STT 후 Phi-3 임베딩 수신 (Intent 분류용)
- * - "clarify_turn": Clarify 질문/답변 턴 수신
+ * - "intent_result": Intent 분류 결과 (Gemini-Flash)
+ * - "start_sse_connection": SSE 연결 시작 요청
+ * - "cv_detection_failed": CV 탐지 실패 이벤트
+ * - "clarify_qa_turn": Clarify 질문/답변 턴 수신
  * - "final_answer": 최종 답변 수신
- * - "clarify_response": Clarify 응답 (레거시, clarify_turn과 final_answer로 대체 예정)
  * 
  * 주의:
  * - Clarify 입력은 모바일에서 전송하지 않음
@@ -29,9 +32,12 @@ class SocketIoSttClient(
     private val serverUrl: String,  // 예: "http://192.168.0.100:5000"
     private val onSttResult: (String, String, String?) -> Unit,  // (text, type, confidence)
     private val onClarifyResponse: ((RagResponse) -> Unit)? = null,  // Clarify 응답 콜백 (레거시)
-    private val onEmbeddingResult: ((EmbeddingResultDto) -> Unit)? = null,  // 임베딩 결과 콜백
+    private val onIntentResult: ((IntentResultDto) -> Unit)? = null,  // Intent 결과 콜백 (Gemini-Flash 분류 결과)
     private val onClarifyTurn: ((ClarifyTurnDto) -> Unit)? = null,  // Clarify 턴 콜백
-    private val onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null  // 최종 답변 콜백
+    private val onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
+    private val onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
+    private val onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
+    private val onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null  // Clarify 질문/답변 턴 콜백
 ) {
     private val TAG = "SocketIoSttClient"
     private var socket: Socket? = null
@@ -92,22 +98,41 @@ class SocketIoSttClient(
                 }
             }
             
-            // embedding_result 이벤트 수신 (버퍼링 STT 후 Phi-3 임베딩)
-            socket?.on("embedding_result") { args ->
+            // intent_result 이벤트 수신 (버퍼링 STT 후 Gemini-Flash Intent 분류 결과)
+            socket?.on("intent_result") { args ->
                 try {
                     val data = args[0] as? JSONObject
                     if (data != null) {
                         val jsonString = data.toString()
-                        Log.d(TAG, "📩 임베딩 결과 수신: $jsonString")
+                        Log.d(TAG, "📩 Intent 결과 수신: $jsonString")
                         
-                        val embeddingResult = gson.fromJson(jsonString, EmbeddingResultDto::class.java)
-                        onEmbeddingResult?.invoke(embeddingResult)
+                        val intentResult = gson.fromJson(jsonString, IntentResultDto::class.java)
+                        onIntentResult?.invoke(intentResult)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ 임베딩 결과 처리 오류: ${e.message}")
+                    Log.e(TAG, "❌ Intent 결과 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
             }
+            
+            // start_sse_connection 이벤트 수신 (버퍼링 STT 수신 시 SSE 연결 시작 요청)
+            socket?.on("start_sse_connection") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val text = data.optString("text", "")
+                        Log.i(TAG, "📡 SSE 연결 시작 요청 수신: text=$text")
+                        onStartSseConnection?.invoke(text)
+                    } else {
+                        Log.i(TAG, "📡 SSE 연결 시작 요청 수신 (데이터 없음)")
+                        onStartSseConnection?.invoke(null)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ SSE 연결 시작 요청 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
             
             // clarify_turn 이벤트 수신 (Clarify 질문/답변 턴)
             socket?.on("clarify_turn") { args ->
@@ -139,6 +164,40 @@ class SocketIoSttClient(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            // cv_detection_failed 이벤트 수신 (CV 모델 오류 탐지 실패)
+            socket?.on("cv_detection_failed") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.d(TAG, "📩 CV 탐지 실패 수신: $jsonString")
+                        
+                        val cvFailed = gson.fromJson(jsonString, CvDetectionFailedDto::class.java)
+                        onCvDetectionFailed?.invoke(cvFailed)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ CV 탐지 실패 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            // clarify_qa_turn 이벤트 수신 (Clarify 질문/답변 턴 - 작업자 질문 + LLM 답변)
+            socket?.on("clarify_qa_turn") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.d(TAG, "📩 Clarify 질문/답변 턴 수신: $jsonString")
+                        
+                        val qaTurn = gson.fromJson(jsonString, ClarifyQaTurnDto::class.java)
+                        onClarifyQaTurn?.invoke(qaTurn)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Clarify 질문/답변 턴 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
             }

@@ -48,10 +48,10 @@ class Settings(BaseSettings):
     REDIS_PREFIX: str = "rag_chat"
 
     # =======================================
-    # 🔤 Phi-3 Embedding (Intent Classification)
+    # 🔤 Intent Classification
     # =======================================
-    PHI3_MODEL_NAME: str = "microsoft/Phi-3-mini-4k-instruct"
-    PHI3_EMBEDDING_DIM: int = 3072  # Phi-3 임베딩 차원
+    # Intent 분류는 Gemini-Flash를 사용합니다 (app/services/intent_service.py)
+    # Phi-3 및 ONNX 모델 관련 설정 제거됨
 
     # =======================================
     # 🔊 TTS (Text-to-Speech) - GCP TTS
