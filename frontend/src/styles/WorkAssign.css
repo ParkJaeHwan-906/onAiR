@@ -55,6 +55,15 @@
   transition: background-color 0.2s ease;
 }
 
+.work-select-trigger > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
 .work-select-trigger::after {
   content: '';
   width: 12px;
@@ -140,6 +149,8 @@ li + li .work-select-option {
 
 .work-select-option-title {
   font-weight: 600;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .work-select-option-meta {
