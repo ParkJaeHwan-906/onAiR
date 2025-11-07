@@ -2,7 +2,8 @@
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
+# from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
+from app.routers import chat_router, tts_router, stt_router, clarify_router, ar_process
 from app.sockets.socket_handler import init_socketio, sio
 
 # Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
