@@ -67,7 +67,7 @@ export const useSSEStore = create<SSEState>((set, get) => ({
       },
       (error) => {
         // // 재연결 실패
-        // console.error("❌ useSSEStore - 재연결 실패:", error);
+        console.error("❌ useSSEStore - 재연결 실패:", error);
         set({
           isConnected: false,
           reconnectAttempts: 0,
