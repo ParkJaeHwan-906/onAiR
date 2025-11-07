@@ -43,6 +43,13 @@ FROM node:22-alpine
 # 컨테이너 내부의 작업 디렉토리를 /app으로 설정 
 WORKDIR /app
 
+# ENV 추가 (디버깅용, 실제로는 사용되지 않음 - 이미 빌드 타임에 번들에 포함됨)
+# Runtime stage에서도 ARG를 다시 선언해야 함 (Multi-stage build는 독립적)
+ARG VITE_API_URL
+ARG VITE_SOCKET_URL
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
+
 # serve 패키지 전역 설치 (경량 정적 파일 서버)
 RUN npm install -g serve
 
