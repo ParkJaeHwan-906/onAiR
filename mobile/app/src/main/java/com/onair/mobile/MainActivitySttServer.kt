@@ -11,8 +11,6 @@ import com.onair.mobile.assistant.data.rag.RagRepositoryImpl
 import com.onair.mobile.assistant.data.raspberry.RaspberryPiControlRepository
 import com.onair.mobile.assistant.data.stt.SocketIoSttClient
 import com.onair.mobile.assistant.data.stt.SttRepositoryImpl
-import com.onair.mobile.assistant.data.stt.SttWebhookServer
-import com.onair.mobile.assistant.data.stt.SttWebSocketServer
 import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
 import com.onair.mobile.assistant.domain.entity.IntentType
@@ -23,19 +21,16 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 
 /**
- * 라즈베리파이로부터 STT 텍스트를 수신하는 WebSocket 서버 Activity
+ * Socket.IO를 통해 라즈베리파이로부터 STT 텍스트를 수신하는 Activity
  * 
  * 실행 방법:
  * 1. Android Studio에서 Run
- * 2. 로그에서 "🚀 WebSocket 서버 시작" 확인
- * 3. 라즈베리파이에서 ws://<안드로이드_IP>:8080/ws/stt 연결
- * 4. 라즈베리파이에서 POST http://<안드로이드_IP>:8081/webhook/stt_start 알림 전송
+ * 2. 로그에서 "✅ Socket.IO 클라이언트 연결 시작" 확인
+ * 3. 라즈베리파이는 Socket.IO 서버를 통해 STT 결과를 전송
  */
 class MainActivitySttServer : AppCompatActivity() {
 
     private lateinit var socketIoSttClient: SocketIoSttClient
-    private lateinit var webSocketServer: SttWebSocketServer  // 레거시, Socket.IO로 대체 예정
-    private lateinit var webhookServer: SttWebhookServer
     private lateinit var sttRepository: SttRepositoryImpl
     private lateinit var intentRepository: IntentRepositoryImpl
     private lateinit var sessionManager: SessionManager
@@ -49,10 +44,9 @@ class MainActivitySttServer : AppCompatActivity() {
     
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
+    private var currentTurnId: Int = 1  // Clarify 턴 ID 추적
     
     private val TAG = "MainActivitySttServer"
-    private val WS_PORT = 8080  // WebSocket 서버 포트 (레거시)
-    private val WEBHOOK_PORT = 8081  // HTTP 웹훅 서버 포트
     
     // TODO: 서버 URL 설정
     private val SOCKET_IO_SERVER_URL = "http://YOUR_SOCKET_IO_SERVER_URL:5000"  // Socket.IO 서버 URL
@@ -112,8 +106,9 @@ class MainActivitySttServer : AppCompatActivity() {
         socketIoSttClient = SocketIoSttClient(
             serverUrl = SOCKET_IO_SERVER_URL,
             onSttResult = { text, type, confidence ->
-                val timestamp = System.currentTimeMillis().toString()
-                handleSttMessage(timestamp, text)
+                // STT 텍스트 수신 (레거시 WebSocket 대신 Socket.IO 사용)
+                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
+                sttRepository.receiveFromRaspberryPi(text)
             },
             onClarifyResponse = { ragResponse ->
                 // Clarify 응답 수신 처리 (레거시)
@@ -152,58 +147,6 @@ class MainActivitySttServer : AppCompatActivity() {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
             e.printStackTrace()
         }
-        
-        // 레거시 WebSocket 서버 (선택사항, Socket.IO로 대체 예정)
-        webSocketServer = SttWebSocketServer(WS_PORT) { timestamp, text ->
-            handleSttMessage(timestamp, text)
-        }
-        
-        try {
-            webSocketServer.start()
-            Log.i(TAG, "✅ 레거시 WebSocket 서버 시작: ws://0.0.0.0:$WS_PORT/ws/stt")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 레거시 WebSocket 서버 시작 실패: ${e.message}")
-            e.printStackTrace()
-        }
-        
-        // HTTP 웹훅 서버 시작 (stt_start 알림 수신용)
-        webhookServer = SttWebhookServer(WEBHOOK_PORT) {
-            handleSttStart()
-        }
-        
-        try {
-            webhookServer.startServer()
-            Log.i(TAG, "✅ HTTP 웹훅 서버 시작: http://0.0.0.0:$WEBHOOK_PORT/webhook/stt_start")
-            Log.i(TAG, "📱 안드로이드 기기 IP를 확인하여 라즈베리파이에서 연결하세요")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ HTTP 웹훅 서버 시작 실패: ${e.message}")
-            e.printStackTrace()
-        }
-    }
-
-    /**
-     * 라즈베리파이에서 stt_start 웹훅 알림 수신 시 호출
-     */
-    private fun handleSttStart() {
-        Log.i(TAG, "🎙️ STT 시작 알림 수신 - 라즈베리파이에서 음성 수집 시작")
-        // TODO: 필요 시 UI 업데이트 (예: "듣고 있습니다..." 표시)
-    }
-    
-    /**
-     * 라즈베리파이로부터 STT 텍스트 수신 시 호출
-     * 
-     * 버퍼링 STT: Intent 분류 수행
-     * Streaming STT: Clarify 입력이지만, 모바일에서 처리하지 않음
-     *                (라즈베리파이 → FastAPI 직접 전송 → FastAPI가 Socket.IO로 clarify_response 전송)
-     */
-    private fun handleSttMessage(timestamp: String, text: String) {
-        Log.i(TAG, "🧠 STT 텍스트 처리: [$timestamp] $text")
-        
-        // SttRepository를 통해 텍스트 수신
-        sttRepository.receiveFromRaspberryPi(text)
-        
-        // ⚠️ Intent 분류는 서버에서 처리되며, 모바일은 Socket.IO로부터 intent_result 이벤트를 받습니다.
-        // 레거시 WebSocket 서버를 통한 직접 처리는 더 이상 사용하지 않습니다.
     }
     
     
@@ -533,39 +476,6 @@ class MainActivitySttServer : AppCompatActivity() {
     }
     
     /**
-     * Clarify 텍스트 입력 전송
-     * 
-     * 사용자가 텍스트로 Clarify 응답을 입력할 때 호출합니다.
-     * 
-     * @param text 사용자 입력 텍스트
-     * @param action "continue" | "skip" | "cancel"
-     */
-    fun sendClarifyTextInput(text: String, action: String = "continue") {
-        val sessionId = currentSessionId
-        if (sessionId == null) {
-            Log.w(TAG, "⚠️ 세션 ID가 없습니다. Clarify 응답을 전송할 수 없습니다.")
-            return
-        }
-        
-        // ClarifyTurnDto에서 turn_id를 추적해야 하므로, 이를 저장하는 로직이 필요합니다.
-        // 임시로 1로 설정 (실제로는 마지막 받은 ClarifyTurnDto의 turn_id를 사용해야 함)
-        val turnId = 1  // TODO: 실제 turn_id를 추적하도록 수정
-        
-        val success = socketIoSttClient.sendClarifyTextResponse(
-            text = text,
-            sessionId = sessionId,
-            turnId = turnId,
-            action = action
-        )
-        
-        if (success) {
-            Log.i(TAG, "✅ Clarify 텍스트 응답 전송 완료: $text")
-        } else {
-            Log.e(TAG, "❌ Clarify 텍스트 응답 전송 실패")
-        }
-    }
-    
-    /**
      * 최종 답변 처리
      */
     private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
@@ -600,12 +510,10 @@ class MainActivitySttServer : AppCompatActivity() {
         sseTaskClient?.disconnect()
         // 기타 리소스 정리
         socketIoSttClient.disconnect()
-        webSocketServer.stopServer()
-        webhookServer.stopServer()
         sttRepository.cleanup()
         intentRepository.cleanup()
         ttsRepository.cleanup()
-        Log.i(TAG, "🛑 서버 중지됨")
+        Log.i(TAG, "🛑 리소스 정리 완료")
     }
 }
 
