@@ -19,7 +19,8 @@ class SocketIOClient:
         Args:
             manager: ConnectionManager 인스턴스 (선택사항, 종료 신호 처리용)
         """
-        self.server_url = settings.SOCKETIO_SERVER_URL
+        # FastAPI 서버 URL 사용 (Socket.IO 서버도 여기에 통합되어 있음)
+        self.server_url = settings.FASTAPI_SERVER_URL
         # 자동 재연결 설정
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
@@ -85,6 +86,94 @@ class SocketIOClient:
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
         
+        @self.sio.on("cv_detection_failed")
+        async def handle_cv_detection_failed(data):
+            """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
+            message = data.get("message", "")
+            logger.info(f"⚠️ CV 모델 오류 탐지 실패: {message}")
+            
+            # 라즈베리파이: 마이크 ON + Streaming STT 즉시 시작
+            if self.manager:
+                # STT 모드를 streaming으로 전환
+                self.manager.set_stt_mode("streaming")
+                
+                # 마이크 활성화 (버퍼링 STT 후 OFF되었으므로)
+                mic = self.manager.get_mic_stream()
+                if mic and not mic.stream.is_active():
+                    mic.resume()
+                    logger.info("🔊 마이크 ON (CV 실패 → Streaming STT 시작)")
+                
+                # Streaming STT 인스턴스 가져오기
+                streaming_stt = self.manager.streaming_stt_instance
+                if streaming_stt:
+                    # Socket.IO 클라이언트 설정
+                    streaming_stt.socketio_client = self
+                    
+                    # 세션 ID 생성 (Clarify 세션용)
+                    import uuid
+                    session_id = str(uuid.uuid4())
+                    logger.info(f"📤 Streaming STT 세션 즉시 시작 (session_id={session_id})")
+                    
+                    # 브로드캐스트 함수 (manager를 통해)
+                    async def broadcaster(msg):
+                        await self.manager.broadcast(msg)
+                    
+                    # Streaming STT 세션 시작 (별도 태스크로 실행)
+                    try:
+                        # 현재 이벤트 루프에서 실행
+                        import asyncio
+                        asyncio.create_task(
+                            streaming_stt.run(mic, broadcaster=broadcaster, session_id=session_id)
+                        )
+                        logger.info("✅ Streaming STT 세션 시작 완료")
+                    except Exception as e:
+                        logger.error(f"❌ Streaming STT 세션 시작 실패: {e}")
+                else:
+                    logger.error("❌ Streaming STT 인스턴스가 등록되지 않았습니다")
+        
+        @self.sio.on("control_raspi")
+        async def handle_control_raspi(data):
+            """라즈베리파이 제어 명령 수신 (모바일 → Socket.IO 서버 → 라즈베리파이)"""
+            command = data.get("command", "")
+            logger.info(f"📡 라즈베리파이 제어 명령 수신: command={command}")
+            
+            if command == "start_streaming_stt":
+                # 스트리밍 STT 시작 명령
+                logger.info("🎤 스트리밍 STT 시작 명령 수신")
+                # manager를 통해 스트리밍 모드로 전환
+                if self.manager:
+                    self.manager.set_stt_mode("streaming")
+                    # 마이크 활성화
+                    mic = self.manager.get_mic_stream()
+                    if mic and not mic.stream.is_active():
+                        mic.resume()
+                        logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
+            
+            elif command == "set_stt_mode":
+                # STT 모드 설정 명령
+                mode = data.get("mode", "buffered")
+                logger.info(f"📝 STT 모드 설정 명령 수신: mode={mode}")
+                if self.manager:
+                    self.manager.set_stt_mode(mode)
+                    # 스트리밍 모드로 전환 시 마이크 활성화
+                    if mode == "streaming":
+                        mic = self.manager.get_mic_stream()
+                        if mic and not mic.stream.is_active():
+                            mic.resume()
+                            logger.info("🔊 마이크 ON (스트리밍 모드 전환)")
+            
+            elif command == "notify_intent_done":
+                # Intent 분기 완료 알림
+                branch = data.get("branch", "")
+                logger.info(f"✅ Intent 분기 완료 알림 수신: branch={branch}")
+                # OPERATOR인 경우: 마이크 OFF 유지, STT 세션 종료 상태 유지
+                # AI_SUPPORTER인 경우는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
+                if branch == "OPERATOR" and self.manager:
+                    self.manager.set_stt_mode("buffered")
+                    # 마이크는 OFF 상태 유지 (버퍼링 STT 후 이미 OFF됨)
+                    # resume() 호출하지 않음
+                    logger.info("🔇 OPERATOR 모드: 마이크 OFF 상태 유지, STT 세션 종료 상태 유지")
+        
         @self.sio.on("server_message")
         async def handle_server_message(data):
             """서버로부터 메시지 수신"""
@@ -108,8 +197,8 @@ class SocketIOClient:
             return True
         
         try:
-            logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url}")
-            # Socket.IO 경로는 /ws로 설정 (ai_ar/app/main.py에서 socketio_path="/ws" 사용)
+            logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url} (경로: /ws)")
+            # Socket.IO 경로는 /ws로 설정 (FastAPI 서버에 통합된 Socket.IO 서버)
             await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
