@@ -24,7 +24,7 @@ from app.ar import motion_core
 sio = socketio.AsyncServer(
     async_mode='asgi',
     cors_allowed_origins='*',  # 모든 Origin 허용
-    logger=True,  # 디버깅을 위해 로거 활성화
+    logger=False,  # 로거 비활성화
 )
 print(f"🔍 [DEBUG] Socket.IO AsyncServer 생성 완료: {sio}")
 
