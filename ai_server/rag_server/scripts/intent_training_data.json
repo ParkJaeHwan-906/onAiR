@@ -1,0 +1,162 @@
+[
+  {
+    "text": "AI 서포터 도움이 필요해",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "AI 도움이 필요해",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "AI에게 물어봐",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "이거 어떻게 하는지 알려줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "설명해줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "이게 뭐야?",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "어떻게 사용하나요?",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "사용법 알려줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "뭐가 문제인지 모르겠어",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "도와줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "이거 뭐하는 거야?",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "어떻게 해야 해?",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "방법 알려줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "질문이 있어",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "궁금한 게 있어",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "알려줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "가르쳐줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "모르겠어",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "이해가 안 돼",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "설명 부탁해",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "통신연결이 필요해",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "사람 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "오퍼레이터 연결해줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "운영자에게 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "직원 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "담당자 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "관리자 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "사람과 통화하고 싶어",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "상담원 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "전화 연결해줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "사람 연결해줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "직원 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "담당자 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "상담원 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "관리자 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "운영자 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "오퍼레이터 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "사람과 통화",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "전화 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "통신 연결",
+    "label": "OPERATOR"
+  }
+]
