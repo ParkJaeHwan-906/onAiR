@@ -8,6 +8,8 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 3. Streaming STT 처리
 """
 import socketio
+import cv2
+import numpy as np
 from typing import Dict, Any, Optional
 from app.core.model_loader import get_phi3_embedding
 from app.services import memory
@@ -15,9 +17,14 @@ from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
+from datetime import datetime
+from app.ar import motion_core
 
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
-sio: Optional[socketio.AsyncServer] = None
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins='*',
+)
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
@@ -26,10 +33,8 @@ device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, history, ... } }
 
 
-def init_socketio(sio_instance: socketio.AsyncServer):
+def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
-    global sio
-    sio = sio_instance
     
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
     sio.on("connect")(handle_connect)
@@ -39,26 +44,39 @@ def init_socketio(sio_instance: socketio.AsyncServer):
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
+    sio.on("video_frame")(handle_video_frame)  
     
     print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
 
-async def broadcast_to(device_types: str | list[str], event: str, payload: dict):
-    """특정 디바이스 타입에 이벤트 전송"""
-    if sio is None:
-        print("⚠️ Socket.IO 서버가 초기화되지 않았습니다.")
-        return
-    
+# === 타입별 브로드캐스트 (안전 버전) ===
+async def broadcast_to(device_types, event: str, payload: dict):
+    """
+    특정 디바이스 타입(하나 또는 여러 개)에 이벤트 전송
+    - device_types: 문자열('raspi') 또는 리스트(['raspi', 'mobile'])
+    - payload: dict 형태의 전송 데이터
+    """
     if isinstance(device_types, str):
         device_types = [device_types]
-    
+
+    # ✅ dictionary snapshot으로 안전한 iteration
+    targets = list(device_map.items())
     sent_count = 0
-    for sid, dev in device_map.items():
+
+    for sid, dev in targets:
         if dev in device_types:
-            await sio.emit(event, payload, to=sid)
-            sent_count += 1
-    
-    print(f"📡 Broadcasted '{event}' to {sent_count} clients ({device_types})")
+            try:
+                await sio.emit(event, payload, to=sid)
+                sent_count += 1
+            except Exception as e:
+                # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
+                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
+                try:
+                    if sid in device_map:
+                        del device_map[sid]
+                except Exception:
+                    pass
 
 
 # ========================================
@@ -449,3 +467,34 @@ async def handle_clarify_response(sid, data):
     else:
         await sio.emit("error", {"msg": "응답 텍스트가 비어있습니다."}, to=sid)
 
+# ========================================
+# Raspberry Pi 비디오 프레임 처리
+# ========================================
+
+@sio.on("video_frame")
+async def handle_video_frame(sid, data):
+    """라즈베리파이 → JPEG binary 수신 후 모션 추정"""
+    sender_device = device_map.get(sid, "unknown")
+    if not data:
+        return
+
+    np_data = np.frombuffer(data, np.uint8)
+    frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+    if frame is None:
+        print("⚠️ Failed to decode frame")
+        return
+
+    # === 모션 계산 ===
+    result = await motion_core.process_frame(frame, sid=sid)
+
+    # === 결과 전송 ===
+    if result["status"] == "ok":
+        x, y, z = result["x"], result["y"], result["z"]
+        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+        await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
+    else:
+        print(f"⚠️ Motion estimation status: {result['status']}")
+
+    # === 프레임 브로드캐스트 (PC 디스플레이용) ===
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
