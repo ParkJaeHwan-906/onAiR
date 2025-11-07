@@ -18,7 +18,7 @@ DEVICE_INDEX = os.getenv("DEVICE_INDEX", None)
 STT_BUFFER_DURATION_SEC = float(os.getenv("STT_BUFFER_DURATION_SEC", "4.0"))  # 3~5초
 
 # === STT 스트리밍 설정 ===
-SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "2.5"))  # 침묵 타임아웃 (초) - 명시적 타이머 기반 종료 감지
+SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "0.5"))  # 침묵 타임아웃 (초) - 명시적 타이머 기반 종료 감지
 
 # === FastAPI 서버 설정 ===
 FASTAPI_SERVER_URL = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8001")

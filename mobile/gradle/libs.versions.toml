@@ -16,7 +16,7 @@ livekitAndroidComposeComponents = "1.4.0"
 material = "1.13.0"
 activity = "1.11.0"
 constraintlayout = "2.2.1"
-onnxruntimeAndroid = "1.23.2"
+# onnxruntimeAndroid = "1.23.2"  # 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -39,7 +39,7 @@ livekit-android-compose-components = { module = "io.livekit:livekit-android-comp
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
-onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntimeAndroid" }
+# onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntimeAndroid" }  # 제거됨
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

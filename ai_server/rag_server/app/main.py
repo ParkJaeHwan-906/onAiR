@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router
+from app.routers import chat_router, tts_router, stt_router, clarify_router
 
 # Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
 try:
@@ -70,9 +70,7 @@ app.add_middleware(
 # chat_router는 이미 prefix="/rag"를 가지고 있음
 app.include_router(chat_router.router)
 
-# Phi-3 Embedding 엔드포인트 (Intent Classification)
-# embedding_router는 prefix="/api"를 가지고 있음
-app.include_router(embedding_router.router)
+# Embedding 엔드포인트 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
 # TTS 엔드포인트 (Text-to-Speech)
 # tts_router는 prefix="/api"를 가지고 있음
@@ -92,7 +90,6 @@ def root():
         "message": "RAG Server is running 🚀",
         "endpoints": {
             "rag_chat": "/rag/chat",
-            "embedding": "/api/embedding",
             "tts": "/api/tts",
             "stt_buffered": "/api/stt/buffered",
             "clarify_streaming": "/api/clarify/streaming",
