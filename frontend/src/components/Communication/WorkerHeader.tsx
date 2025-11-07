@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { TextAlignJustify } from "lucide-react";
 import WorkerCard from "./WorkerCard";
+import { useUserStore } from "../../store/useUserStore";
 import "../../styles/Communication/WorkerHeader.css";
 
 interface UserData {
@@ -10,35 +11,30 @@ interface UserData {
   role: string;
 }
 
-const WorkerHeader = () => {
-  const [status, setStatus] = useState<"대기중" | "통신중">("대기중");
+interface PartnerInfo {
+  senderAccountId: number;
+  name: string;
+  phone: string;
+  equipmentName: string | null;
+}
+
+interface WorkerHeaderProps {
+  partnerInfo?: PartnerInfo | null;
+}
+
+const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
+  const { myInfo } = useUserStore();
+  const [status, setStatus] = useState<"대기중" | "통신중">("통신중");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [waitingList, setWaitingList] = useState<UserData[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // 상대방 정보가 있으면 통신중 상태로 설정
   useEffect(() => {
-    const dummyData: UserData[] = [
-      {
-        userAccountId: 1,
-        name: "최선우",
-        equipmentName: "CNC1호기",
-        role: "작업자",
-      },
-      {
-        userAccountId: 2,
-        name: "손동현",
-        equipmentName: "CNC5호기",
-        role: "작업자",
-      },
-      {
-        userAccountId: 3,
-        name: "손흥민",
-        equipmentName: "아디다스1호기",
-        role: "관리자",
-      },
-    ];
-    setWaitingList(dummyData);
-  }, []);
+    if (partnerInfo) {
+      setStatus("통신중");
+    }
+  }, [partnerInfo]);
 
   const toggleStatus = () => {
     setStatus((prev) => (prev === "대기중" ? "통신중" : "대기중"));
@@ -69,8 +65,12 @@ const WorkerHeader = () => {
             <div className="profile-icon" />
             <div className="worker-texts">
               <div className="top-row">
-                <span className="worker-name">홍길동</span>
-                <span className="worker-position">부서</span>
+                <span className="worker-name">
+                  {partnerInfo ? partnerInfo.name : myInfo?.name || "사용자"}
+                </span>
+                <span className="worker-position">
+                  {partnerInfo ? (partnerInfo.equipmentName || "설비 미지정") : (myInfo?.part || "부서")}
+                </span>
               </div>
               <div className="bottom-row">
                 <span

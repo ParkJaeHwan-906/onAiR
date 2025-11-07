@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import '../styles/EquipmentPage.css';
-import EquipmentCategorySection from '../components/Equipment/EquipmentCategorySection';
-import EquipmentRegisterSection from '../components/Equipment/EquipmentRegisterSection';
-import CompanyEquipmentSection from '../components/Equipment/CompanyEquipmentSection';
-import { useUserStore } from '../store/useUserStore';
+import { useEffect, useState } from "react";
+import "../styles/EquipmentPage.css";
+import EquipmentCategorySection from "../components/Equipment/EquipmentCategorySection";
+import EquipmentRegisterSection from "../components/Equipment/EquipmentRegisterSection";
+import CompanyEquipmentSection from "../components/Equipment/CompanyEquipmentSection";
+import { useUserStore } from "../store/useUserStore";
 
 function EquipmentPage() {
   const { fetchMyInfo, myInfo } = useUserStore();
@@ -27,7 +27,7 @@ function EquipmentPage() {
   if (!isAdmin) {
     return (
       <div className="equipment-page-wrapper">
-        <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF' }}>
+        <div style={{ padding: "40px", textAlign: "center", color: "#9CA3AF" }}>
           <h2>접근 권한이 없습니다.</h2>
           <p>설비 관리는 관리자만 이용할 수 있습니다.</p>
         </div>
@@ -39,7 +39,7 @@ function EquipmentPage() {
     <div className="equipment-page-wrapper">
       <div className="equipment-component-wrapper">
         <EquipmentCategorySection onCategoryAdded={handleCategoryAdded} />
-        <EquipmentRegisterSection 
+        <EquipmentRegisterSection
           categoryRefreshKey={categoryRefreshKey}
           onEquipmentAdded={handleEquipmentAdded}
         />
@@ -50,4 +50,3 @@ function EquipmentPage() {
 }
 
 export default EquipmentPage;
-
