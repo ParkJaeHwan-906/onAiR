@@ -21,9 +21,7 @@ STT_BUFFER_DURATION_SEC = float(os.getenv("STT_BUFFER_DURATION_SEC", "4.0"))  # 
 SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "0.5"))  # 침묵 타임아웃 (초) - 명시적 타이머 기반 종료 감지
 
 # === FastAPI 서버 설정 ===
-FASTAPI_SERVER_URL = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8001")
+# FastAPI 서버 URL (Socket.IO 서버도 여기에 통합되어 있음, 경로: /ws)
+FASTAPI_SERVER_URL = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8000")
 RAG_CHAT_ENDPOINT = os.getenv("RAG_CHAT_ENDPOINT", "/rag/chat")
-WS_CHAT_ENDPOINT = os.getenv("WS_CHAT_ENDPOINT", "/ws/chat")  # WebSocket 엔드포인트
-
-# === Socket.IO 서버 설정 ===
-SOCKETIO_SERVER_URL = os.getenv("SOCKETIO_SERVER_URL", "http://localhost:5000")  # Socket.IO 서버 URL
+WS_CHAT_ENDPOINT = os.getenv("WS_CHAT_ENDPOINT", "/ws/chat")  # WebSocket 엔드포인트 (레거시)

@@ -8,9 +8,10 @@ import { useUserStore } from "../../store/useUserStore";
 interface WorkBigProps {
   refreshKey?: number;
   onTaskUpdated?: () => void;
+  onSelectTask?: (taskId: number) => void;
 }
 
-function WorkBig({ refreshKey, onTaskUpdated }: WorkBigProps) {
+function WorkBig({ refreshKey, onTaskUpdated, onSelectTask }: WorkBigProps) {
   const [tasks, setTasks] = useState<Work[]>([]);
   const [loading, setLoading] = useState(true);
   const { myInfo } = useUserStore();
@@ -86,7 +87,10 @@ function WorkBig({ refreshKey, onTaskUpdated }: WorkBigProps) {
           <div className="col-status">상태</div>
           <div className="col-time">요청시간</div>
           {isAdmin ? (
-            <div className="col-solution">완료/취소 내용</div>
+            <>
+              <div className="col-solution">완료/취소 내용</div>
+              <div className="col-view">보기</div>
+            </>
           ) : (
             <div className="col-actions-header">완료 / 취소</div>
           )}
@@ -123,6 +127,7 @@ function WorkBig({ refreshKey, onTaskUpdated }: WorkBigProps) {
                       onTaskUpdated();
                     }
                   }}
+                  onSelect={onSelectTask}
                 />
               );
             })
