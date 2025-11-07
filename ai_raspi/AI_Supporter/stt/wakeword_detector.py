@@ -120,7 +120,7 @@ class WakewordDetector:
                     conf = np.max(pred)
                     
                     if label == "onair" and conf > WAKEWORD_THRESHOLD:
-                        print(f"🚀 Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
+                        print(f"Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
                         self.detection_queue.put(True)
                         # 중복 감지 방지를 위해 버퍼 초기화
                         buffer.clear()
