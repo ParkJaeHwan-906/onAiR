@@ -14,9 +14,17 @@
   flex-shrink: 0;
 }
 
-.work-page-left {
+.work-page-right {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.work-page-left {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

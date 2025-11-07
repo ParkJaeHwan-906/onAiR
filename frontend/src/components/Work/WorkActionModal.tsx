@@ -41,12 +41,17 @@ function WorkActionModal({
         onSuccess();
         onClose();
       } else {
-        alert(res.message || `작업 ${action === "complete" ? "완료" : "취소"}에 실패했습니다.`);
+        alert(
+          res.message ||
+            `작업 ${action === "complete" ? "완료" : "취소"}에 실패했습니다.`
+        );
       }
     } catch (error: any) {
       alert(
         error.response?.data?.message ||
-          `작업 ${action === "complete" ? "완료" : "취소"} 중 오류가 발생했습니다.`
+          `작업 ${
+            action === "complete" ? "완료" : "취소"
+          } 중 오류가 발생했습니다.`
       );
     } finally {
       setLoading(false);
@@ -73,17 +78,25 @@ function WorkActionModal({
             <textarea
               value={solution}
               onChange={(e) => setSolution(e.target.value)}
-              placeholder={`${action === "complete" ? "완료" : "취소"} 내용을 입력하세요...`}
+              placeholder={`${
+                action === "complete" ? "완료" : "취소"
+              } 내용을 입력하세요...`}
               rows={5}
             />
           </label>
         </div>
         <div className="work-action-modal-footer">
-          <button className="cancel-button" onClick={handleCancel} disabled={loading}>
+          <button
+            className="cancel-button"
+            onClick={handleCancel}
+            disabled={loading}
+          >
             취소
           </button>
           <button
-            className={`submit-button ${action === "complete" ? "complete" : "cancel"}`}
+            className={`submit-button ${
+              action === "complete" ? "complete" : "cancel"
+            }`}
             onClick={handleSubmit}
             disabled={loading}
           >
@@ -96,6 +109,3 @@ function WorkActionModal({
 }
 
 export default WorkActionModal;
-
-
-
