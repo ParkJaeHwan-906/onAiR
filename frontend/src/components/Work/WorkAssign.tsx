@@ -356,7 +356,7 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
           className={`work-select-trigger${isWorkDropdownOpen ? ' open' : ''}`}
           onClick={() => setIsWorkDropdownOpen((prev) => !prev)}
         >
-          {selectedWork ? `${selectedWork.equipmentName} (${selectedWork.id})` : '작업을 선택하세요'}
+          <span>{selectedWork ? selectedWork.request : '작업을 선택하세요'}</span>
         </button>
         {isWorkDropdownOpen && (
           <ul className='work-select-dropdown'>
@@ -373,8 +373,8 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
                       setIsWorkDropdownOpen(false);
                     }}
                   >
-                    <span className='work-select-option-title'>{work.equipmentName}</span>
-                    <span className='work-select-option-meta'>#{work.id} · {work.actionStatus}</span>
+                    <span className='work-select-option-title'>{work.request}</span>
+                    <span className='work-select-option-meta'>{work.equipmentName}</span>
                   </button>
                 </li>
               ))
@@ -408,7 +408,7 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
                     }}
                   >
                     <span className='work-select-option-title'>{employee.name}</span>
-                    <span className='work-select-option-meta'>#{employee.userAccountId} · {employee.part} · {employee.online ? '온라인' : '오프라인'}</span>
+                    <span className='work-select-option-meta'>{employee.part} | {employee.online ? '온라인' : '오프라인'}</span>
                   </button>
                 </li>
               ))
