@@ -11,14 +11,25 @@ import socketio
 import cv2
 import numpy as np
 from typing import Dict, Any, Optional
-from app.core.model_loader import get_phi3_embedding
+from app.services.intent_service import classify_intent
 from app.services import memory
 from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
-from datetime import datetime
-from app.ar import motion_core
+from app.services.cv_service import run_cv_model
+from app.services.llm_service import clarify_query
+
+# Gemini 모델 import (clarify_qa_turn에서 사용)
+try:
+    import google.generativeai as genai
+    from app.core.config import settings
+    genai_available = True
+    if settings.GMS_API_KEY:
+        genai.configure(api_key=settings.GMS_API_KEY)
+except Exception:
+    genai = None
+    genai_available = False
 
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
 sio = socketio.AsyncServer(
@@ -138,7 +149,7 @@ async def handle_stt_result(sid, data):
     라즈베리파이로부터 STT 결과 수신 (버퍼링 또는 Streaming)
     
     설계 요구사항:
-    - 버퍼링 STT: type="final" → Phi-3 임베딩 추출 → 모바일 전송
+    - 버퍼링 STT: type="final" → Gemini-Flash로 Intent 분류 → 모바일 전송
     - Streaming STT: type="interim" 또는 "final" → Redis 세션에 추가 → Clarify 처리
     """
     sender_device = device_map.get(sid, "unknown")
@@ -157,21 +168,76 @@ async def handle_stt_result(sid, data):
     
     # 버퍼링 STT (type="final"이고 session_id가 없음)
     if stt_type == "final" and not session_id:
-        # Phi-3 임베딩 추출 및 모바일로 전송
+        # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
         try:
-            embedding_array = get_phi3_embedding(stt_text)
-            embedding_list = embedding_array.tolist()
-            
-            await broadcast_to("mobile", "embedding_result", {
+            await broadcast_to("mobile", "start_sse_connection", {
                 "text": stt_text,
-                "embedding": embedding_list,
-                "dimension": len(embedding_list),
-                "confidence": confidence
+                "timestamp": None  # 필요시 추가
+            })
+            print(f"📡 모바일로 SSE 연결 시작 요청 전송: '{stt_text[:50]}...'")
+        except Exception as e:
+            print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
+        
+        # 2. Gemini-Flash로 Intent 분류 및 모바일로 전송
+        try:
+            intent_result = classify_intent(stt_text)
+            intent = intent_result.get("intent", "AI_SUPPORTER")
+            
+            await broadcast_to("mobile", "intent_result", {
+                "text": stt_text,
+                "intent": intent,
+                "confidence": intent_result.get("confidence", 0.5),
+                "reasoning": intent_result.get("reasoning", ""),
+                "stt_confidence": confidence  # STT 신뢰도
             })
             
-            print(f"✅ 버퍼링 STT 처리 완료: '{stt_text[:50]}...' → 모바일로 임베딩 전송")
+            print(f"✅ 버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent} (신뢰도: {intent_result.get('confidence', 0.5):.2f})")
+            
+            # AI_SUPPORTER 분기인 경우 CV 모델 실행
+            if intent == "AI_SUPPORTER":
+                try:
+                    cv_result = await run_cv_model()
+                    
+                    if not cv_result.get("detected", False):
+                        # CV 모델이 오류를 탐지하지 못한 경우
+                        print(f"⚠️ CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                        
+                        # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                        await broadcast_to("mobile", "cv_detection_failed", {
+                            "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                        })
+                        
+                        await broadcast_to("raspi", "cv_detection_failed", {
+                            "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                        })
+                        
+                        # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
+                        # (라즈베리파이에서 이 이벤트를 받아서 처리)
+                    else:
+                        # CV 모델이 오류를 탐지한 경우
+                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
+                        # TODO: 오류 탐지 성공 시 처리 로직 추가
+                        
+                except Exception as e:
+                    print(f"❌ CV 모델 실행 오류: {e}")
+                    # CV 모델 오류 시에도 탐지 실패로 처리
+                    await broadcast_to("mobile", "cv_detection_failed", {
+                        "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                    })
+                    await broadcast_to("raspi", "cv_detection_failed", {
+                        "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                    })
+                    
         except Exception as e:
             print(f"❌ 버퍼링 STT 처리 오류: {e}")
+            # 에러 발생 시 기본값으로 AI_SUPPORTER 전송
+            await broadcast_to("mobile", "intent_result", {
+                "text": stt_text,
+                "intent": "AI_SUPPORTER",
+                "confidence": 0.5,
+                "reasoning": f"Intent 분류 중 오류 발생: {e}",
+                "stt_confidence": confidence
+            })
     
     # Streaming STT (Clarify 루프 중)
     elif session_id:
@@ -186,9 +252,9 @@ async def handle_stt_result(sid, data):
             }
         })
         
-        # type="final"이면 Clarify 처리 시작
+        # type="final"이면 Clarify 처리 시작 (새로운 방식: clarify_qa_turn)
         if stt_type == "final":
-            await process_clarify_turn(session_id, stt_text)
+            await process_clarify_qa_turn(session_id, stt_text)
         
         print(f"✅ Streaming STT 수신 [session={session_id}]: '{stt_text[:50]}...'")
 
@@ -350,6 +416,197 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
         })
         
         print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
+
+
+# ========================================
+# 새로운 Clarify 루프 처리 (작업자 질문 + LLM 답변)
+# ========================================
+
+async def process_clarify_qa_turn(session_id: str, user_question: str):
+    """
+    Streaming STT 세션 중 Clarify 질문/답변 턴 처리:
+    1. Gemini-Flash로 clarify 여부 판단 (need_clarify)
+    2. 구체화 필요 시 소질문 생성 및 LLM 답변 생성
+    3. TTS 변환 후 clarify_qa_turn 이벤트 전송
+    4. 충분히 구체화되면 GPT-4o로 최종 답변 생성
+    """
+    # 히스토리 로드
+    history = memory.get_history(session_id)
+    
+    # 세션 정보 가져오기 또는 생성
+    if session_id not in clarify_sessions:
+        clarify_sessions[session_id] = {
+            "turns": [],
+            "history": []
+        }
+    
+    turn_id = len(clarify_sessions[session_id]["turns"]) + 1
+    
+    try:
+        # 1. Gemini-Flash로 clarify 여부 판단
+        clarify_result = clarify_query(user_question)
+        need_clarify = not clarify_result.get("answerable", True)
+        
+        if need_clarify:
+            # 구체화 필요: 소질문 생성 및 LLM 답변 생성
+            clarify_question = clarify_result.get("clarify", "문제 상황을 구체적으로 말씀해주세요.")
+            
+            # LLM 답변 생성 (Gemini-Flash 사용)
+            try:
+                if genai_available:
+                    model_qa = genai.GenerativeModel("gemini-1.5-flash")
+                    
+                    qa_prompt = f"""다음 질문에 대해 간단하고 명확하게 답변해주세요.
+
+질문: {clarify_question}
+
+답변은 1-2문장으로 간결하게 작성해주세요."""
+                    
+                    qa_response = model_qa.generate_content(qa_prompt)
+                    llm_answer = qa_response.text.strip()
+                else:
+                    llm_answer = "문제 상황을 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
+            except Exception as e:
+                print(f"⚠️ LLM 답변 생성 실패: {e}")
+                llm_answer = "문제 상황을 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
+            
+            # TTS 변환
+            try:
+                tts_result = text_to_speech(llm_answer)
+                audio_content = tts_result.get("audio_content")
+                audio_encoding = tts_result.get("mime_type")
+            except Exception as e:
+                print(f"⚠️ TTS 생성 실패: {e}")
+                audio_content = None
+                audio_encoding = None
+            
+            # clarify_qa_turn 이벤트 전송
+            await broadcast_to("mobile", "clarify_qa_turn", {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "user_question": user_question,
+                "llm_answer": llm_answer,
+                "audio_content": audio_content,
+                "audio_encoding": audio_encoding,
+                "need_clarify": True,
+                "status": "success"
+            })
+            
+            # 세션 정보 업데이트
+            clarify_sessions[session_id]["turns"].append({
+                "turn_id": turn_id,
+                "user_question": user_question,
+                "llm_answer": llm_answer,
+                "need_clarify": True
+            })
+            
+            print(f"📤 Clarify 질문/답변 턴 {turn_id} 전송 [session={session_id}]: need_clarify=True")
+            
+        else:
+            # 충분히 구체화됨: GPT-4o로 최종 답변 생성
+            # 히스토리 컨텍스트 구성
+            history_context = ""
+            user_lines = []
+            for ev in reversed(history):
+                if ev.get("role") == "user" and ev.get("type") == "streaming_stt":
+                    text = ev.get("data", {}).get("text", "")
+                    if text:
+                        user_lines.append(text)
+                    if len(user_lines) >= 3:  # 최근 3개 질문 사용
+                        break
+            
+            if user_lines:
+                history_context = " \n".join(reversed(user_lines))
+            
+            effective_query = f"{history_context} \n{user_question}" if history_context else user_question
+            normalized_query = normalize_query_style(effective_query)
+            
+            # Hybrid Search + Rerank
+            base_hits = hybrid_retrieve(normalized_query, top_k=8)
+            hits = rerank(normalized_query, base_hits, top_k=6)
+            used_hits = hits[:5]
+            
+            if not hits:
+                await broadcast_to("mobile", "clarify_qa_turn", {
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "user_question": user_question,
+                    "llm_answer": "관련 문서를 찾을 수 없습니다.",
+                    "audio_content": None,
+                    "audio_encoding": None,
+                    "need_clarify": False,
+                    "status": "error"
+                })
+                return
+            
+            # 최종 답변 생성 (GPT-4o)
+            snippets = [h["source"]["content"] for h in used_hits]
+            answer_text = llm_generate_answer(effective_query, snippets)
+            
+            # TTS 생성
+            try:
+                tts_result = text_to_speech(answer_text)
+                audio_content = tts_result.get("audio_content")
+                audio_encoding = tts_result.get("mime_type")
+            except Exception as e:
+                print(f"⚠️ TTS 생성 실패: {e}")
+                audio_content = None
+                audio_encoding = None
+            
+            # Redis에 저장
+            memory.append_event(session_id, {
+                "role": "assistant",
+                "type": "final_answer",
+                "data": {
+                    "answer": answer_text,
+                    "citations": [
+                        {
+                            "section": h["source"]["section"],
+                            "pages": h["source"]["pages"],
+                        }
+                        for h in used_hits[:3]
+                    ]
+                }
+            })
+            
+            # 세션 초기화
+            memory.clear_history(session_id)
+            clarify_sessions.pop(session_id, None)
+            
+            # 최종 답변 전송
+            await broadcast_to("mobile", "final_answer", {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "status": "completed",
+                "answer": answer_text,
+                "audio_content": audio_content,
+                "audio_encoding": audio_encoding,
+                "citations": [
+                    {
+                        "section": h["source"]["section"],
+                        "pages": h["source"]["pages"],
+                    }
+                    for h in used_hits[:3]
+                ]
+            })
+            
+            print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
+            
+    except Exception as e:
+        print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        await broadcast_to("mobile", "clarify_qa_turn", {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "user_question": user_question,
+            "llm_answer": "",
+            "audio_content": None,
+            "audio_encoding": None,
+            "need_clarify": True,
+            "status": "error"
+        })
 
 
 # ========================================
