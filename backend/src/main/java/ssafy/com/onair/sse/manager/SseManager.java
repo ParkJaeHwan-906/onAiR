@@ -2,6 +2,7 @@ package ssafy.com.onair.sse.manager;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import ssafy.com.onair.global.jwt.user.CustomUserDetails;
@@ -126,5 +127,19 @@ public class SseManager {
                         .eventName("")  // 이벤트 명 지정해주세여
                         .data(data)     // 여기에 뭔가 필요한 데이터가 있다면 넣으세여
                         .build());
+    }
+
+    /**
+     * SSE 연결 유지를 위해 모든 emitter에게 30초마다 heart beat 이벤트 전달
+     */
+    @Scheduled(fixedRate = 30 * 1000)
+    public void sendHeartBeat(){
+        this.emitters.forEach((accountId, emitter) -> {
+            sendSseMessage(emitter, SseMessageDto.builder()
+                    .eventName("heart beat")
+                    .data(null)
+                    .build());
+            log.debug("send heartbeat to {}", accountId);
+        });
     }
 }
