@@ -72,6 +72,9 @@ app.add_middleware(
 
 # Socket.IO 초기화 (app 생성 후 바로)
 if USE_SOCKETIO:
+    print(f"🔍 [DEBUG] USE_SOCKETIO = {USE_SOCKETIO}")
+    print(f"🔍 [DEBUG] sio 인스턴스: {sio}")
+    print(f"🔍 [DEBUG] init_socketio 함수: {init_socketio}")
     init_socketio()  # 이벤트 핸들러 등록
     print("✅ Socket.IO 초기화 완료")
 
@@ -128,13 +131,18 @@ def root():
 
 # Socket.IO 통합 (ai_ar의 socket_manager 사용)
 if USE_SOCKETIO:
+    print(f"🔍 [DEBUG] ASGIApp 생성 전 - sio: {sio}")
+    print(f"🔍 [DEBUG] ASGIApp 생성 전 - app: {app}")
     asgi_app = socketio.ASGIApp(
         sio,
         other_asgi_app=app,
         socketio_path="/ws"
     )
+    print(f"🔍 [DEBUG] ASGIApp 생성 완료: {asgi_app}")
+    print(f"✅ Socket.IO ASGIApp 설정 완료 (path=/ws)")
 else:
     # Socket.IO 없이 FastAPI만 사용
     asgi_app = app
+    print("⚠️ Socket.IO 없이 FastAPI만 사용")
 
 # uvicorn 실행 시: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000
