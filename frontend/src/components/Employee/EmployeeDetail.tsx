@@ -2,8 +2,8 @@ import "../../styles/EmployeeDetail.css";
 import type { Employee } from "../../types/employee";
 import { useUserStore } from "../../store/useUserStore";
 import { formatPhone } from "../../utils/formatPhone";
-import { sendConnectionRequest, getLivekitToken } from "../../api/webrtc";
-import { useNavigate } from "react-router-dom";
+import { sendConnectionRequest } from "../../api/webrtc";
+import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
 import WorkAdd from "../Work/WorkAdd";
 import Modal from "../Work/Modal";
 import { useState, useEffect, useRef } from "react";
@@ -18,9 +18,9 @@ type EmployeeDetailProps = {
 
 function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const { myInfo, fetchEmployees, fetchMyInfo } = useUserStore();
+  const { addSentRequest } = useWebRtcRequestStore();
   const isMine = myInfo?.userAccountId === employee?.userAccountId;
   const isAdmin = myInfo?.role === "관리자";
-  const navigate = useNavigate();
   const [showRequestBox, setShowRequestBox] = useState(false);
   const { isConnected, connect } = useSSEStore();
 
@@ -120,38 +120,47 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
     }
   };
 
-  // description(요청 사유) 받도록 수정
-  const handleConnectionRequest = async (description: string) => {
+  // 연결 요청 핸들러
+  const handleConnectionRequest = async (_description: string) => {
     if (!employee || !isAdmin) return;
 
     try {
       // 혹시 연결이 끊겨있다면 재연결 시도
       if (!isConnected) connect();
 
-      const receiverId = employee.userAccountId;
-      console.log("보내는 receiverAccountId:", receiverId);
-      console.log("요청 사유:", description);
-
-      // 연결 요청 시 description도 함께 전달
-      const res = await sendConnectionRequest(receiverId, description);
+      // 연결 요청 전송 (description은 현재 빈 문자열로 전송)
+      const res = await sendConnectionRequest(employee.userAccountId);
 
       if (!res.success) {
-        alert(res.message || "연결 요청 중 오류가 발생했습니다.");
+        const errorMsg = res.message || "연결 요청 중 오류가 발생했습니다.";
+        console.error("연결 요청 실패:", errorMsg);
+        alert(errorMsg + "\n\n작업자가 SSE 연결이 되어 있는지 확인해주세요.");
         return;
       }
 
-      alert("연결 요청이 성공적으로 전송되었습니다.");
-
-      // LiveKit 토큰 발급
-      const roomName = `room-${receiverId}`;
-      const token = await getLivekitToken(roomName);
-
-      if (token) {
-        console.log("LiveKit 토큰:", token);
-        navigate("/communication", { state: { token, roomName } });
-      } else {
-        alert("LiveKit 토큰 발급 실패");
+      // 관리자가 보낸 요청 정보를 sentRequests에 저장 (응답을 받을 때 매칭하기 위해)
+      // 상대방(작업자) 정보도 함께 저장하여 CommunicationPage에서 사용
+      if (myInfo && employee) {
+        addSentRequest(
+          {
+            senderAccountId: myInfo.userAccountId,
+            name: myInfo.name,
+            phone: myInfo.phone || "",
+            equipmentName: myInfo.equipmentName || null,
+          },
+          {
+            senderAccountId: employee.userAccountId,
+            name: employee.name,
+            phone: employee.phone || "",
+            equipmentName: employee.equipmentName || null,
+          }
+        );
       }
+
+      alert("연결 요청이 성공적으로 전송되었습니다.");
+      // 요청만 보내고 응답을 기다림 (SSE로 토큰을 받을 예정)
+      // 백엔드에서 작업자에게 SSE로 전달되며, 작업자는 HomePage의 요청 목록에서 확인 가능
+      // 관리자가 보낸 요청은 자신의 요청 목록에 표시되지 않음 (작업자의 요청 목록에만 표시됨)
     } catch (error) {
       console.error("연결 요청 중 오류:", error);
       alert("요청 처리 중 오류가 발생했습니다.");

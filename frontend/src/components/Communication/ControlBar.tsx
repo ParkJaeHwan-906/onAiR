@@ -22,6 +22,7 @@ interface ControlBarProps {
   setCurrentTool: React.Dispatch<React.SetStateAction<string>>;
   penColor: string;
   setPenColor: React.Dispatch<React.SetStateAction<string>>;
+  onEndCall?: () => void;
 }
 
 const ControlBar = ({
@@ -29,9 +30,10 @@ const ControlBar = ({
   setCurrentTool,
   penColor,
   setPenColor,
+  onEndCall,
 }: ControlBarProps) => {
   // socket 인스턴스 가져오기
-  const socket = useSocket(); 
+  const socket = useSocket();
   // 열려있는 메뉴: color, shape, eraser, none
   const [openMenu, setOpenMenu] = useState<
     "none" | "color" | "shape" | "eraser"
@@ -175,7 +177,10 @@ const ControlBar = ({
           className="icon-button end-call"
           onClick={() => {
             setOpenMenu("none");
-            socket.emit('video_stream', { state: 'on' });
+            socket.emit("video_stream", { state: "on" });
+            if (onEndCall) {
+              onEndCall();
+            }
           }}
         >
           <Phone className="icon end-call-icon" size={18} />

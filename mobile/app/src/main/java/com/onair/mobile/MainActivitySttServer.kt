@@ -49,9 +49,7 @@ class MainActivitySttServer : AppCompatActivity() {
     private val TAG = "MainActivitySttServer"
     
     // TODO: 서버 URL 설정
-    private val SOCKET_IO_SERVER_URL = "http://YOUR_SOCKET_IO_SERVER_URL:5000"  // Socket.IO 서버 URL
-    private val FASTAPI_SERVER_URL = "http://YOUR_FASTAPI_SERVER_URL:8000"  // FastAPI 서버 URL
-    private val RASPBERRY_PI_SERVER_URL = "http://YOUR_RASPBERRY_PI_URL:5000"  // 라즈베리파이 FastAPI 서버 URL
+    private val FASTAPI_SERVER_URL = "http://YOUR_FASTAPI_SERVER_URL:8000"  // FastAPI 서버 URL (Socket.IO 서버도 여기에 통합됨)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
 
@@ -78,33 +76,9 @@ class MainActivitySttServer : AppCompatActivity() {
         // TTS Repository 초기화
         ttsRepository = TtsRepositoryImpl(this, mediaPlayerController, FASTAPI_SERVER_URL)
         
-        // 라즈베리파이 제어 API 초기화
-        raspberryPiControlRepository = RaspberryPiControlRepository(RASPBERRY_PI_SERVER_URL)
-        
-        // 토큰 관리자 초기화
-        tokenManager = TokenManager(this)
-        
-        // WebRTC Repository 초기화
-        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
-        
-        // TODO: 실제 로그인 API 연동 후 제거
-        // 임시로 제공받은 액세스 토큰 설정 (테스트용)
-        // 주의: 실제 프로덕션에서는 로그인 API를 통해 토큰을 받아야 합니다
-        if (!tokenManager.hasToken()) {
-            // BuildConfig에서 읽거나, 로그인 API를 통해 받아야 함
-            // 현재는 테스트용으로만 사용
-            val testToken = BuildConfig.DEFAULT_ACCESS_TOKEN
-            if (testToken.isNotEmpty()) {
-                tokenManager.saveAccessToken(testToken)
-                Log.i(TAG, "✅ 임시 액세스 토큰 설정 완료")
-            } else {
-                Log.w(TAG, "⚠️ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-            }
-        }
-        
-        // Socket.IO 클라이언트 시작 (Socket.IO 서버에서 이벤트 수신)
+        // Socket.IO 클라이언트 시작 (FastAPI 서버에 통합된 Socket.IO 서버에 연결)
         socketIoSttClient = SocketIoSttClient(
-            serverUrl = SOCKET_IO_SERVER_URL,
+            serverUrl = FASTAPI_SERVER_URL,  // FastAPI 서버 URL 사용 (Socket.IO도 같은 서버)
             onSttResult = { text, type, confidence ->
                 // STT 텍스트 수신 (레거시 WebSocket 대신 Socket.IO 사용)
                 Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
@@ -140,9 +114,33 @@ class MainActivitySttServer : AppCompatActivity() {
             }
         )
         
+        // 라즈베리파이 제어 API 초기화 (Socket.IO 클라이언트 사용)
+        raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
+        
+        // 토큰 관리자 초기화
+        tokenManager = TokenManager(this)
+        
+        // WebRTC Repository 초기화
+        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
+        
+        // TODO: 실제 로그인 API 연동 후 제거
+        // 임시로 제공받은 액세스 토큰 설정 (테스트용)
+        // 주의: 실제 프로덕션에서는 로그인 API를 통해 토큰을 받아야 합니다
+        if (!tokenManager.hasToken()) {
+            // BuildConfig에서 읽거나, 로그인 API를 통해 받아야 함
+            // 현재는 테스트용으로만 사용
+            val testToken = BuildConfig.DEFAULT_ACCESS_TOKEN
+            if (testToken.isNotEmpty()) {
+                tokenManager.saveAccessToken(testToken)
+                Log.i(TAG, "✅ 임시 액세스 토큰 설정 완료")
+            } else {
+                Log.w(TAG, "⚠️ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
+            }
+        }
+        
         try {
             socketIoSttClient.connect()
-            Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $SOCKET_IO_SERVER_URL")
+            Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL (Socket.IO 경로: /ws)")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
             e.printStackTrace()

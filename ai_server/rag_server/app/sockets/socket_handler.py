@@ -37,7 +37,6 @@ sio = socketio.AsyncServer(
     cors_allowed_origins='*',  # 모든 Origin 허용
     logger=False,  # 로거 비활성화
 )
-print(f"🔍 [DEBUG] Socket.IO AsyncServer 생성 완료: {sio}")
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
@@ -62,6 +61,8 @@ def init_socketio():
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
+    sio.on("clarify_input")(handle_clarify_input)  # 모바일에서 오는 Clarify 입력 수신 (Socket.IO를 통해)
+    sio.on("control_raspi")(handle_control_raspi)  # 모바일에서 라즈베리파이 제어 명령
     sio.on("video_frame")(handle_video_frame)  
     
     print("✅ Socket.IO 이벤트 핸들러 등록 완료")
@@ -104,9 +105,7 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        print(f"🔍 [DEBUG] handle_connect 호출됨! sid={sid}")
         print(f"✅ Client connected: {sid}")
-        print(f"🔍 [DEBUG] environ keys: {list(environ.keys()) if environ else 'None'}")
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
@@ -774,3 +773,58 @@ async def handle_video_frame(sid, data):
     # === 프레임 브로드캐스트 (PC 디스플레이용) ===
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+
+
+# ========================================
+# Clarify 입력 수신 (모바일 → FastAPI)
+# ========================================
+
+async def handle_clarify_input(sid, data):
+    """
+    모바일에서 전송된 Clarify 입력을 수신하여 처리
+    clarify_response 핸들러를 호출하여 처리합니다.
+    
+    Args:
+        sid: 클라이언트 세션 ID
+        data: Clarify 입력 딕셔너리
+            {
+                "text": "사용자 입력 텍스트",
+                "session_id": "세션 ID",
+                "turn_id": 1 (optional),
+                "action": "continue" | "skip" | "cancel" (optional)
+            }
+    """
+    # clarify_response 핸들러로 위임
+    await handle_clarify_response(sid, data)
+
+
+# ========================================
+# 라즈베리파이 제어 이벤트 (모바일 → 라즈베리파이)
+# ========================================
+
+async def handle_control_raspi(sid, data):
+    """
+    모바일에서 전송된 라즈베리파이 제어 명령을 수신하여 라즈베리파이로 전달
+    
+    Args:
+        sid: 클라이언트 세션 ID
+        data: 제어 명령 딕셔너리
+            {
+                "command": "start_streaming_stt" | "set_stt_mode" | "notify_intent_done",
+                "mode": "buffered" | "streaming" (set_stt_mode일 때),
+                "branch": "AI_SUPPORTER" | "OPERATOR" (notify_intent_done일 때)
+            }
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ 라즈베리파이 제어 명령은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    command = data.get("command", "")
+    print(f"📡 라즈베리파이 제어 명령 수신 [mobile]: command={command}")
+    
+    # 라즈베리파이로 브로드캐스트
+    await broadcast_to("raspi", "control_raspi", data)
+    print(f"✅ 라즈베리파이 제어 명령 전달 완료: command={command}")
