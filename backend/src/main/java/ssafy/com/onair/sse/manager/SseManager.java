@@ -137,7 +137,7 @@ public class SseManager {
         this.emitters.forEach((accountId, emitter) -> {
             sendSseMessage(emitter, SseMessageDto.builder()
                     .eventName("heart beat")
-                    .data(null)
+                    .data("SSE 연결을 유지하기 위한 이벤트입니다.")
                     .build());
             log.debug("send heartbeat to {}", accountId);
         });
