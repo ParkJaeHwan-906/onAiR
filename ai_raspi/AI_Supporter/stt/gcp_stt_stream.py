@@ -19,7 +19,7 @@ class GcpStreamingStt:
         self.rate = settings.RATE
         self.client = speech.SpeechClient()
         self._stop = False
-        self.silence_timeout = settings.SILENCE_TIMEOUT_SEC if hasattr(settings, 'SILENCE_TIMEOUT_SEC') else 2.5
+        self.silence_timeout = settings.SILENCE_TIMEOUT_SEC if hasattr(settings, 'SILENCE_TIMEOUT_SEC') else 0.5
         self.socketio_client = socketio_client
         self.session_id = None  # Clarify 세션 ID
         self.stop_sessions = set()  # 종료할 세션 ID 집합

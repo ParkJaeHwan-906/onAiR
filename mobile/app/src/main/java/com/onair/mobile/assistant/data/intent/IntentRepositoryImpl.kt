@@ -4,73 +4,31 @@ import android.content.Context
 import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.IntentClassificationDto
 import com.onair.mobile.assistant.domain.repository.IntentRepository
+import com.onair.mobile.assistant.domain.entity.IntentType
 
 /**
  * Intent Repository 구현체
  * 
- * FastAPI 서버로부터 Phi-3 임베딩을 받아서
- * intent_classifier.int8.onnx 모델로 Intent 분류를 수행합니다.
+ * ⚠️ ONNX 모델 관련 코드 제거됨
+ * Intent 분류는 이제 Gemini-Flash를 사용합니다 (서버 측에서 처리)
+ * 모바일은 Socket.IO로부터 intent_result 이벤트를 받아서 사용합니다.
  */
 class IntentRepositoryImpl(
     private val context: Context,
-    private val embeddingRepository: EmbeddingRepository? = null  // FastAPI 서버 URL 주입 필요
+    private val embeddingRepository: EmbeddingRepository? = null  // 더 이상 사용하지 않음
 ) : IntentRepository {
 
     private val TAG = "IntentRepository"
-    private val dataSource = OnnxIntentClassifierDataSource(context)
-
-    init {
-        dataSource.init()
-    }
 
     override suspend fun classifyIntent(text: String): IntentClassificationDto {
-        return try {
-            // 1. FastAPI 서버로부터 Phi-3 임베딩 추출
-            val embedding = if (embeddingRepository != null) {
-                Log.d(TAG, "📡 FastAPI 서버로부터 Phi-3 임베딩 추출 중...")
-                embeddingRepository.extractEmbedding(text)
-            } else {
-                Log.w(TAG, "⚠️ EmbeddingRepository가 주입되지 않음 - 임시 분류 사용")
-                // 임시: 해시 기반 임베딩 사용 (개발/테스트용)
-                return dataSource.classify(text)
-            }
-            
-            // 2. ONNX 모델로 Intent 분류
-            Log.d(TAG, "🧠 ONNX 모델로 Intent 분류 중...")
-            dataSource.classifyWithEmbedding(embedding, text)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Intent 분류 실패: ${e.message}")
-            e.printStackTrace()
-            IntentClassificationDto(
-                intentType = com.onair.mobile.assistant.domain.entity.IntentType.UNKNOWN,
-                confidence = 0.0f,
-                rawText = text
-            )
-        }
-    }
-
-    /**
-     * 임베딩을 직접 받아서 Intent 분류 수행
-     * Socket.IO로부터 embedding_result 이벤트 수신 시 사용
-     */
-    suspend fun classifyWithEmbedding(embedding: FloatArray, text: String): IntentClassificationDto {
-        return try {
-            Log.d(TAG, "🧠 ONNX 모델로 Intent 분류 중 (임베딩 직접 사용)...")
-            dataSource.classifyWithEmbedding(embedding, text)
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Intent 분류 실패: ${e.message}")
-            e.printStackTrace()
-            IntentClassificationDto(
-                intentType = com.onair.mobile.assistant.domain.entity.IntentType.UNKNOWN,
-                confidence = 0.0f,
-                rawText = text
-            )
-        }
-    }
-
-    fun cleanup() {
-        dataSource.cleanup()
+        // ⚠️ 이 메서드는 더 이상 사용되지 않습니다.
+        // Intent 분류는 서버 측 Gemini-Flash에서 처리되며,
+        // 모바일은 Socket.IO로부터 intent_result 이벤트를 받습니다.
+        Log.w(TAG, "⚠️ classifyIntent()는 더 이상 사용되지 않습니다. 서버 측에서 Intent 분류를 수행합니다.")
+        return IntentClassificationDto(
+            intentType = IntentType.UNKNOWN,
+            confidence = 0.0f,
+            rawText = text
+        )
     }
 }
-

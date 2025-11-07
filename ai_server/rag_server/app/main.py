@@ -2,7 +2,8 @@
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
+# from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
+from app.routers import chat_router, tts_router, stt_router, clarify_router, ar_process
 from app.sockets.socket_handler import init_socketio, sio
 
 # Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
@@ -72,6 +73,9 @@ app.add_middleware(
 
 # Socket.IO 초기화 (app 생성 후 바로)
 if USE_SOCKETIO:
+    print(f"🔍 [DEBUG] USE_SOCKETIO = {USE_SOCKETIO}")
+    print(f"🔍 [DEBUG] sio 인스턴스: {sio}")
+    print(f"🔍 [DEBUG] init_socketio 함수: {init_socketio}")
     init_socketio()  # 이벤트 핸들러 등록
     print("✅ Socket.IO 초기화 완료")
 
@@ -79,9 +83,7 @@ if USE_SOCKETIO:
 # chat_router는 이미 prefix="/rag"를 가지고 있음
 app.include_router(chat_router.router)
 
-# Phi-3 Embedding 엔드포인트 (Intent Classification)
-# embedding_router는 prefix="/api"를 가지고 있음
-app.include_router(embedding_router.router)
+# Embedding 엔드포인트 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
 # TTS 엔드포인트 (Text-to-Speech)
 # tts_router는 prefix="/api"를 가지고 있음
@@ -106,7 +108,6 @@ def root():
         "message": "RAG Server is running 🚀",
         "endpoints": {
             "rag_chat": "/rag/chat",
-            "embedding": "/api/embedding",
             "tts": "/api/tts",
             "stt_buffered": "/api/stt/buffered",
             "clarify_streaming": "/api/clarify/streaming",
@@ -128,13 +129,18 @@ def root():
 
 # Socket.IO 통합 (ai_ar의 socket_manager 사용)
 if USE_SOCKETIO:
+    print(f"🔍 [DEBUG] ASGIApp 생성 전 - sio: {sio}")
+    print(f"🔍 [DEBUG] ASGIApp 생성 전 - app: {app}")
     asgi_app = socketio.ASGIApp(
         sio,
         other_asgi_app=app,
         socketio_path="/ws"
     )
+    print(f"🔍 [DEBUG] ASGIApp 생성 완료: {asgi_app}")
+    print(f"✅ Socket.IO ASGIApp 설정 완료 (path=/ws)")
 else:
     # Socket.IO 없이 FastAPI만 사용
     asgi_app = app
+    print("⚠️ Socket.IO 없이 FastAPI만 사용")
 
 # uvicorn 실행 시: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000

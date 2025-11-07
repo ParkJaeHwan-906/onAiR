@@ -1,0 +1,43 @@
+[
+  {
+    "text": "AI 서포터 도움이 필요해",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "AI 도움이 필요해",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "AI에게 물어봐",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "이거 어떻게 하는지 알려줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "설명해줘",
+    "label": "AI_SUPPORTER"
+  },
+  {
+    "text": "통신연결이 필요해",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "사람 불러줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "오퍼레이터 연결해줘",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "운영자에게 연결",
+    "label": "OPERATOR"
+  },
+  {
+    "text": "직원 불러줘",
+    "label": "OPERATOR"
+  }
+]
+
