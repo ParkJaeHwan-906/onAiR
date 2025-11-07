@@ -2,7 +2,7 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
-from app.core.model_loader import get_phi3_embedding
+from app.services.intent_service import classify_intent
 from app.utils.retry import retry_with_backoff
 
 router = APIRouter(prefix="/api/stt", tags=["STT"])
@@ -23,12 +23,12 @@ class STTResultResponse(BaseModel):
 @router.post("/buffered")
 async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResultResponse:
     """
-    버퍼링 STT 결과를 수신하여 Phi-3 임베딩을 추출하고 모바일로 전송
+    버퍼링 STT 결과를 수신하여 Gemini-Flash로 Intent 분류하고 모바일로 전송
     
     플로우:
     1. 라즈베리파이 → Socket.IO (stt_result 이벤트)
     2. Socket.IO → FastAPI POST /api/stt/buffered
-    3. FastAPI → Phi-3 임베딩 추출
+    3. FastAPI → Gemini-Flash로 Intent 분류
     4. FastAPI → Socket.IO로 모바일에게 전송
     
     Args:
@@ -42,8 +42,8 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
     Returns:
         {
             "success": true,
-            "embedding": [0.123, 0.456, ...],  # 3072차원 (type="final"일 때만)
-            "dimension": 3072,
+            "intent": "OPERATOR" | "AI_SUPPORTER",
+            "confidence": 0.0~1.0,
             "message": "처리 완료"
         }
     """
@@ -98,12 +98,36 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                     message=f"Clarify 처리 실패: {str(e)}"
                 )
         
-        # 버퍼링 STT: final 타입만 임베딩 추출 (interim은 스킵)
+        # 버퍼링 STT: final 타입만 Intent 분류 (interim은 스킵)
         if stt_type == "final":
             try:
-                # Phi-3 임베딩 추출
-                embedding_array = get_phi3_embedding(stt_text)
-                embedding_list = embedding_array.tolist()
+                # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
+                try:
+                    import sys
+                    import os
+                    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+                    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir))))
+                    ai_ar_path = os.path.join(project_root, "ai_ar")
+                    ai_ar_app_path = os.path.join(ai_ar_path, "app")
+                    
+                    if os.path.exists(ai_ar_app_path) and ai_ar_app_path not in sys.path:
+                        sys.path.insert(0, ai_ar_app_path)
+                    
+                    from sockets.socket_manager import broadcast_to
+                    
+                    await broadcast_to("mobile", "start_sse_connection", {
+                        "text": stt_text,
+                        "timestamp": None
+                    })
+                    logger.info(f"📡 모바일로 SSE 연결 시작 요청 전송: '{stt_text[:50]}...'")
+                except Exception as e:
+                    logger.warning(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
+                
+                # 2. Gemini-Flash로 Intent 분류
+                intent_result = classify_intent(stt_text)
+                intent = intent_result.get("intent", "AI_SUPPORTER")
+                intent_confidence = intent_result.get("confidence", 0.5)
+                reasoning = intent_result.get("reasoning", "")
                 
                 # Socket.IO를 통해 모바일로 전송
                 # socket_manager는 ai_ar 프로젝트에 있음
@@ -120,17 +144,18 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                     
                     from sockets.socket_manager import broadcast_to
                     
-                    # 모바일로 임베딩 전송 (에러 핸들링 및 재시도)
+                    # 모바일로 Intent 결과 전송 (에러 핸들링 및 재시도)
                     try:
-                        await broadcast_to("mobile", "embedding_result", {
+                        await broadcast_to("mobile", "intent_result", {
                             "text": stt_text,
-                            "embedding": embedding_list,
-                            "dimension": len(embedding_list),
-                            "confidence": request.confidence
+                            "intent": intent,
+                            "confidence": intent_confidence,
+                            "reasoning": reasoning,
+                            "stt_confidence": request.confidence
                         })
-                        logger.info(f"✅ STT 텍스트 처리 완료: '{stt_text[:50]}...' → 모바일로 임베딩 전송")
+                        logger.info(f"✅ STT 텍스트 처리 완료: '{stt_text[:50]}...' → Intent: {intent} (신뢰도: {intent_confidence:.2f})")
                     except Exception as e:
-                        logger.error(f"❌ 임베딩 전송 실패: {e}, 재시도 중...")
+                        logger.error(f"❌ Intent 결과 전송 실패: {e}, 재시도 중...")
                         # 재시도
                         try:
                             await retry_with_backoff(
@@ -139,40 +164,35 @@ async def handle_buffered_stt(request: STTResultRequest = Body(...)) -> STTResul
                                 initial_delay=0.5,
                                 exceptions=(Exception,),
                                 device_types="mobile",
-                                event="embedding_result",
+                                event="intent_result",
                                 payload={
                                     "text": stt_text,
-                                    "embedding": embedding_list,
-                                    "dimension": len(embedding_list),
-                                    "confidence": request.confidence
+                                    "intent": intent,
+                                    "confidence": intent_confidence,
+                                    "reasoning": reasoning,
+                                    "stt_confidence": request.confidence
                                 }
                             )
-                            logger.info(f"✅ 임베딩 전송 재시도 성공")
+                            logger.info(f"✅ Intent 결과 전송 재시도 성공")
                         except Exception as retry_error:
-                            logger.error(f"❌ 임베딩 전송 재시도 실패: {retry_error}")
+                            logger.error(f"❌ Intent 결과 전송 재시도 실패: {retry_error}")
                     
                 except ImportError as e:
-                    logger.warning(f"⚠️ socket_manager를 찾을 수 없습니다: {e}. 임베딩만 반환합니다.")
+                    logger.warning(f"⚠️ socket_manager를 찾을 수 없습니다: {e}. Intent 결과만 반환합니다.")
                 except Exception as e:
-                    logger.warning(f"⚠️ Socket.IO 전송 중 오류 발생: {e}. 임베딩은 반환합니다.")
+                    logger.warning(f"⚠️ Socket.IO 전송 중 오류 발생: {e}. Intent 결과는 반환합니다.")
                 
                 return STTResultResponse(
                     success=True,
-                    embedding=embedding_list,
-                    dimension=len(embedding_list),
-                    message=f"STT 텍스트 처리 완료: '{stt_text[:50]}...'"
+                    message=f"STT 텍스트 처리 완료: '{stt_text[:50]}...' → Intent: {intent}"
                 )
                 
-            except RuntimeError as e:
-                logger.error(f"❌ Phi-3 모델이 사용 불가능합니다: {str(e)}")
-                return STTResultResponse(
-                    success=False,
-                    message=f"Phi-3 모델이 사용 불가능합니다: {str(e)}"
-                )
             except Exception as e:
+                logger.error(f"❌ Intent 분류 중 오류 발생: {str(e)}")
+                # 에러 발생 시 기본값으로 AI_SUPPORTER 반환
                 return STTResultResponse(
                     success=False,
-                    message=f"임베딩 생성 중 오류 발생: {str(e)}"
+                    message=f"Intent 분류 중 오류 발생: {str(e)}"
                 )
         
         elif stt_type == "interim":

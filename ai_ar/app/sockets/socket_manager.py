@@ -272,3 +272,32 @@ async def handle_clarify_input(sid, data):
     except Exception as e:
         print(f"❌ FastAPI 서버 전달 오류: {e}")
 
+# === 라즈베리파이 제어 이벤트 (모바일 → 라즈베리파이) ===
+@sio.on("control_raspi")
+async def handle_control_raspi(sid, data):
+    """
+    모바일에서 전송된 라즈베리파이 제어 명령을 수신하여 라즈베리파이로 전달
+    
+    Args:
+        sid: 클라이언트 세션 ID
+        data: 제어 명령 딕셔너리
+            {
+                "command": "start_streaming_stt" | "set_stt_mode",
+                "mode": "buffered" | "streaming" (set_stt_mode일 때),
+                "branch": "AI_SUPPORTER" | "OPERATOR" (notifyIntentDone일 때)
+            }
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ 라즈베리파이 제어 명령은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    command = data.get("command", "")
+    print(f"📡 라즈베리파이 제어 명령 수신 [mobile]: command={command}")
+    
+    # 라즈베리파이로 브로드캐스트
+    await broadcast_to("raspi", "control_raspi", data)
+    print(f"✅ 라즈베리파이 제어 명령 전달 완료: command={command}")
+
