@@ -21,7 +21,7 @@
 }
 
 .title {
-  font-family: 'NotoSansKR';
+  font-family: "NotoSansKR";
   font-size: 20px;
   font-weight: 800;
   color: #3b4a6b;
@@ -75,6 +75,11 @@
   width: 20%;
 }
 
+.home-table .col-description {
+  width: 0;
+  display: none;
+}
+
 /* 리스트 본문 */
 .home-table .list-body {
   width: 100%;
@@ -102,4 +107,80 @@
 /* HomeBig 내부 work-row 스타일 조정 */
 .home-table .list-body .work-row {
   width: 748px;
+}
+
+/* 요청 목록용 컬럼 너비 조정 */
+.home-table .col-actions-header {
+  width: 20%;
+}
+
+.home-table .col-actions {
+  width: 20%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  padding-left: 16px;
+  box-sizing: border-box;
+}
+
+/* 요청 목록 전용 레이아웃 */
+.home-table.request-list .col-worker {
+  width: 16%;
+}
+
+.home-table.request-list .col-content {
+  width: 18%;
+}
+
+.home-table.request-list .col-description {
+  display: flex;
+  width: 26%;
+  align-items: center;
+  padding-right: 8px;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.home-table.request-list .col-status {
+  width: 14%;
+}
+
+.home-table.request-list .col-time {
+  width: 14%;
+}
+
+.home-table.request-list .col-actions-header {
+  width: 12%;
+}
+
+.home-table.request-list .col-actions {
+  width: 12%;
+}
+
+.home-table .col-actions button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: "NotoSansKR";
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.accept-button {
+  color: #16a34a;
+}
+
+.accept-button:hover {
+  color: #15803d;
+}
+
+.reject-button {
+  color: #ef4444;
+}
+
+.reject-button:hover {
+  color: #dc2626;
 }
