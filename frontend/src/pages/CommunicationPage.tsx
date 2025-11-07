@@ -37,7 +37,7 @@ export const CommunicationPage = () => {
     <div className="communication-container">
       <LiveKitRoom
         token={token}
-        serverUrl="ws://localhost:7880" // LiveKit 서버 URL
+        serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
         connect={true}
       >
         <VideoFrame
