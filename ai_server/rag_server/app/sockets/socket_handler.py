@@ -37,7 +37,6 @@ sio = socketio.AsyncServer(
     cors_allowed_origins='*',  # 모든 Origin 허용
     logger=False,  # 로거 비활성화
 )
-print(f"🔍 [DEBUG] Socket.IO AsyncServer 생성 완료: {sio}")
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
@@ -106,9 +105,7 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        print(f"🔍 [DEBUG] handle_connect 호출됨! sid={sid}")
         print(f"✅ Client connected: {sid}")
-        print(f"🔍 [DEBUG] environ keys: {list(environ.keys()) if environ else 'None'}")
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
