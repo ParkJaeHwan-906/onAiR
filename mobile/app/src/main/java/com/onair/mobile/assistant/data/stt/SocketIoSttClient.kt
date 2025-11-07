@@ -46,6 +46,7 @@ class SocketIoSttClient(
     
     /**
      * Socket.IO 서버에 연결
+     * FastAPI 서버에 통합된 Socket.IO 서버에 연결 (경로: /ws)
      */
     fun connect() {
         try {
@@ -53,6 +54,8 @@ class SocketIoSttClient(
                 reconnection = true
                 reconnectionAttempts = 5
                 reconnectionDelay = 1000
+                // FastAPI 서버에 통합된 Socket.IO 서버 경로 설정
+                path = "/ws"
             }
             
             socket = IO.socket(serverUrl, options)
@@ -60,7 +63,7 @@ class SocketIoSttClient(
             // 연결 이벤트
             socket?.on(Socket.EVENT_CONNECT) {
                 isConnected = true
-                Log.i(TAG, "✅ Socket.IO 서버 연결 성공: $serverUrl")
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공: $serverUrl (경로: /ws)")
                 
                 // 디바이스 등록
                 registerDevice()
@@ -256,53 +259,36 @@ class SocketIoSttClient(
      * Clarify 입력 텍스트 전송
      * 
      * 사용자가 텍스트로 Clarify 응답을 입력할 때 사용합니다.
-     * FastAPI의 /api/clarify/response 엔드포인트로 HTTP POST 요청을 보냅니다.
+     * Socket.IO를 통해 FastAPI 서버로 전달됩니다.
      * 
      * @param text 사용자 입력 텍스트
      * @param sessionId Clarify 세션 ID
      * @param turnId 현재 Clarify 턴 ID
      * @param action "continue" | "skip" | "cancel"
-     * @param fastApiUrl FastAPI 서버 URL (예: "http://192.168.0.100:8000")
      * @return 전송 성공 여부
      */
     fun sendClarifyTextResponse(
         text: String,
         sessionId: String,
         turnId: Int,
-        action: String = "continue",
-        fastApiUrl: String
+        action: String = "continue"
     ): Boolean {
-        // HTTP POST로 FastAPI에 직접 전송 (ai_ar 폴더 수정 불가로 인해 직접 전송)
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
         return try {
-            val client = okhttp3.OkHttpClient()
-            val json = JSONObject().apply {
+            val payload = JSONObject().apply {
+                put("text", text)
                 put("session_id", sessionId)
                 put("turn_id", turnId)
-                put("response", text)
                 put("action", action)
             }
             
-            val requestBody = okhttp3.RequestBody.create(
-                okhttp3.MediaType.parse("application/json; charset=utf-8"),
-                json.toString()
-            )
-            
-            val request = okhttp3.Request.Builder()
-                .url("$fastApiUrl/api/clarify/response")
-                .post(requestBody)
-                .build()
-            
-            val response = client.newCall(request).execute()
-            val success = response.isSuccessful
-            
-            if (success) {
-                Log.i(TAG, "📤 Clarify 텍스트 응답 전송 완료: session_id=$sessionId, turn_id=$turnId, text=$text")
-            } else {
-                Log.e(TAG, "❌ Clarify 응답 전송 실패: HTTP ${response.code()}")
-            }
-            
-            response.close()
-            success
+            socket?.emit("clarify_input", payload)
+            Log.i(TAG, "📤 Clarify 텍스트 응답 전송: session_id=$sessionId, turn_id=$turnId, text=$text")
+            true
         } catch (e: Exception) {
             Log.e(TAG, "❌ Clarify 응답 전송 실패: ${e.message}")
             e.printStackTrace()
@@ -342,6 +328,64 @@ class SocketIoSttClient(
             Log.i(TAG, "🛑 Socket.IO 연결 종료")
         } catch (e: Exception) {
             Log.e(TAG, "❌ 연결 종료 오류: ${e.message}")
+        }
+    }
+    
+    /**
+     * 연결 상태 확인
+     */
+    fun isConnected(): Boolean = isConnected && socket?.connected() == true
+    
+    /**
+     * 연결 종료
+     */
+    fun disconnect() {
+        try {
+            socket?.disconnect()
+            socket?.off()
+            socket = null
+            isConnected = false
+            Log.i(TAG, "🛑 Socket.IO 연결 종료")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 연결 종료 오류: ${e.message}")
+        }
+    }
+    
+    /**
+     * 라즈베리파이 제어 명령 전송
+     * 모바일 → Socket.IO 서버 → 라즈베리파이로 제어 명령 전달
+     * 
+     * @param command 제어 명령 ("start_streaming_stt" | "set_stt_mode" | "notify_intent_done")
+     * @param data 추가 데이터 (mode, branch 등)
+     * @return 전송 성공 여부
+     */
+    fun sendRaspberryPiControl(command: String, data: Map<String, Any> = emptyMap()): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 라즈베리파이 제어 명령을 전송할 수 없습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("command", command)
+                data.forEach { (key, value) ->
+                    when (value) {
+                        is String -> put(key, value)
+                        is Int -> put(key, value)
+                        is Boolean -> put(key, value)
+                        is Double -> put(key, value)
+                        else -> put(key, value.toString())
+                    }
+                }
+            }
+            
+            socket?.emit("control_raspi", payload)
+            Log.i(TAG, "📤 라즈베리파이 제어 명령 전송: command=$command")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 라즈베리파이 제어 명령 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
         }
     }
     
