@@ -23,7 +23,9 @@ pipeline {
         SPRING_SECURITY_USER_PASSWORD = credentials('SPRING_SECURITY_USER_PASSWORD')
 
         // ======================= Frontend(React) =======================
-
+        // Vite 환경변수 (빌드 타임에 주입)
+        VITE_API_URL = credentials('VITE_API_URL')
+        VITE_SOCKET_URL = credentials('VITE_SOCKET_URL')
 
         // ======================= AI(FastAPI) =======================
         // data & embedding
