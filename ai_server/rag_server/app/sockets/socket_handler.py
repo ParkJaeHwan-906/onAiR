@@ -760,15 +760,15 @@ async def handle_video_frame(sid, data):
         return
 
     # === 모션 계산 ===
-    result = await motion_core.process_frame(frame, sid=sid)
+    # result = await motion_core.process_frame(frame, sid=sid)
 
     # === 결과 전송 ===
-    if result["status"] == "ok":
-        x, y, z = result["x"], result["y"], result["z"]
-        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-        await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
-    else:
-        print(f"⚠️ Motion estimation status: {result['status']}")
+    # if result["status"] == "ok":
+    #     x, y, z = result["x"], result["y"], result["z"]
+    #     print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+    #     await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
+    # else:
+    #     print(f"⚠️ Motion estimation status: {result['status']}")
 
     # === 프레임 브로드캐스트 (PC 디스플레이용) ===
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
