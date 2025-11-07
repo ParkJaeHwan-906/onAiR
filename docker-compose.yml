@@ -35,7 +35,11 @@ services:
 
   frontend:
     container_name: react
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_SOCKET_URL=${VITE_SOCKET_URL}
     expose: 
       - "3000"
     networks:
