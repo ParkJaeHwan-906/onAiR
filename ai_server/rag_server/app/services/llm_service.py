@@ -8,9 +8,9 @@ except Exception:
     genai = None
     genai_available = False
 
-# ✅ Gemini 설정 (config.py의 GEMINI_API_KEY 사용)
-if genai_available and settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+# ✅ Gemini 설정 (config.py의 GMS_API_KEY 사용)
+if genai_available and settings.GMS_API_KEY:
+    genai.configure(api_key=settings.GMS_API_KEY)
     model_clarify = genai.GenerativeModel("gemini-1.5-flash")
 else:
     model_clarify = None
