@@ -1,166 +1,186 @@
 import cv2
 import numpy as np
 import os
-
-from video_loader import load_video
 from feature_extractor import extract_features
 from feature_tracker import track_features
-from ransac_filter import ransac_filter
-from motion_estimator import estimate_motion
 
-# ===== 파라미터 =====
-MIN_TRACKS      = 60
-REFRESH_EVERY   = 25
-DISPLAY_SCALE   = 0.8
-CALIB_PATH      = "../data/camera_intrinsics.npy"
-DIST_PATH       = "../data/dist_coeffs.npy"
-SCALE_FACTOR    = 0.3
-REVERSE_T       = True
-Z_ALPHA         = 50.0
-Z_MIN, Z_MAX    = 0.1, 10.0
+# ==========================================================
+# 🎯 설정
+# ==========================================================
+VIDEO_PATH = "../data/test.mp4"            # 입력 비디오 경로
+OUTPUT_DIR = "../output/optical_flow"      # Optical Flow 결과 저장 경로
+DISPLAY_SCALE = 1.0                        # 보기용 축소 비율
+FLOW_COLOR = (0, 255, 255)                 # Optical Flow 선 색상 (노란색)
+POINT_COLOR = (0, 255, 0)                  # 기존 특징점 (초록색)
+NEW_POINT_COLOR = (255, 0, 0)              # 새로 추가된 특징점 (파란색)
+MIN_FEATURES = 50                          # 최소 유지할 특징점 개수
+MIN_DIST_BETWEEN = 10.0                    # 기존 점과의 최소 거리(px)
+MAX_AGE = 30                                # 추적 실패 시 유지할 프레임 수
 
-# --- 전역 상태 ---
-anchor_points = []  # (x, y, z)
-K_global = None
-R_total = np.eye(3, dtype=np.float32)
-t_total = np.zeros((3, 1), dtype=np.float32)
-last_inlier_old = None
-last_inlier_new = None
-current_method = "GFTT"
-
-
-# 🖱️ 마우스 클릭 → 앵커 추가 (+ z 근사)
-def mouse_click(event, x_disp, y_disp, flags, param):
-    global anchor_points, last_inlier_old, last_inlier_new, K_global
-
-    if event != cv2.EVENT_LBUTTONDOWN:
-        return
-
-    x = int(x_disp / DISPLAY_SCALE)
-    y = int(y_disp / DISPLAY_SCALE)
-    z = 1.0
-
-    if last_inlier_old is not None and last_inlier_new is not None and K_global is not None:
-        pts_old = last_inlier_old.reshape(-1, 2)
-        pts_new = last_inlier_new.reshape(-1, 2)
-
-        if len(pts_old) > 0:
-            d2 = np.sum((pts_old - np.array([x, y], dtype=np.float32))**2, axis=1)
-            idx = int(np.argmin(d2))
-            flow_vec = pts_new[idx] - pts_old[idx]
-            flow_len = float(np.linalg.norm(flow_vec))
-
-            fx, fy = K_global[0, 0], K_global[1, 1]
-            f = (fx + fy) / 2.0
-            z = (Z_ALPHA * (f / 1000.0)) / (flow_len + 1e-3)
-            z = float(np.clip(z, Z_MIN, Z_MAX * 3))
-
-    anchor_points.append(np.array([[x, y, z]], dtype=np.float32))
-    print(f"📍 z≈{z:.3f}")
+# ==========================================================
+# 🎥 시각화 함수
+# ==========================================================
+def draw_features(vis_frame, tracked_pts, new_pts=None):
+    """
+    기존 점(초록)과 새 점(파랑)을 표시
+    """
+    vis = vis_frame.copy()
+    if tracked_pts is not None and len(tracked_pts) > 0:
+        for p in tracked_pts.reshape(-1, 2):
+            cv2.circle(vis, (int(p[0]), int(p[1])), 2, POINT_COLOR, -1)
+    if new_pts is not None and len(new_pts) > 0:
+        for p in new_pts.reshape(-1, 2):
+            cv2.circle(vis, (int(p[0]), int(p[1])), 2, NEW_POINT_COLOR, -1)
+    return vis
 
 
-# 🎯 3D → 2D 투영
-def project_point(world_point, R, t, K, frame_shape):
-    h, w = frame_shape[:2]
-    cam_point = R @ world_point + t
-    if cam_point[2, 0] <= 1e-6:
-        return None
-    proj = K @ cam_point
-    proj /= proj[2, 0]
-    px, py = int(proj[0, 0]), int(proj[1, 0])
-    if 0 <= px < w and 0 <= py < h:
-        return px, py
-    return None
+def draw_optical_flow(vis_frame, prev_pts, next_pts, color=(0, 255, 255)):
+    """
+    Optical Flow로 추적된 점 쌍을 화살표로 시각화
+    """
+    vis = vis_frame.copy()
+    if prev_pts is None or next_pts is None:
+        return vis
+    n_prev = len(prev_pts)
+    n_next = len(next_pts)
+    if n_prev == 0 or n_next == 0:
+        return vis
+
+    # 쌍 개수가 다르면 최소 길이에 맞춰 그림
+    n = min(n_prev, n_next)
+    p1s = prev_pts.reshape(-1, 2)[:n]
+    p2s = next_pts.reshape(-1, 2)[:n]
+
+    for (x1, y1), (x2, y2) in zip(p1s, p2s):
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        cv2.arrowedLine(vis, (x1, y1), (x2, y2), color, 1, tipLength=0.3)
+        cv2.circle(vis, (x2, y2), 2, (0, 255, 0), -1)
+    return vis
 
 
-# 🚀 메인 루프
+# ==========================================================
+# 🎬 메인 루프
+# ==========================================================
 def main():
-    global K_global, R_total, t_total, last_inlier_old, last_inlier_new, current_method
-
-    video = load_video("../data/test.mp4")
-    K_global = np.load(CALIB_PATH) if os.path.exists(CALIB_PATH) else None
-    use_pose = K_global is not None
-
-    win_name = "Pose & Anchor View"
-    cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback(win_name, mouse_click)
-
-    ret, prev_frame = video.read()
-    if not ret:
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    if not cap.isOpened():
+        print("❌ 비디오를 열 수 없습니다.")
         return
 
-    prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-    prev_pts, current_method = extract_features(prev_gray)
-    print(f"🔍 Initial feature method: {current_method} ({len(prev_pts)} pts)")
+    print("🎬 Persistent Optical Flow (RANSAC 전단계)...")
+
+    prev_gray = None
     frame_idx = 0
 
+    # 점 풀 (좌표 + age)
+    feature_pool = {
+        "pts": np.empty((0, 1, 2), dtype=np.float32),
+        "age": np.empty((0,), dtype=np.int32)
+    }
+
     while True:
-        ret, frame = video.read()
+        ret, frame = cap.read()
         if not ret:
             break
-
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # === 주기적 특징점 갱신 ===
-        if REFRESH_EVERY and frame_idx > 0 and frame_idx % REFRESH_EVERY == 0:
-            prev_pts, current_method = extract_features(prev_gray)
-            # print(f"🔄 Refresh features using {current_method} ({len(prev_pts)} pts)")
+        # === 첫 프레임 초기화 ===
+        if prev_gray is None:
+            init_pts, method = extract_features(gray)
+            feature_pool["pts"] = init_pts
+            feature_pool["age"] = np.zeros(len(init_pts), dtype=np.int32)
+            print(f"[{frame_idx:04d}] {method}: {len(init_pts)} initial points")
+            prev_gray = gray.copy()
+            frame_idx += 1
+            continue
+
+        prev_pts = feature_pool["pts"]
 
         # === Optical Flow 추적 ===
-        if prev_pts is not None and len(prev_pts) > 0:
-            good_prev, good_next, _ = track_features(prev_gray, gray, prev_pts)
-            if len(good_prev) >= MIN_TRACKS:
-                # RANSAC 필터
-                inlier_prev, inlier_next, _, _ = ransac_filter(good_prev, good_next)
-                if inlier_prev is not None and len(inlier_prev) > 8:
-                    last_inlier_old = inlier_prev.astype(np.float32).copy()
-                    last_inlier_new = inlier_next.astype(np.float32).copy()
-
-                    # Essential Matrix 기반 Pose 추정
-                    if use_pose:
-                        R, t, E, stats = estimate_motion(inlier_prev, inlier_next, K_global)
-                        if stats["pose_ok"]:
-                            R_total = R @ R_total
-                            step = (R_total @ (t * SCALE_FACTOR))
-                            if REVERSE_T:
-                                t_total -= step
-                            else:
-                                t_total += step
-
-                            z_val = float(t_total[2, 0])
-                            # print(f"[{current_method}] z={z_val:.3f}, parallax={stats['parallax_px']:.2f}px, "
-                            #       f"inliers={stats['in_pts']}, cheirality={stats['cheirality_ratio']:.2f}")
-
-        # === 앵커 투영 ===
-        if use_pose and len(anchor_points) > 0:
-            for anchor in anchor_points:
-                pixel = np.array([[anchor[0][0]], [anchor[0][1]], [1.0]], dtype=np.float32)
-                world_point = np.linalg.inv(K_global).astype(np.float32) @ pixel
-                world_point *= float(anchor[0][2])
-                proj = project_point(world_point, R_total, t_total, K_global, frame.shape)
-                if proj is not None:
-                    color = (0, 255, 0) if current_method == "GFTT" else (0, 255, 255)
-                    cv2.circle(frame, proj, 8, color, -1)
-
-        # === 디스플레이 ===
-        disp = cv2.resize(frame, (int(frame.shape[1]*DISPLAY_SCALE), int(frame.shape[0]*DISPLAY_SCALE)))
-        cv2.putText(
-            disp, f"Method: {current_method}", (10, 25),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0) if current_method == "GFTT" else (0, 255, 255), 2
+        prev_valid, next_valid, mask = track_features(
+            prev_gray, gray, prev_pts,
+            fb_thresh=1.5,
+            large_motion_px=60.0,
+            enable_equalize=False,
+            blur_var_thresh=12.0,
+            lk_win_size=(25, 25),
+            lk_max_level=4
         )
-        cv2.imshow(win_name, disp)
 
-        key = cv2.waitKey(20) & 0xFF
-        if key == ord('q'):
-            break
+        # Optical Flow 시각화용 쌍 저장
+        flow_prev = prev_valid.copy()
+        flow_next = next_valid.copy()
 
+        # Optical Flow 성공한 점 갱신
+        if len(next_valid) > 0:
+            feature_pool["pts"] = next_valid
+            feature_pool["age"] = np.zeros(len(next_valid), dtype=np.int32)
+        else:
+            # Optical Flow 실패 시 age 증가
+            feature_pool["age"] += 1
+
+        # 오래된 점 제거
+        valid_mask = feature_pool["age"] < MAX_AGE
+        feature_pool["age"][feature_pool["age"] < 0] += 1  # 보호 프레임 감소
+        feature_pool["pts"] = feature_pool["pts"][valid_mask]
+        feature_pool["age"] = feature_pool["age"][valid_mask]
+
+        # === 새 점 보충 ===
+        added_pts = np.empty((0, 1, 2), dtype=np.float32)
+        if len(feature_pool["pts"]) < MIN_FEATURES:
+            new_pts, _ = extract_features(gray)
+            if new_pts is not None and len(new_pts) > 0:
+                if len(feature_pool["pts"]) > 0:
+                    dist = np.linalg.norm(
+                        new_pts.reshape(-1, 1, 2) - feature_pool["pts"].reshape(1, -1, 2),
+                        axis=2
+                    )
+                    if dist.shape[1] > 0:
+                        mask_far = (dist.min(axis=1) > MIN_DIST_BETWEEN)
+                        added_pts = new_pts[mask_far]
+                else:
+                    added_pts = new_pts
+
+                if len(added_pts) > 0:
+                    feature_pool["pts"] = np.vstack((feature_pool["pts"], added_pts))
+                    ages = np.full(len(added_pts), -MAX_AGE, dtype=np.int32)
+                    feature_pool["age"] = np.concatenate((feature_pool["age"], ages))       # 새로운 점들도 일정 시간동안 유지
+                    print(f"[{frame_idx:04d}] 🔹 Added {len(added_pts)} new points (total {len(feature_pool['pts'])})")
+            else:
+                print(f"[{frame_idx:04d}] ⚠️ Unable to add new features")
+
+        else:
+            print(f"[{frame_idx:04d}] Maintaining {len(feature_pool['pts'])} points")
+
+        # === 시각화 ===
+        vis_features = draw_features(frame, feature_pool["pts"], new_pts=added_pts)
+        vis_flow = draw_optical_flow(frame, flow_prev, flow_next)
+        combined = np.hstack((vis_features, vis_flow))
+
+        cv2.putText(combined, f"Tracked: {len(feature_pool['pts'])}", (10, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2)
+
+        # 저장 및 표시
+        out_path = os.path.join(OUTPUT_DIR, f"flow_{frame_idx:04d}.jpg")
+        cv2.imwrite(out_path, combined)
+        disp = cv2.resize(combined,
+                          (int(combined.shape[1]*DISPLAY_SCALE),
+                           int(combined.shape[0]*DISPLAY_SCALE)))
+        cv2.imshow("Persistent Optical Flow (Pre-RANSAC)", disp)
+
+        # 다음 프레임 준비
         prev_gray = gray.copy()
-        prev_pts = extract_features(gray)[0] if len(good_next) < MIN_TRACKS else good_next.reshape(-1, 1, 2)
         frame_idx += 1
 
-    video.release()
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            break
+
+    cap.release()
     cv2.destroyAllWindows()
+    print(f"✅ Optical Flow 추적 완료 (저장 위치: {OUTPUT_DIR})")
 
 
+# ==========================================================
 if __name__ == "__main__":
     main()
