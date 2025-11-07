@@ -9,6 +9,14 @@ FROM node:22-alpine AS builder
 # 이후 모든 명령어가 해당 디렉토리에서 실행 
 WORKDIR /app
 
+# Vite 환경변수를 빌드 타임에 주입하기 위한 ARG 선언
+ARG VITE_API_URL
+ARG VITE_SOCKET_URL
+
+# ARG를 ENV로 변환 (Vite가 빌드 시 접근 가능하도록)
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
+
 # package.json과 package-lock.json 파일을 컨테이너의 /app 디렉토리로 복사 
 # 소스 코드보다 먼저 복사 -> Docker 레이어 캐싱 최적화 (?)
 COPY package*.json ./
@@ -34,6 +42,13 @@ FROM node:22-alpine
 
 # 컨테이너 내부의 작업 디렉토리를 /app으로 설정 
 WORKDIR /app
+
+# ENV 추가 (디버깅용, 실제로는 사용되지 않음 - 이미 빌드 타임에 번들에 포함됨)
+# Runtime stage에서도 ARG를 다시 선언해야 함 (Multi-stage build는 독립적)
+ARG VITE_API_URL
+ARG VITE_SOCKET_URL
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
 
 # serve 패키지 전역 설치 (경량 정적 파일 서버)
 RUN npm install -g serve
