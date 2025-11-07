@@ -1,6 +1,6 @@
 .work-add {
-  width: 788px;
-  height: 280px;
+  width: 100%;
+  height: 520px;
   border-radius: 16px;
   padding: 25px;
   background-color: #FFFFFF;
@@ -8,6 +8,17 @@
   display: flex;
   flex-direction: column;
   font-family: 'NotoSansKR';
+  box-sizing: border-box;
+}
+
+/* 모달 내부에서는 Modal이 레이아웃을 담당 → WorkAdd 외곽 스타일 제거 */
+.modal-content .work-add {
+  width: 100%;
+  height: auto;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .work-add-header {
@@ -28,6 +39,7 @@
   justify-content: flex-start;
   font-size: 16px;
   font-weight: 500;
+  color: #3B4A6B;
   margin-top: 15px;
 }
 
@@ -39,6 +51,11 @@
   border: none;
   background-color: #ECEDF1;
   padding: 15px;
+  font-family: 'NotoSansKR';
+  font-size: 14px;
+  font-weight: 400;
+  color: #2E2E2E;
+  resize: none;
 }
 
 .request-body::placeholder {
@@ -50,9 +67,170 @@
 .add-button {
   width: 100%;
   height: 40px;
+  min-height: 40px;
+  max-height: 40px;
   margin-top: 25px;
+  margin-bottom: 0;
   padding: 0;
   border-radius: 16px;
   background-color: #3B4A6B;
   color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-family: 'NotoSansKR';
+  border: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-button:hover:not(:disabled) {
+  background-color: #2d3a56;
+}
+
+.add-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 장비 선택 드롭다운 스타일 */
+.assign-header {
+  box-sizing: border-box;
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 16px;
+  font-weight: 500;
+  color: #3B4A6B;
+  margin-top: 15px;
+}
+
+.assign-header:first-of-type {
+  margin-top: 0;
+}
+
+.work-select-wrapper {
+  position: relative;
+  margin-top: 8px;
+}
+
+.work-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px 12px 16px;
+  border: none;
+  border-radius: 16px;
+  background-color: #ECEDF1;
+  color: #2E2E2E;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.work-select-trigger::after {
+  content: '';
+  width: 12px;
+  height: 8px;
+  background-image: url('data:image/svg+xml,%3Csvg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M1 1.5L6 6.5L11 1.5" stroke="%235C6478" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E');
+  background-repeat: no-repeat;
+  background-size: 12px 8px;
+  transition: transform 0.2s ease;
+}
+
+.work-select-trigger.open::after {
+  transform: rotate(180deg);
+}
+
+.work-select-trigger:hover:not(:disabled),
+.work-select-trigger:focus:not(:disabled) {
+  background-color: #E0E3EB;
+  outline: none;
+}
+
+.work-select-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #F3F4F6;
+}
+
+.work-select-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  background-color: #FFFFFF;
+  border-radius: 16px;
+  border: none;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.work-select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.work-select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.work-select-dropdown::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+.work-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.work-select-option {
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border: none;
+  background-color: transparent;
+  color: #2E2E2E;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+li + li .work-select-option {
+  border-top: 1px solid #ECEDF1;
+}
+
+.work-select-option:hover {
+  background-color: #F5F6FA;
+}
+
+.work-select-option.selected {
+  background-color: #ECEDF1;
+  font-weight: 600;
+}
+
+.work-select-option-title {
+  font-weight: 600;
+}
+
+.work-select-option-meta {
+  font-size: 12px;
+  color: #5C6478;
 }
