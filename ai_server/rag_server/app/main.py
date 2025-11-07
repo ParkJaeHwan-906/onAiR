@@ -1,58 +1,62 @@
 # app/main.py
+import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat_router, tts_router, stt_router, clarify_router
+from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
+from app.sockets.socket_handler import init_socketio, sio
 
 # Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
-try:
-    import sys
-    import os
-    current_file_dir = os.path.dirname(os.path.abspath(__file__))
-    # ai_server/rag_server/app/main.py -> ai_server/rag_server -> ai_server -> S13P31A407
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir)))
-    ai_ar_path = os.path.join(project_root, "ai_ar")
+# try:
+#     import sys
+#     import os
+#     current_file_dir = os.path.dirname(os.path.abspath(__file__))
+#     # ai_server/rag_server/app/main.py -> ai_server/rag_server -> ai_server -> S13P31A407
+#     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir)))
+#     ai_ar_path = os.path.join(project_root, "ai_ar")
     
-    print(f"🔍 디버깅: current_file_dir = {current_file_dir}")
-    print(f"🔍 디버깅: project_root = {project_root}")
-    print(f"🔍 디버깅: ai_ar_path = {ai_ar_path}")
-    print(f"🔍 디버깅: ai_ar_path 존재 여부 = {os.path.exists(ai_ar_path)}")
+#     print(f"🔍 디버깅: current_file_dir = {current_file_dir}")
+#     print(f"🔍 디버깅: project_root = {project_root}")
+#     print(f"🔍 디버깅: ai_ar_path = {ai_ar_path}")
+#     print(f"🔍 디버깅: ai_ar_path 존재 여부 = {os.path.exists(ai_ar_path)}")
     
-    if os.path.exists(ai_ar_path):
-        # ai_ar/app을 sys.path에 추가해야 app 모듈을 찾을 수 있음
-        ai_ar_app_path = os.path.join(ai_ar_path, "app")
-        if os.path.exists(ai_ar_app_path):
-            # ai_ar/app을 sys.path에 추가 (이렇게 하면 from sockets.socket_manager로 import 가능)
-            if ai_ar_app_path not in sys.path:
-                sys.path.insert(0, ai_ar_app_path)
-                print(f"✅ ai_ar_app_path를 sys.path에 추가했습니다: {ai_ar_app_path}")
-        else:
-            print(f"⚠️ ai_ar/app 경로를 찾을 수 없습니다: {ai_ar_app_path}")
+#     if os.path.exists(ai_ar_path):
+#         # ai_ar/app을 sys.path에 추가해야 app 모듈을 찾을 수 있음
+#         ai_ar_app_path = os.path.join(ai_ar_path, "app")
+#         if os.path.exists(ai_ar_app_path):
+#             # ai_ar/app을 sys.path에 추가 (이렇게 하면 from sockets.socket_manager로 import 가능)
+#             if ai_ar_app_path not in sys.path:
+#                 sys.path.insert(0, ai_ar_app_path)
+#                 print(f"✅ ai_ar_app_path를 sys.path에 추가했습니다: {ai_ar_app_path}")
+#         else:
+#             print(f"⚠️ ai_ar/app 경로를 찾을 수 없습니다: {ai_ar_app_path}")
     
-    import socketio
-    print(f"✅ socketio 모듈 import 성공")
+#     import socketio
+#     print(f"✅ socketio 모듈 import 성공")
     
-    # ai_ar/app을 sys.path에 추가했으므로 sockets.socket_manager로 import
-    # socket_manager를 import하면 모든 이벤트 핸들러(@sio.on)가 자동으로 등록됨
-    import sockets.socket_manager as socket_manager_module
-    from sockets.socket_manager import sio
-    print(f"✅ socket_manager.sio import 성공")
-    print(f"✅ Socket.IO 이벤트 핸들러 등록 완료")
+#     # ai_ar/app을 sys.path에 추가했으므로 sockets.socket_manager로 import
+#     # socket_manager를 import하면 모든 이벤트 핸들러(@sio.on)가 자동으로 등록됨
+#     import sockets.socket_manager as socket_manager_module
+#     from sockets.socket_manager import sio
+#     print(f"✅ socket_manager.sio import 성공")
+#     print(f"✅ Socket.IO 이벤트 핸들러 등록 완료")
     
-    USE_SOCKETIO = True
-    print(f"✅ Socket.IO 통합 활성화됨")
-except ImportError as e:
-    print(f"⚠️ Socket.IO를 사용할 수 없습니다. HTTP 엔드포인트만 사용합니다.")
-    print(f"   ImportError: {e}")
-    import traceback
-    traceback.print_exc()
-    USE_SOCKETIO = False
-    sio = None
-except Exception as e:
-    print(f"⚠️ Socket.IO 통합 중 오류 발생: {e}")
-    import traceback
-    traceback.print_exc()
-    USE_SOCKETIO = False
-    sio = None
+#     USE_SOCKETIO = True
+#     print(f"✅ Socket.IO 통합 활성화됨")
+# except ImportError as e:
+#     print(f"⚠️ Socket.IO를 사용할 수 없습니다. HTTP 엔드포인트만 사용합니다.")
+#     print(f"   ImportError: {e}")
+#     import traceback
+#     traceback.print_exc()
+#     USE_SOCKETIO = False
+#     sio = None
+# except Exception as e:
+#     print(f"⚠️ Socket.IO 통합 중 오류 발생: {e}")
+#     import traceback
+#     traceback.print_exc()
+#     USE_SOCKETIO = False
+#     sio = None
+
+USE_SOCKETIO = True
 
 # FastAPI 앱 생성
 app = FastAPI(title="RAG FastAPI Server")
@@ -65,6 +69,11 @@ app.add_middleware(
     allow_methods=["*"],  # GET, POST, PUT, DELETE 등 모든 메서드 허용
     allow_headers=["*"],  # 모든 헤더 허용
 )
+
+# Socket.IO 초기화 (app 생성 후 바로)
+if USE_SOCKETIO:
+    init_socketio()  # 이벤트 핸들러 등록
+    print("✅ Socket.IO 초기화 완료")
 
 # RAG Chat 엔드포인트 (Answerability + Generator + Self-Score)
 # chat_router는 이미 prefix="/rag"를 가지고 있음
@@ -83,6 +92,11 @@ app.include_router(stt_router.router)
 # Clarify 엔드포인트 (Clarify 처리)
 # clarify_router는 prefix="/api/clarify"를 가지고 있음
 app.include_router(clarify_router.router)
+
+# AR 마커 엔드포인트
+# ar_process는 prefix="/ar"를 가지고 있음
+# 마완성
+app.include_router(ar_process.router)
 
 @app.get("/")
 def root():

@@ -4,13 +4,15 @@ import os
 import cv2
 import numpy as np
 from datetime import datetime
+from app.ar import motion_core
 
-print(f"🔔 [DEBUG] socket_manager.py 모듈 로드 시작")
 
-# 비동기 Socket.IO 서버 생성
+# 서버 측 socket_manager.py
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*'
+    cors_allowed_origins='*',
+    ping_timeout=20,    # 기본값 5초 → 늘려서 여유 줌
+    ping_interval=10    # 기본값 25초 → 조금 짧게 하여 안정적 유지
 )
 
 print(f"🔔 [DEBUG] Socket.IO 서버 인스턴스 생성 완료")
@@ -31,7 +33,10 @@ async def disconnect(sid):
     # 연결 종료 시 기록 삭제
     if sid in device_map:
         print(f"🧹 Removing device: {device_map[sid]}")
+        disconnected_device = device_map.get(sid, "unknown")
+        await broadcast_to("raspi", "video_stream", {"state": "off"})
         del device_map[sid]
+
 
 
 @sio.on("register_device")
@@ -55,22 +60,38 @@ async def handle_ping(sid, data):
     await sio.emit("pong", {"msg": f"Pong from server to {device}!"}, to=sid)
 
 
-# === 타입별 브로드캐스트 ===
+# === 타입별 브로드캐스트 (안전 버전) ===
 async def broadcast_to(device_types, event: str, payload: dict):
     """
     특정 디바이스 타입(하나 또는 여러 개)에 이벤트 전송
     - device_types: 문자열('raspi') 또는 리스트(['raspi', 'mobile'])
+    - payload: dict 형태의 전송 데이터
     """
     if isinstance(device_types, str):
         device_types = [device_types]
 
+    # ✅ dictionary snapshot으로 안전한 iteration
+    targets = list(device_map.items())
     sent_count = 0
-    for sid, dev in device_map.items():
-        if dev in device_types:
-            await sio.emit(event, payload, to=sid)
-            sent_count += 1
 
-    print(f"📡 Broadcasted '{event}' to {sent_count} clients ({device_types})")
+    for sid, dev in targets:
+        if dev in device_types:
+            try:
+                await sio.emit(event, payload, to=sid)
+                sent_count += 1
+            except Exception as e:
+                # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
+                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
+                try:
+                    if sid in device_map:
+                        del device_map[sid]
+                except Exception:
+                    pass
+
+    # 디버깅용 로그 (필요 시 활성화)
+    # print(f"📡 Broadcasted '{event}' to {sent_count} clients ({device_types})")
+
 
 
 # === video_stream ===
@@ -85,43 +106,32 @@ async def handle_video_stream(sid, data):
     print(f"📡 Received 'video_stream:{state}' from {sender_device}")
     await broadcast_to("raspi", "video_stream", {"state": state})
 
-
-# === video-frame (라즈베리 → 서버 프레임 전송) ===
 @sio.on("video_frame")
 async def handle_video_frame(sid, data):
-    print("프레임 들어옴")
-    # from app.ar import motion_core
-    """
-    라즈베리파이에서 binary 형태로 전송된 JPEG 프레임 처리
-    """
+    """라즈베리파이 → JPEG binary 수신 후 모션 추정"""
     sender_device = device_map.get(sid, "unknown")
-
     if not data:
         return
 
-    # data는 bytes (JPEG 이미지)
     np_data = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-    print("프레임")
-    print(frame)
     if frame is None:
         print("⚠️ Failed to decode frame")
         return
 
-    print(f"🎞️ Received frame from {sender_device}")
+    # === 모션 계산 ===
+    result = await motion_core.process_frame(frame, sid=sid)
 
-    # ✅ 모션 계산 수행 (카메라 위치 추정)
-    # result = await motion_core.process_frame(frame, sid=sid)
+    # === 결과 전송 ===
+    if result["status"] == "ok":
+        x, y, z = result["x"], result["y"], result["z"]
+        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+        await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
+    else:
+        print(f"⚠️ Motion estimation status: {result['status']}")
 
-    # ✅ 계산 결과 확인 로그
-    # if result["status"] == "ok":
-    #     x, y, z = result["x"], result["y"], result["z"]
-    #     print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-    # else:
-    #     print(f"⚠️ Motion estimation status: {result['status']}")
-
-    # 동시에 PC 클라이언트에게 원본 프레임 브로드캐스트
-    _, jpeg_bytes = cv2.imencode('.jpg', frame)
+    # === 프레임 브로드캐스트 (PC 디스플레이용) ===
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
     
 
