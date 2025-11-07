@@ -53,9 +53,9 @@ def run_stt_loop():
         try:
             connected = await socketio_client.connect()
             if connected:
-                print(f"✅ Socket.IO 서버 연결 성공: {settings.SOCKETIO_SERVER_URL}")
+                print(f"✅ Socket.IO 서버 연결 성공: {settings.FASTAPI_SERVER_URL} (경로: /ws)")
             else:
-                print(f"⚠️ Socket.IO 서버 연결 실패: {settings.SOCKETIO_SERVER_URL}")
+                print(f"⚠️ Socket.IO 서버 연결 실패: {settings.FASTAPI_SERVER_URL}")
         except Exception as e:
             print(f"❌ Socket.IO 연결 오류: {e}")
     
@@ -116,7 +116,7 @@ def run_stt_loop():
                 mic.resume()
 
     print("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
-    print("📌 모드 전환: Android에서 HTTP POST /api/stt/mode 로 {'mode': 'streaming'} 전송")
+    print("📌 모드 전환: 모바일에서 Socket.IO를 통해 제어 명령 전송")
     try:
         while True:
             # ① 대기 상태 (마이크 ON, Wakeword 감지 중)
