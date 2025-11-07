@@ -26,7 +26,8 @@ const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
   const { myInfo } = useUserStore();
   const [status, setStatus] = useState<"대기중" | "통신중">("통신중");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [waitingList, setWaitingList] = useState<UserData[]>([]);
+  // const [waitingList, setWaitingList] = useState<UserData[]>([]);
+  const [waitingList, ] = useState<UserData[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 상대방 정보가 있으면 통신중 상태로 설정
