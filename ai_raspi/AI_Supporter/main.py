@@ -1,6 +1,5 @@
 import threading
 import asyncio
-import uvicorn
 import logging
 import json
 from stt.mic_stream import MicStream
@@ -8,7 +7,7 @@ from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
 from stt.socketio_client import SocketIOClient
-from server.app import app, manager
+from server.app import manager  # manager만 사용 (app은 레거시)
 from config import settings
 
 # 로깅 설정
@@ -29,14 +28,14 @@ def run_stt_loop():
     
     참고: 마이크는 항상 켜져있고, 버퍼링 STT 후 Intent 분류 중간에만 OFF됩니다.
     Socket.IO 클라이언트가 자동으로 서버에 연결되어 디바이스 등록을 수행합니다.
-    모드 전환은 Android에서 HTTP POST /api/stt/mode 로 {"mode": "streaming"} 전송하면 됩니다.
+    모드 전환은 모바일에서 Socket.IO를 통해 제어 명령을 전송합니다.
     """
     # 마이크 초기화 및 시작 (항상 켜져있음)
     mic = MicStream()
     mic.start()  # 스트림 생성 및 시작 (마이크 ON)
     print("🔊 마이크 ON (항상 활성 상태)")
     
-    # 마이크 인스턴스를 manager에 등록 (FastAPI 엔드포인트에서 접근 가능하도록)
+    # 마이크 인스턴스를 manager에 등록 (Socket.IO 제어 명령에서 접근 가능하도록)
     manager.set_mic_stream(mic)
     
     # Socket.IO 클라이언트 초기화 및 연결
@@ -138,6 +137,11 @@ def run_stt_loop():
         print("✅ 종료 완료")
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_stt_loop, daemon=True)
-    t.start()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    """
+    라즈베리파이 메인 프로그램
+    - 클라이언트로만 동작 (Socket.IO 클라이언트)
+    - 모든 통신은 Socket.IO를 통해 FastAPI 서버로 전송
+    - HTTP 서버(uvicorn)는 사용하지 않음
+    """
+    # STT 루프 실행 (무한 루프이므로 여기서 멈춤)
+    run_stt_loop()
