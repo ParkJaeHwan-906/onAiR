@@ -1,24 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import '../../styles/WorkAssign.css';
-import { reAssignTask, getTaskList } from '../../api/task';
-import { getUserList } from '../../api/user';
-import { useUserStore } from '../../store/useUserStore';
-import { useSSEStore } from '../../store/useSSEStore';
-import type { Work } from '../../types/work';
-import type { Employee } from '../../types/employee';
+import { useEffect, useMemo, useRef, useState } from "react";
+import "../../styles/WorkAssign.css";
+import { reAssignTask, getTaskList } from "../../api/task";
+import { getUserList } from "../../api/user";
+import { useUserStore } from "../../store/useUserStore";
+import { useSSEStore } from "../../store/useSSEStore";
+import type { Work } from "../../types/work";
+import type { Employee } from "../../types/employee";
 
 interface WorkAssignProps {
   onTaskReassigned?: () => void;
 }
 
-function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
+function WorkAssign({ onTaskReassigned }: WorkAssignProps) {
   const [works, setWorks] = useState<Work[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<number | null>(null);
   const [isWorkDropdownOpen, setIsWorkDropdownOpen] = useState(false);
   const workDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
+    null
+  );
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
   const employeeDropdownRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,16 +61,17 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
         // actionStatus가 없으면 action 값으로 변환
         const worksWithStatus = res.data.map((work: Work) => ({
           ...work,
-          actionStatus: work.actionStatus && work.actionStatus.trim() 
-            ? work.actionStatus 
-            : getActionStatus(work.action)
+          actionStatus:
+            work.actionStatus && work.actionStatus.trim()
+              ? work.actionStatus
+              : getActionStatus(work.action),
         }));
         setWorks(worksWithStatus);
         // 기본 선택값 없음 - "작업을 선택하세요" 표시
         setSelectedWorkId(null);
       }
     } catch (error) {
-      console.error('작업 목록 조회 실패:', error);
+      console.error("작업 목록 조회 실패:", error);
     }
   };
 
@@ -81,7 +84,7 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
         setSelectedEmployeeId(null);
       }
     } catch (error) {
-      console.error('직원 목록 조회 실패:', error);
+      console.error("직원 목록 조회 실패:", error);
     }
   };
 
@@ -91,7 +94,10 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
   );
 
   const selectedEmployee = useMemo(
-    () => employees.find((employee) => employee.userAccountId === selectedEmployeeId) ?? null,
+    () =>
+      employees.find(
+        (employee) => employee.userAccountId === selectedEmployeeId
+      ) ?? null,
     [employees, selectedEmployeeId]
   );
 
@@ -103,19 +109,27 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      if (isWorkDropdownOpen && workDropdownRef.current && !workDropdownRef.current.contains(target)) {
+      if (
+        isWorkDropdownOpen &&
+        workDropdownRef.current &&
+        !workDropdownRef.current.contains(target)
+      ) {
         setIsWorkDropdownOpen(false);
       }
 
-      if (isEmployeeDropdownOpen && employeeDropdownRef.current && !employeeDropdownRef.current.contains(target)) {
+      if (
+        isEmployeeDropdownOpen &&
+        employeeDropdownRef.current &&
+        !employeeDropdownRef.current.contains(target)
+      ) {
         setIsEmployeeDropdownOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isWorkDropdownOpen, isEmployeeDropdownOpen]);
 
@@ -126,14 +140,16 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
     }
 
     // 선택한 작업과 직원 정보 확인
-    const selectedWork = works.find(work => work.id === selectedWorkId);
-    const selectedEmployee = employees.find(emp => emp.userAccountId === selectedEmployeeId);
-    
+    const selectedWork = works.find((work) => work.id === selectedWorkId);
+    const selectedEmployee = employees.find(
+      (emp) => emp.userAccountId === selectedEmployeeId
+    );
+
     if (!selectedWork) {
       alert("선택한 작업 정보를 찾을 수 없습니다. 다시 선택해주세요.");
       return;
     }
-    
+
     if (!selectedEmployee) {
       alert("선택한 직원 정보를 찾을 수 없습니다. 다시 선택해주세요.");
       return;
@@ -141,74 +157,84 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
 
     try {
       setLoading(true);
-      console.log('=== 작업 재할당 시작 ===');
-      console.log('재할당 요청 정보:', {
+      console.log("=== 작업 재할당 시작 ===");
+      console.log("재할당 요청 정보:", {
         taskId: selectedWorkId,
         taskRequest: selectedWork.request,
         employeeId: selectedEmployeeId,
         employeeName: selectedEmployee.name,
         equipmentId: selectedWork.equipmentId,
         taskAction: selectedWork.action,
-        taskUserAccountId: selectedWork.userAccountId
+        taskUserAccountId: selectedWork.userAccountId,
       });
-      
+
       // API 호출 전 유효성 검증
       if (!selectedWorkId || !selectedEmployeeId) {
-        throw new Error('작업 ID 또는 담당자 ID가 유효하지 않습니다.');
+        throw new Error("작업 ID 또는 담당자 ID가 유효하지 않습니다.");
       }
-      
+
       if (!selectedWork || !selectedEmployee) {
-        throw new Error('작업 또는 담당자 정보를 찾을 수 없습니다.');
+        throw new Error("작업 또는 담당자 정보를 찾을 수 없습니다.");
       }
-      
-      console.log('재할당할 작업 ID:', selectedWorkId);
-      console.log('재할당할 담당자 ID:', selectedEmployeeId);
-      console.log('재할당할 담당자 이름:', selectedEmployee.name);
-      
+
+      // console.log('재할당할 작업 ID:', selectedWorkId);
+      // console.log('재할당할 담당자 ID:', selectedEmployeeId);
+      // console.log('재할당할 담당자 이름:', selectedEmployee.name);
+
       // SSE 연결 상태 확인 및 재연결
-      console.log("🔍 작업 재할당 전 SSE 연결 상태 확인");
+      // console.log("🔍 작업 재할당 전 SSE 연결 상태 확인");
       const currentState = useSSEStore.getState();
       const currentEventSource = currentState.eventSource;
-      
-      console.log("📊 현재 SSE 상태:", {
-        eventSource: !!currentEventSource,
-        readyState: currentEventSource?.readyState,
-        isConnected: currentState.isConnected
-      });
-      
+
+      // console.log("📊 현재 SSE 상태:", {
+      //   eventSource: !!currentEventSource,
+      //   readyState: currentEventSource?.readyState,
+      //   isConnected: currentState.isConnected
+      // });
+
       // SSE가 끊겨있거나 연결 중이면 재연결 시도
-      if (!currentEventSource || currentEventSource.readyState === EventSource.CLOSED || currentEventSource.readyState === EventSource.CONNECTING) {
-        console.log("🔄 SSE 재연결 시도...");
+      if (
+        !currentEventSource ||
+        currentEventSource.readyState === EventSource.CLOSED ||
+        currentEventSource.readyState === EventSource.CONNECTING
+      ) {
+        // console.log("🔄 SSE 재연결 시도...");
         connectSSE();
-        
+
         // 재연결 완료 대기 (최대 5초)
         let waitCount = 0;
         while (waitCount < 50) {
           const checkState = useSSEStore.getState();
           const checkEventSource = checkState.eventSource;
-          if (checkEventSource && checkEventSource.readyState === EventSource.OPEN) {
-            console.log("✅ SSE 연결 완료 - readyState: OPEN");
+          if (
+            checkEventSource &&
+            checkEventSource.readyState === EventSource.OPEN
+          ) {
+            // console.log("✅ SSE 연결 완료 - readyState: OPEN");
             break;
           }
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           waitCount++;
         }
-        
+
         // 최종 확인
         const finalState = useSSEStore.getState();
         const finalEventSource = finalState.eventSource;
-        if (!finalEventSource || finalEventSource.readyState !== EventSource.OPEN) {
-          console.error("❌ SSE 연결 실패 - 재할당 시도 중단");
-          alert("⚠️ 실시간 연결이 불안정합니다. 잠시 후 다시 시도해주세요.");
+        if (
+          !finalEventSource ||
+          finalEventSource.readyState !== EventSource.OPEN
+        ) {
+          // console.error("❌ SSE 연결 실패 - 재할당 시도 중단");
+          alert("실시간 연결이 불안정합니다. 잠시 후 다시 시도해주세요.");
           return;
         }
-        console.log("✅ SSE 연결 확인 완료 - 재할당 진행");
+        // console.log("✅ SSE 연결 확인 완료 - 재할당 진행");
       } else if (currentEventSource.readyState === EventSource.OPEN) {
-        console.log("✅ SSE 이미 연결됨 - 재할당 진행");
+        // console.log("✅ SSE 이미 연결됨 - 재할당 진행");
       }
-      
+
       const res = await reAssignTask(selectedWorkId, selectedEmployeeId);
-      
+
       if (res.success) {
         alert("작업이 재할당되었습니다.");
         // 작업 목록 새로고침
@@ -221,87 +247,97 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
         setSelectedWorkId(null);
         setSelectedEmployeeId(null);
       } else {
-        console.error('재할당 실패 - 응답:', res);
+        console.error("재할당 실패 - 응답:", res);
         alert(res.message || "작업 재할당에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error('=== 작업 재할당 실패 ===');
-      console.error('에러 객체:', error);
-      console.error('에러 타입:', error.constructor.name);
-      console.error('에러 메시지:', error.message);
-      console.error('에러 응답:', error.response);
-      
-      // 에러 응답 데이터를 상세히 출력
-      if (error.response?.data) {
-        console.error('=== 에러 응답 데이터 상세 ===');
-        console.error('전체 응답 데이터:', JSON.stringify(error.response.data, null, 2));
-        console.error('응답 데이터 타입:', typeof error.response.data);
-        console.error('응답 데이터 keys:', Object.keys(error.response.data || {}));
-        console.error('응답 message:', error.response.data.message);
-        console.error('응답 error:', error.response.data.error);
-        console.error('응답 data:', error.response.data.data);
-        console.error('응답 status:', error.response.data.status);
-      } else {
-        console.error('에러 응답 데이터가 없습니다.');
-      }
-      
-      console.error('에러 상태 코드:', error.response?.status);
-      console.error('에러 상태 텍스트:', error.response?.statusText);
-      console.error('요청 URL:', error.config?.url);
-      console.error('요청 메서드:', error.config?.method);
-      console.error('요청 데이터:', error.config?.data);
-      console.error('요청 헤더:', error.config?.headers);
-      console.error('요청 정보:', {
-        taskId: selectedWorkId,
-        employeeId: selectedEmployeeId,
-        requestData: {
-          taskId: selectedWorkId,
-          userAccountId: selectedEmployeeId
-        }
-      });
-      
+      // console.error('=== 작업 재할당 실패 ===');
+      // console.error('에러 객체:', error);
+      // console.error('에러 타입:', error.constructor.name);
+      // console.error('에러 메시지:', error.message);
+      // console.error('에러 응답:', error.response);
+
+      // // 에러 응답 데이터를 상세히 출력
+      // if (error.response?.data) {
+      //   console.error('=== 에러 응답 데이터 상세 ===');
+      //   console.error('전체 응답 데이터:', JSON.stringify(error.response.data, null, 2));
+      //   console.error('응답 데이터 타입:', typeof error.response.data);
+      //   console.error('응답 데이터 keys:', Object.keys(error.response.data || {}));
+      //   console.error('응답 message:', error.response.data.message);
+      //   console.error('응답 error:', error.response.data.error);
+      //   console.error('응답 data:', error.response.data.data);
+      //   console.error('응답 status:', error.response.data.status);
+      // } else {
+      //   console.error('에러 응답 데이터가 없습니다.');
+      // }
+
+      // console.error('에러 상태 코드:', error.response?.status);
+      // console.error('에러 상태 텍스트:', error.response?.statusText);
+      // console.error('요청 URL:', error.config?.url);
+      // console.error('요청 메서드:', error.config?.method);
+      // console.error('요청 데이터:', error.config?.data);
+      // console.error('요청 헤더:', error.config?.headers);
+      // console.error('요청 정보:', {
+      //   taskId: selectedWorkId,
+      //   employeeId: selectedEmployeeId,
+      //   requestData: {
+      //     taskId: selectedWorkId,
+      //     userAccountId: selectedEmployeeId
+      //   }
+      // });
+
       // 백엔드 에러 메시지 추출 (여러 가능성 체크)
-      const errorMessage = error.response?.data?.message 
-        || error.response?.data?.error
-        || error.response?.data?.data?.message
-        || error.response?.data?.data?.error
-        || (typeof error.response?.data === 'string' ? error.response.data : null)
-        || error.message 
-        || "알 수 없는 오류";
-      
-      console.error('추출된 에러 메시지:', errorMessage);
-      
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.response?.data?.data?.message ||
+        error.response?.data?.data?.error ||
+        (typeof error.response?.data === "string"
+          ? error.response.data
+          : null) ||
+        error.message ||
+        "알 수 없는 오류";
+
+      // console.error('추출된 에러 메시지:', errorMessage);
+
       // 에러 상태 코드별 메시지
       if (error.response?.status === 500) {
-        // 500 에러 시 실제 재할당 여부 확인
-        console.log('=== 500 에러 발생 - 작업 재할당 여부 확인 시작 ===');
-        console.log('확인할 작업 ID:', selectedWorkId);
-        console.log('확인할 담당자 ID:', selectedEmployeeId);
-        
+        // // 500 에러 시 실제 재할당 여부 확인
+        // console.log('=== 500 에러 발생 - 작업 재할당 여부 확인 시작 ===');
+        // console.log('확인할 작업 ID:', selectedWorkId);
+        // console.log('확인할 담당자 ID:', selectedEmployeeId);
+
         try {
           // 잠시 대기 후 작업 목록 재조회
-          await new Promise(resolve => setTimeout(resolve, 500));
-          console.log('작업 목록 재조회 중...');
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          // console.log('작업 목록 재조회 중...');
           const verifyRes = await getTaskList(null, null);
-          console.log('작업 목록 재조회 결과:', {
-            success: verifyRes.success,
-            dataLength: verifyRes.data?.length || 0
-          });
-          
-          const reassignedTask = verifyRes.data?.find((t: Work) => t.id === selectedWorkId);
-          console.log('재할당 확인 결과:', {
-            taskFound: !!reassignedTask,
-            taskId: reassignedTask?.id,
-            assignedUserAccountId: reassignedTask?.userAccountId,
-            expectedUserAccountId: selectedEmployeeId,
-            isMatch: reassignedTask?.userAccountId === selectedEmployeeId,
-            taskAction: reassignedTask?.action
-          });
-          
-          if (reassignedTask && reassignedTask.userAccountId === selectedEmployeeId) {
+          // console.log('작업 목록 재조회 결과:', {
+          //   success: verifyRes.success,
+          //   dataLength: verifyRes.data?.length || 0
+          // });
+
+          const reassignedTask = verifyRes.data?.find(
+            (t: Work) => t.id === selectedWorkId
+          );
+          // console.log('재할당 확인 결과:', {
+          //   taskFound: !!reassignedTask,
+          //   taskId: reassignedTask?.id,
+          //   assignedUserAccountId: reassignedTask?.userAccountId,
+          //   expectedUserAccountId: selectedEmployeeId,
+          //   isMatch: reassignedTask?.userAccountId === selectedEmployeeId,
+          //   taskAction: reassignedTask?.action
+          // });
+
+          if (
+            reassignedTask &&
+            reassignedTask.userAccountId === selectedEmployeeId
+          ) {
             // 실제로는 재할당되었음
-            console.log('✅ 실제로 재할당되었음 - 성공 처리');
-            alert("작업이 재할당되었습니다.\n\n(서버 오류가 발생했지만 작업 재할당은 완료되었습니다. 페이지를 새로고침해주세요.)");
+            // console.log('✅ 실제로 재할당되었음 - 성공 처리');
+            alert(
+              "작업이 재할당되었습니다.\n\n(서버 오류가 발생했지만 작업 재할당은 완료되었습니다. 페이지를 새로고침해주세요.)"
+            );
             await fetchWorks();
             if (onTaskReassigned) {
               onTaskReassigned();
@@ -309,28 +345,41 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
             setSelectedWorkId(null);
             setSelectedEmployeeId(null);
           } else {
-            console.log('❌ 실제로 재할당되지 않음 - 실패 처리');
-            console.log('재할당된 작업 정보:', reassignedTask);
-            alert(`작업 재할당에 실패했습니다.\n\n서버 내부 오류가 발생했습니다.\n\n에러: ${errorMessage}\n\n작업 ID: ${selectedWorkId}\n담당자 ID: ${selectedEmployeeId}\n\n백엔드 로그를 확인해주세요.\n\n(SSE 연결이 끊어져 있을 수 있습니다. 페이지를 새로고침해주세요.)`);
+            // console.log('❌ 실제로 재할당되지 않음 - 실패 처리');
+            // console.log('재할당된 작업 정보:', reassignedTask);
+            alert(
+              `작업 재할당에 실패했습니다.\n\n서버 내부 오류가 발생했습니다.\n\n에러: ${errorMessage}\n\n작업 ID: ${selectedWorkId}\n담당자 ID: ${selectedEmployeeId}\n\n백엔드 로그를 확인해주세요.\n\n(SSE 연결이 끊어져 있을 수 있습니다. 페이지를 새로고침해주세요.)`
+            );
           }
         } catch (verifyError) {
-          console.error('재할당 확인 중 오류:', verifyError);
-          alert(`작업 재할당에 실패했습니다.\n\n서버 내부 오류가 발생했습니다.\n\n에러: ${errorMessage}\n\n작업 ID: ${selectedWorkId}\n담당자 ID: ${selectedEmployeeId}\n\n(재할당 확인 중 오류가 발생했습니다.)`);
+          // console.error('재할당 확인 중 오류:', verifyError);
+          alert(
+            `작업 재할당에 실패했습니다.\n\n서버 내부 오류가 발생했습니다.\n\n에러: ${errorMessage}\n\n작업 ID: ${selectedWorkId}\n담당자 ID: ${selectedEmployeeId}\n\n(재할당 확인 중 오류가 발생했습니다.)`
+          );
         }
       } else if (error.response?.status === 400) {
         // SSE 전송 실패인 경우 특별 처리
-        if (errorMessage.includes('SSE 전송에 실패했습니다') || errorMessage.includes('SSE')) {
-          alert(`작업 재할당 시도 중 실시간 알림 전송에 실패했습니다.\n\n실제 작업 재할당이 완료되었는지 확인해주세요.\n페이지를 새로고침하여 작업 목록을 확인해주세요.\n\n에러: ${errorMessage}`);
+        if (
+          errorMessage.includes("SSE 전송에 실패했습니다") ||
+          errorMessage.includes("SSE")
+        ) {
+          alert(
+            `작업 재할당 시도 중 실시간 알림 전송에 실패했습니다.\n\n실제 작업 재할당이 완료되었는지 확인해주세요.\n페이지를 새로고침하여 작업 목록을 확인해주세요.\n\n에러: ${errorMessage}`
+          );
           // 작업 목록 새로고침을 시도
           await fetchWorks();
           if (onTaskReassigned) {
             onTaskReassigned();
           }
         } else {
-          alert(`작업 재할당에 실패했습니다.\n\n잘못된 요청입니다.\n\n에러: ${errorMessage}`);
+          alert(
+            `작업 재할당에 실패했습니다.\n\n잘못된 요청입니다.\n\n에러: ${errorMessage}`
+          );
         }
       } else if (error.response?.status === 401) {
-        alert(`작업 재할당에 실패했습니다.\n\n인증이 필요합니다. 다시 로그인해주세요.`);
+        alert(
+          `작업 재할당에 실패했습니다.\n\n인증이 필요합니다. 다시 로그인해주세요.`
+        );
       } else if (error.response?.status === 403) {
         alert(`작업 재할당에 실패했습니다.\n\n권한이 없습니다.`);
       } else {
@@ -346,35 +395,45 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
   }
 
   return (
-    <div className='work-assign'>
-      <div className='work-assign-header'>작업 재할당</div>
+    <div className="work-assign">
+      <div className="work-assign-header">작업 재할당</div>
 
-      <div className='assign-header'>작업</div>
-      <div className='work-select-wrapper' ref={workDropdownRef}>
+      <div className="assign-header">작업</div>
+      <div className="work-select-wrapper" ref={workDropdownRef}>
         <button
-          type='button'
-          className={`work-select-trigger${isWorkDropdownOpen ? ' open' : ''}`}
+          type="button"
+          className={`work-select-trigger${isWorkDropdownOpen ? " open" : ""}`}
           onClick={() => setIsWorkDropdownOpen((prev) => !prev)}
         >
-          <span>{selectedWork ? selectedWork.request : '작업을 선택하세요'}</span>
+          <span>
+            {selectedWork ? selectedWork.request : "작업을 선택하세요"}
+          </span>
         </button>
         {isWorkDropdownOpen && (
-          <ul className='work-select-dropdown'>
+          <ul className="work-select-dropdown">
             {works.length === 0 ? (
-              <li style={{ padding: '10px', textAlign: 'center' }}>작업이 없습니다.</li>
+              <li style={{ padding: "10px", textAlign: "center" }}>
+                작업이 없습니다.
+              </li>
             ) : (
               works.map((work) => (
                 <li key={work.id}>
                   <button
-                    type='button'
-                    className={`work-select-option${work.id === selectedWorkId ? ' selected' : ''}`}
+                    type="button"
+                    className={`work-select-option${
+                      work.id === selectedWorkId ? " selected" : ""
+                    }`}
                     onClick={() => {
                       setSelectedWorkId(work.id);
                       setIsWorkDropdownOpen(false);
                     }}
                   >
-                    <span className='work-select-option-title'>{work.request}</span>
-                    <span className='work-select-option-meta'>{work.equipmentName}</span>
+                    <span className="work-select-option-title">
+                      {work.request}
+                    </span>
+                    <span className="work-select-option-meta">
+                      {work.equipmentName}
+                    </span>
                   </button>
                 </li>
               ))
@@ -383,32 +442,47 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
         )}
       </div>
 
-      <div className='assign-header'>담당자</div>
-      <div className='work-select-wrapper' ref={employeeDropdownRef}>
+      <div className="assign-header">담당자</div>
+      <div className="work-select-wrapper" ref={employeeDropdownRef}>
         <button
-          type='button'
-          className={`work-select-trigger${isEmployeeDropdownOpen ? ' open' : ''}`}
+          type="button"
+          className={`work-select-trigger${
+            isEmployeeDropdownOpen ? " open" : ""
+          }`}
           onClick={() => setIsEmployeeDropdownOpen((prev) => !prev)}
         >
-          {selectedEmployee ? `${selectedEmployee.name} (${selectedEmployee.part})` : '담당자를 선택하세요'}
+          {selectedEmployee
+            ? `${selectedEmployee.name} (${selectedEmployee.part})`
+            : "담당자를 선택하세요"}
         </button>
         {isEmployeeDropdownOpen && (
-          <ul className='work-select-dropdown'>
+          <ul className="work-select-dropdown">
             {employees.length === 0 ? (
-              <li style={{ padding: '10px', textAlign: 'center' }}>직원이 없습니다.</li>
+              <li style={{ padding: "10px", textAlign: "center" }}>
+                직원이 없습니다.
+              </li>
             ) : (
               employees.map((employee) => (
                 <li key={employee.userAccountId}>
                   <button
-                    type='button'
-                    className={`work-select-option${employee.userAccountId === selectedEmployeeId ? ' selected' : ''}`}
+                    type="button"
+                    className={`work-select-option${
+                      employee.userAccountId === selectedEmployeeId
+                        ? " selected"
+                        : ""
+                    }`}
                     onClick={() => {
                       setSelectedEmployeeId(employee.userAccountId);
                       setIsEmployeeDropdownOpen(false);
                     }}
                   >
-                    <span className='work-select-option-title'>{employee.name}</span>
-                    <span className='work-select-option-meta'>{employee.part} | {employee.online ? '온라인' : '오프라인'}</span>
+                    <span className="work-select-option-title">
+                      {employee.name}
+                    </span>
+                    <span className="work-select-option-meta">
+                      {employee.part} |{" "}
+                      {employee.online ? "온라인" : "오프라인"}
+                    </span>
                   </button>
                 </li>
               ))
@@ -416,8 +490,8 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
           </ul>
         )}
       </div>
-      <button 
-        className='assign-button'
+      <button
+        className="assign-button"
         onClick={handleReAssign}
         disabled={loading || !selectedWorkId || !selectedEmployeeId}
       >
@@ -427,4 +501,4 @@ function WorkAssign ({ onTaskReassigned }: WorkAssignProps) {
   );
 }
 
-export default WorkAssign
+export default WorkAssign;
