@@ -1,9 +1,26 @@
+<<<<<<< ai_raspi/AI_Supporter/requirements.txt
+# WebSocket & Socket.IO
+# 참고: FastAPI와 uvicorn은 사용하지 않음 (클라이언트 전용)
+# fastapi>=0.104.0  # 레거시 (필요 시 활성화)
+# uvicorn[standard]>=0.24.0  # 레거시 (필요 시 활성화)
+websockets>=12.0
+aiohttp>=3.9.0
+# FastAPI 서버의 Socket.IO 서버 버전과 동일하게 맞춤 (호환성 보장)
+python-engineio==4.12.3
+python-socketio[asyncio-client]==5.11.3
+
+# 브리지 서버 (Python 3.10 ↔ 3.13 통신용)
+flask>=3.0.0
+flask-cors>=4.0.0
+requests>=2.31.0
+
 # FastAPI & WebSocket
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 websockets==12.0
 aiohttp==3.9.0
 python-socketio[asyncio-client]>=5.10.0
+>>>>>>> ai_raspi/AI_Supporter/requirements.txt
 
 # GCP STT
 google-cloud-speech==2.20.0
