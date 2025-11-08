@@ -1,24 +1,23 @@
-# WebSocket & Socket.IO
-# 참고: FastAPI와 uvicorn은 사용하지 않음 (클라이언트 전용)
-# fastapi>=0.104.0  # 레거시 (필요 시 활성화)
-# uvicorn[standard]>=0.24.0  # 레거시 (필요 시 활성화)
-websockets>=12.0
-aiohttp>=3.9.0
+# FastAPI & WebSocket
+fastapi==0.104.0
+uvicorn[standard]==0.24.0
+websockets==12.0
+aiohttp==3.9.0
 python-socketio[asyncio-client]>=5.10.0
 
 # GCP STT
-google-cloud-speech>=2.20.0
+google-cloud-speech==2.20.0
 
 # 오디오 처리
-pyaudio>=0.2.13
-sounddevice>=0.4.6
-numpy>=1.24.0
-scipy>=1.11.0
-soundfile>=0.12.1
+sounddevice==0.5.3
+soundfile==0.12.1
+numpy==1.26.4
+scipy==1.11.4
 
 # 머신러닝
-tflite-runtime==2.14.0
+# pip install https://github.com/google-coral/pycoral/releases/download/release-frogfish/tflite_runtime-2.14.0-cp310-cp310-linux_aarch64.whl
+tflite-runtime==2.14.0 # 미리 설치 완료
 
 # 환경 변수
-python-dotenv>=1.0.0
+python-dotenv==1.0.0
 
