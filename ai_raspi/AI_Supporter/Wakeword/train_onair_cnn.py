@@ -1,8 +1,3 @@
-# ============================================
-# 🧠 Wakeword ("onair") Detection Model Training
-# ✅ Simplified CNN Version (TFLite Compatible)
-# ============================================
-
 import os
 import numpy as np
 import tensorflow as tf
@@ -10,13 +5,11 @@ import librosa
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 
-# ===== 1️⃣ 기본 설정 =====
 SAMPLE_RATE = 16000
 DURATION = 1.0
 N_MELS = 40
 LABELS = ["onair", "negative"]
 
-# ===== 2️⃣ 데이터 로딩 =====
 def load_audio_dataset(base_dir, labels):
     X, y = [], []
     for label_idx, label in enumerate(labels):
@@ -48,7 +41,6 @@ X, y = load_audio_dataset("data", LABELS)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 print(f"✅ Data loaded: {X.shape}, Labels: {LABELS}")
 
-# ===== 3️⃣ 모델 정의 =====
 def build_cnn_model(input_shape=(98, 40, 1), num_classes=2):
     inputs = tf.keras.Input(shape=input_shape)
 
@@ -79,7 +71,6 @@ model.compile(
 )
 model.summary()
 
-# ===== 4️⃣ 학습 =====
 print("🚀 Training start...")
 history = model.fit(
     X_train, y_train,
@@ -89,16 +80,14 @@ history = model.fit(
     verbose=1
 )
 
-# ===== 5️⃣ 평가 및 저장 =====
 loss, acc = model.evaluate(X_test, y_test, verbose=0)
-print(f"✅ Test Accuracy: {acc:.4f}, Loss: {loss:.4f}")
+print(f"Test Accuracy: {acc:.4f}, Loss: {loss:.4f}")
 
 model.save("wakeword_onair_cnn.keras")
-print("✅ Model saved as wakeword_onair_cnn.keras")
+print("Model saved as wakeword_onair_cnn.keras")
 
-# ===== 6️⃣ (선택) TFLite 변환 =====
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 tflite_model = converter.convert()
 open("wakeword_onair_cnn.tflite", "wb").write(tflite_model)
-print("✅ TFLite model exported as wakeword_onair_cnn.tflite")
+print("TFLite model exported as wakeword_onair_cnn.tflite")
