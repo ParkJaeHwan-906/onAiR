@@ -60,15 +60,15 @@ services:
       # data & embedding
       - JSONL_PATH=${JSONL_PATH}
       - FAISS_INDEX_PATH=${FAISS_INDEX_PATH}
-      - EMB_MODEL_NAME=${EMB_MODEL_NAME}
+      - EMB_MODEL_NAME=BAAI/bge-m3
       - FAISS_METRIC=cosine
       - EMB_ENCODING_MODE=query
       # Hybrid / Rerank options
-      - USE_ELASTIC=false
-      - ES_HOST=${ES_HOST}
-      - ES_INDEX=${ES_INDEX}
+      - USE_ELASTIC=True
+      - ES_HOST=http://elastic-search:9200
+      - ES_INDEX=samkos
       - USE_CROSS_ENCODER=true
-      - CE_MODEL_NAME=${CE_MODEL_NAME}
+      - CE_MODEL_NAME=BAAI/bge-reranker-large
       - CE_MAXLEN=256
       - HYBRID_ALPHA=0.82
       - RERANK_TOP_K=6
