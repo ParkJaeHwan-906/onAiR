@@ -148,6 +148,33 @@ class SocketIOClient:
                     if mic and not mic.stream.is_active():
                         mic.resume()
                         logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
+                    
+                    # Streaming STT 인스턴스 가져오기
+                    streaming_stt = self.manager.streaming_stt_instance
+                    if streaming_stt:
+                        # Socket.IO 클라이언트 설정
+                        streaming_stt.socketio_client = self
+                        
+                        # 세션 ID 생성 (Clarify 세션용)
+                        import uuid
+                        session_id = str(uuid.uuid4())
+                        logger.info(f"📤 Streaming STT 세션 즉시 시작 (session_id={session_id})")
+                        
+                        # 브로드캐스트 함수 (manager를 통해)
+                        async def broadcaster(msg):
+                            await self.manager.broadcast(msg)
+                        
+                        # Streaming STT 세션 시작 (별도 태스크로 실행)
+                        try:
+                            import asyncio
+                            asyncio.create_task(
+                                streaming_stt.run(mic, broadcaster=broadcaster, session_id=session_id)
+                            )
+                            logger.info("✅ Streaming STT 세션 시작 완료")
+                        except Exception as e:
+                            logger.error(f"❌ Streaming STT 세션 시작 실패: {e}")
+                    else:
+                        logger.error("❌ Streaming STT 인스턴스가 등록되지 않았습니다")
             
             elif command == "set_stt_mode":
                 # STT 모드 설정 명령
