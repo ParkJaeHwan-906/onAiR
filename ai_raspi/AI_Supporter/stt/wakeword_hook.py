@@ -1,7 +1,7 @@
 # 🧩 wakeword_hook.py
 # Wakeword 감지 모듈 래퍼
 
-from wakeword_detector import WakewordDetector
+from .wakeword_detector import WakewordDetector
 
 # 전역 감지기 인스턴스
 _detector = None
