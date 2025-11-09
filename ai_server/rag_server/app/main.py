@@ -52,6 +52,9 @@ app.include_router(ar_process.router)
 def root():
     return {
         "message": "RAG Server is running 🚀",
+        "server_url": settings.FASTAPI_SERVER_URL,
+        "host": settings.FASTAPI_SERVER_HOST,
+        "port": settings.FASTAPI_SERVER_PORT,
         "endpoints": {
             "rag_chat": "/rag/chat",
             "tts": "/api/tts",
@@ -63,7 +66,8 @@ def root():
         },
         "socketio": {
             "enabled": USE_SOCKETIO,
-            "note": "Socket.IO 서버는 ai_ar 프로젝트의 socket_manager.py를 사용합니다." if USE_SOCKETIO else "Socket.IO를 사용할 수 없습니다.",
+            "path": "/ws",
+            "note": "Socket.IO 서버는 FastAPI 서버에 통합되어 있습니다." if USE_SOCKETIO else "Socket.IO를 사용할 수 없습니다.",
             "fastapi_endpoints": [
                 "/api/stt/buffered (버퍼링 STT 수신)",
                 "/api/stt/streaming (Streaming STT 수신)",
@@ -86,4 +90,16 @@ else:
     asgi_app = app
     print("⚠️ Socket.IO 없이 FastAPI만 사용")
 
-# uvicorn 실행 시: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000
+# 서버 실행 방법:
+# 1. uvicorn 사용 (권장):
+#    uvicorn app.main:asgi_app --host {settings.FASTAPI_SERVER_HOST} --port {settings.FASTAPI_SERVER_PORT} --reload
+#
+# 2. Python으로 직접 실행:
+#    import uvicorn
+#    from app.core.config import settings
+#    uvicorn.run("app.main:asgi_app", host=settings.FASTAPI_SERVER_HOST, port=settings.FASTAPI_SERVER_PORT, reload=True)
+#
+# 설정 파일: app/core/config.py
+# - FASTAPI_SERVER_URL: 모바일 앱에서 접근할 URL (예: "http://192.168.0.100:8000")
+# - FASTAPI_SERVER_HOST: 서버 바인딩 호스트 (기본값: "0.0.0.0")
+# - FASTAPI_SERVER_PORT: 서버 포트 (기본값: 8000)

@@ -181,7 +181,7 @@ async def handle_stt_result(sid, data):
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8000")
+            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "https://k13a407.p.ssafy.io/ai")
             endpoint = f"{fastapi_url}/api/stt/buffered"
             
             # session_id 포함 (Streaming STT용)
@@ -249,7 +249,7 @@ async def handle_clarify_input(sid, data):
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://localhost:8000")
+            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "https://k13a407.p.ssafy.io/ai")
             endpoint = f"{fastapi_url}/api/clarify/response"
             
             response = await client.post(
