@@ -28,10 +28,12 @@ def send_stt_result(result: dict):
 
 # 4️⃣ 서버 실행
 def run_server(host='127.0.0.1', port=5050):
-    import eventlet
+    from werkzeug.serving import WSGIRequestHandler, make_server
     logging.basicConfig(level=logging.INFO)
     logger.info(f"🚀 STT 브리지 서버 시작 (Socket.IO): ws://{host}:{port}")
-    eventlet.wsgi.server(eventlet.listen((host, port)), app)
+    # threading 모드를 사용하므로 werkzeug 서버 사용
+    server = make_server(host, port, app, request_handler=WSGIRequestHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
     run_server()
