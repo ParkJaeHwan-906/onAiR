@@ -8,6 +8,7 @@ import asyncio
 import uuid
 from google.cloud import speech
 from config import settings
+import numpy as np
 
 class GcpStreamingStt:
     def __init__(self, socketio_client=None):
@@ -79,14 +80,12 @@ class GcpStreamingStt:
 
             def gen():
                 """오디오 청크 생성기"""
-                nonlocal last_voice_ts
                 while not self._stop:
                     chunk = mic.read()
                     if chunk is None:
                         break
-                    # 음성이 감지되면 타임스탬프 업데이트
-                    if len(chunk) > 0:
-                        last_voice_ts = time.time()
+                    if isinstance(chunk, np.ndarray):
+                        chunk = chunk.tobytes()  # numpy → bytes 변환
                     yield speech.StreamingRecognizeRequest(audio_content=chunk)
 
             def blocking_stream():
