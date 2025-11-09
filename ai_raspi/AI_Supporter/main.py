@@ -34,7 +34,7 @@ def run_socketio_client():
     
     # 브리지 클라이언트 초기화
     bridge_client = SttBridgeClient()
-    bridge_client.set_socketio_client(socketio_client)
+    bridge_client.set_fastapi_socketio_client(socketio_client)
     
     async def main_async():
         """비동기 메인 함수"""
@@ -50,18 +50,11 @@ def run_socketio_client():
             logger.error(f"❌ Socket.IO 연결 오류: {e}")
             return
         
-        # 브리지 서버 연결 확인
-        bridge_ok = await bridge_client.check_bridge_server()
-        if not bridge_ok:
-            logger.warning("⚠️ 브리지 서버가 실행되지 않았습니다.")
-            logger.warning("   Python 3.10에서 브리지 서버를 실행했는지 확인하세요.")
-            return
+
         
-        # 브리지 클라이언트 시작 (STT 결과 폴링)
-        await bridge_client.start()
-        
-        logger.info("🚀 Socket.IO 클라이언트 및 브리지 클라이언트 실행 중...")
-        logger.info("   Python 3.10에서 오는 STT 결과를 Socket.IO로 전송합니다.")
+        bridge_thread = threading.Thread(target=bridge_client.connect, daemon=True)
+        bridge_thread.start()
+        logger.info("✅ 브리지 서버(Socket.IO) 연결 시도 중 (스레드 실행)")
         
         try:
             # 무한 대기 (Ctrl+C로 종료)
@@ -69,7 +62,6 @@ def run_socketio_client():
                 await asyncio.sleep(1)
         except KeyboardInterrupt:
             logger.info("🛑 종료 중...")
-            await bridge_client.stop()
             await socketio_client.disconnect()
             logger.info("✅ 종료 완료")
     

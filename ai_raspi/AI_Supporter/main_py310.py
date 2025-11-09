@@ -8,42 +8,17 @@
 import threading
 import asyncio
 import logging
-import json
-import requests
 from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
-from bridge.stt_bridge_server import run_server as run_bridge_server
+from bridge.stt_bridge_server import run_server, send_stt_result
 from config import settings
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 브리지 서버 URL (로컬)
-BRIDGE_SERVER_URL = "http://127.0.0.1:8888"
-
-def send_stt_result_to_bridge(stt_data: dict):
-    """
-    STT 결과를 브리지 서버로 전송
-    
-    Args:
-        stt_data: STT 결과 딕셔너리
-            예: {"type": "final", "text": "안녕하세요", "confidence": 0.95}
-    """
-    try:
-        response = requests.post(
-            f"{BRIDGE_SERVER_URL}/stt/result",
-            json=stt_data,
-            timeout=1
-        )
-        if response.status_code == 200:
-            logger.info(f"✅ STT 결과 브리지 서버로 전송 완료: {stt_data.get('type')} - {stt_data.get('text', '')[:50]}...")
-        else:
-            logger.warning(f"⚠️ 브리지 서버 응답 오류: {response.status_code}")
-    except Exception as e:
-        logger.error(f"❌ 브리지 서버 전송 오류: {e}")
 
 def run_stt_loop():
     """
@@ -60,12 +35,12 @@ def run_stt_loop():
     """
     # 브리지 서버를 별도 스레드에서 실행
     bridge_thread = threading.Thread(
-        target=run_bridge_server,
-        args=('127.0.0.1', 8888),
+        target=run_server,
+        args=('127.0.0.1', 5050),
         daemon=True
     )
     bridge_thread.start()
-    logger.info("🚀 브리지 서버 시작 (포트 8888)")
+    logger.info("🚀 STT 브리지 서버 시작 (포트 5050)")
     logger.info("   Python 3.13에서 브리지 클라이언트가 연결할 수 있습니다.")
     
     # 브리지 서버가 시작될 때까지 잠시 대기
@@ -85,8 +60,8 @@ def run_stt_loop():
     init_wakeword_detector()
     
     async def broadcast(msg):
-        """STT 결과를 브리지 서버로 전송"""
-        send_stt_result_to_bridge(msg)
+        """STT 결과를 브리지 서버(Socket.IO)로 전송"""
+        send_stt_result(msg)
     
     async def stt_session():
         """STT 세션 실행 (모드에 따라 버퍼링/스트리밍 선택)"""
@@ -128,7 +103,6 @@ def run_stt_loop():
     
     logger.info("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
     logger.info("📌 Python 3.10에서 실행 중 (wakeword + STT)")
-    logger.info(f"📡 브리지 서버: {BRIDGE_SERVER_URL}")
     
     try:
         while True:
