@@ -332,26 +332,6 @@ class SocketIoSttClient(
     }
     
     /**
-     * 연결 상태 확인
-     */
-    fun isConnected(): Boolean = isConnected && socket?.connected() == true
-    
-    /**
-     * 연결 종료
-     */
-    fun disconnect() {
-        try {
-            socket?.disconnect()
-            socket?.off()
-            socket = null
-            isConnected = false
-            Log.i(TAG, "🛑 Socket.IO 연결 종료")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 연결 종료 오류: ${e.message}")
-        }
-    }
-    
-    /**
      * 라즈베리파이 제어 명령 전송
      * 모바일 → Socket.IO 서버 → 라즈베리파이로 제어 명령 전달
      * 
