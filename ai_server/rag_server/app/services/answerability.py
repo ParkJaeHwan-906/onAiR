@@ -558,16 +558,40 @@ def make_clarify_prompt(
     conversation_context = ""
     if history:
         conv_lines = []
-        for event in history[-6:]:  # 최근 6개 이벤트만
+        for event in history[-10:]:  # 최근 10개 이벤트로 확장
             role = event.get("role", "")
             event_type = event.get("type", "")
             data = event.get("data", {})
-            if role == "user" and event_type == "query":
-                conv_lines.append(f"사용자: {data.get('query', '')}")
+            
+            # 사용자 질문 (스트리밍 STT)
+            if role == "user" and event_type == "streaming_stt":
+                text = data.get("text", "")
+                if text:
+                    conv_lines.append(f"사용자: {text}")
+            
+            # 사용자 질문 (일반 query)
+            elif role == "user" and event_type == "query":
+                query_text = data.get("query", "")
+                if query_text:
+                    conv_lines.append(f"사용자: {query_text}")
+            
+            # Clarify 질문/답변
+            elif role == "system" and event_type == "clarify":
+                clarify_guidance = data.get("clarify_guidance", "")
+                if clarify_guidance:
+                    conv_lines.append(f"시스템 질문: {clarify_guidance}")
+                # 이전에 누락된 정보도 포함
+                evidence_stats_in_history = data.get("evidence_stats", {})
+                prev_missing = evidence_stats_in_history.get("missing_info", [])
+                if prev_missing:
+                    conv_lines.append(f"  → 누락된 정보: {', '.join(prev_missing)}")
+            
+            # Evidence 체크 결과
             elif role == "system" and event_type == "evidence":
                 prev_missing = data.get("missing_info", [])
                 if prev_missing:
                     conv_lines.append(f"시스템: 누락된 정보 - {', '.join(prev_missing)}")
+        
         if conv_lines:
             conversation_context = f"""
 [이전 대화 맥락]
