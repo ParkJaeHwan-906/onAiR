@@ -19,6 +19,9 @@ import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
+import com.onair.mobile.assistant.data.auth.TokenManager
+import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
+import com.onair.mobile.assistant.data.task.SseTaskClient
 
 /**
  * Socket.IO를 통해 라즈베리파이로부터 STT 텍스트를 수신하는 Activity
@@ -48,8 +51,9 @@ class MainActivitySttServer : AppCompatActivity() {
     
     private val TAG = "MainActivitySttServer"
     
-    // TODO: 서버 URL 설정
-    private val FASTAPI_SERVER_URL = "http://YOUR_FASTAPI_SERVER_URL:8000"  // FastAPI 서버 URL (Socket.IO 서버도 여기에 통합됨)
+    // 서버 URL 설정
+    // EC2에 배포된 FastAPI 서버 URL
+    private val FASTAPI_SERVER_URL = "https://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
 
@@ -123,18 +127,19 @@ class MainActivitySttServer : AppCompatActivity() {
         // WebRTC Repository 초기화
         webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
         
-        // TODO: 실제 로그인 API 연동 후 제거
-        // 임시로 제공받은 액세스 토큰 설정 (테스트용)
-        // 주의: 실제 프로덕션에서는 로그인 API를 통해 토큰을 받아야 합니다
-        if (!tokenManager.hasToken()) {
-            // BuildConfig에서 읽거나, 로그인 API를 통해 받아야 함
-            // 현재는 테스트용으로만 사용
-            val testToken = BuildConfig.DEFAULT_ACCESS_TOKEN
-            if (testToken.isNotEmpty()) {
-                tokenManager.saveAccessToken(testToken)
-                Log.i(TAG, "✅ 임시 액세스 토큰 설정 완료")
+        // TODO: 테스트 완료 후 제거 - REFRESH_TOKEN 하드코딩 (임시)
+        // REFRESH_TOKEN을 하드코딩하여 테스트
+        // TokenManager.kt의 HARDCODED_REFRESH_TOKEN 상수에 실제 REFRESH_TOKEN을 입력하세요
+        tokenManager.setupHardcodedRefreshToken()
+        
+        // REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 시도
+        lifecycleScope.launch {
+            val refreshed = tokenManager.refreshAccessToken()
+            if (refreshed) {
+                Log.i(TAG, "✅ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 완료")
             } else {
-                Log.w(TAG, "⚠️ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
+                Log.w(TAG, "⚠️ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 실패")
+                Log.w(TAG, "   TokenManager.kt의 HARDCODED_REFRESH_TOKEN을 확인하세요.")
             }
         }
         
@@ -221,20 +226,21 @@ class MainActivitySttServer : AppCompatActivity() {
                         updateIntentUI(IntentType.OPERATOR, "통신 중...")
                         
                         // 3. Spring 서버 WebRTC API 연결 요청
-                        val accessToken = tokenManager.getAccessToken()
-                        if (accessToken != null) {
-                            // TODO: receiverAccountId를 실제 값으로 설정 (현재는 임시로 0)
-                            val receiverAccountId = 0L  // 실제 수신자 계정 ID로 변경 필요
-                            lifecycleScope.launch {
+                        // ACCESS_TOKEN이 만료되었을 수 있으므로 갱신 시도
+                        lifecycleScope.launch {
+                            val accessToken = tokenManager.ensureValidAccessToken()
+                            if (accessToken != null) {
+                                // TODO: receiverAccountId를 실제 값으로 설정 (현재는 임시로 0)
+                                val receiverAccountId = 0L  // 실제 수신자 계정 ID로 변경 필요
                                 val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
                                 if (success) {
                                     Log.i(TAG, "✅ WebRTC 연결 요청 완료")
                                 } else {
                                     Log.e(TAG, "❌ WebRTC 연결 요청 실패")
                                 }
+                            } else {
+                                Log.e(TAG, "❌ 액세스 토큰이 없어 WebRTC 연결 요청을 할 수 없습니다")
                             }
-                        } else {
-                            Log.e(TAG, "❌ 액세스 토큰이 없어 WebRTC 연결 요청을 할 수 없습니다")
                         }
                         
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지
@@ -271,42 +277,44 @@ class MainActivitySttServer : AppCompatActivity() {
      * SSE 작업 스트림 연결 시작
      */
     private fun connectSseTaskStream() {
-        // 액세스 토큰 확인
-        val accessToken = tokenManager.getAccessToken()
-        if (accessToken == null) {
-            Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-            // TODO: 로그인 화면으로 이동하거나 토큰 입력 요청
-            return
-        }
-        
-        // 기존 연결이 있으면 종료
-        sseTaskClient?.disconnect()
-        
-        sseTaskClient = SseTaskClient(
-            baseUrl = SPRING_SERVER_URL,
-            accessToken = accessToken,
-            onConnect = {
-                Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
-            },
-            onTaskAssign = { event ->
-                Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
-                // TODO: 작업 할당 UI 업데이트
-            },
-            onTaskCancel = { event ->
-                Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
-                // TODO: 작업 취소 UI 업데이트
-            },
-            onTaskEnd = { event ->
-                Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
-                // TODO: 작업 완료 UI 업데이트
-            },
-            onError = { error ->
-                Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
-                error.printStackTrace()
+        // 액세스 토큰 확인 및 갱신
+        lifecycleScope.launch {
+            val accessToken = tokenManager.ensureValidAccessToken()
+            if (accessToken == null) {
+                Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
+                // TODO: 로그인 화면으로 이동하거나 토큰 입력 요청
+                return@launch
             }
-        )
-        
-        sseTaskClient?.connect()
+            
+            // 기존 연결이 있으면 종료
+            sseTaskClient?.disconnect()
+            
+            sseTaskClient = SseTaskClient(
+                baseUrl = SPRING_SERVER_URL,
+                accessToken = accessToken,
+                onConnect = {
+                    Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
+                },
+                onTaskAssign = { event ->
+                    Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
+                    // TODO: 작업 할당 UI 업데이트
+                },
+                onTaskCancel = { event ->
+                    Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
+                    // TODO: 작업 취소 UI 업데이트
+                },
+                onTaskEnd = { event ->
+                    Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
+                    // TODO: 작업 완료 UI 업데이트
+                },
+                onError = { error ->
+                    Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
+                    error.printStackTrace()
+                }
+            )
+            
+            sseTaskClient?.connect()
+        }
     }
     
     /**
