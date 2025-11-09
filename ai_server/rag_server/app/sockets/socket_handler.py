@@ -367,9 +367,13 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
     # GREEN → 최종 답변 생성
     else:
         snippets = [h["source"]["content"] for h in used_hits]
-        answer_text = llm_generate_answer(effective_query, snippets)
+        answer_result = llm_generate_answer(effective_query, snippets, used_hits)
         
-        # TTS 생성
+        # 구조화된 답변에서 TTS 텍스트 추출
+        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+        structured_answer = answer_result  # 전체 구조화된 답변
+        
+        # TTS 생성 (TTS 친화적 텍스트 사용)
         try:
             tts_result = text_to_speech(answer_text)
             audio_url = None  # 또는 파일 저장 후 URL 생성
@@ -397,21 +401,22 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
         memory.clear_history(session_id)
         clarify_sessions.pop(session_id, None)
         
-        # 모바일로 최종 답변 전송
+        # 모바일로 최종 답변 전송 (구조화된 답변 포함)
         await broadcast_to("mobile", "final_answer", {
             "session_id": session_id,
             "turn_id": turn_id,
             "status": "completed",
-            "answer": answer_text,
+            "answer": answer_text,  # TTS 친화적 텍스트
+            "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
             "audio_content": tts_result.get("audio_content") if tts_result else None,
             "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
-            "citations": [
+            "citations": structured_answer.get("citations", [
                 {
                     "section": h["source"]["section"],
                     "pages": h["source"]["pages"],
                 }
                 for h in used_hits[:3]
-            ]
+            ])
         })
         
         print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
@@ -583,11 +588,15 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # GREEN → 최종 답변 생성 (GPT-4o)
             # 이미 위에서 RAG 검색 및 Evidence Check 완료됨
             
-            # 최종 답변 생성 (GPT-4o)
+            # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
             snippets = [h["source"]["content"] for h in used_hits]
-            answer_text = llm_generate_answer(effective_query, snippets)
+            answer_result = llm_generate_answer(effective_query, snippets, used_hits)
             
-            # TTS 생성
+            # 구조화된 답변에서 TTS 텍스트 추출
+            answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+            structured_answer = answer_result  # 전체 구조화된 답변
+            
+            # TTS 생성 (TTS 친화적 텍스트 사용)
             try:
                 tts_result = text_to_speech(answer_text)
                 audio_content = tts_result.get("audio_content")
@@ -603,13 +612,14 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 "type": "final_answer",
                 "data": {
                     "answer": answer_text,
-                    "citations": [
+                    "structured_answer": structured_answer,
+                    "citations": structured_answer.get("citations", [
                         {
                             "section": h["source"]["section"],
                             "pages": h["source"]["pages"],
                         }
                         for h in used_hits[:3]
-                    ]
+                    ])
                 }
             })
             
@@ -617,21 +627,22 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             memory.clear_history(session_id)
             clarify_sessions.pop(session_id, None)
             
-            # 최종 답변 전송
+            # 최종 답변 전송 (구조화된 답변 포함)
             await broadcast_to("mobile", "final_answer", {
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "status": "completed",
-                "answer": answer_text,
+                "answer": answer_text,  # TTS 친화적 텍스트
+                "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
                 "audio_content": audio_content,
                 "audio_encoding": audio_encoding,
-                "citations": [
+                "citations": structured_answer.get("citations", [
                     {
                         "section": h["source"]["section"],
                         "pages": h["source"]["pages"],
                     }
                     for h in used_hits[:3]
-                ]
+                ])
             })
             
             print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
