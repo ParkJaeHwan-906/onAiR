@@ -1,8 +1,0 @@
-{
-  "classes": [
-    "AI_SUPPORTER",
-    "OPERATOR"
-  ],
-  "embedding_model": "BAAI/bge-small-en-v1.5",
-  "embedding_dim": 384
-}

@@ -93,22 +93,63 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
     
     # 히스토리 로드
     history = memory.get_history(session_id)
-    history_context = ""
     
-    # 최근 사용자 query 2개 결합
-    user_lines = []
-    for ev in reversed(history):
-        if ev.get("role") == "user" and ev.get("type") in ["query", "streaming_stt", "clarify_response"]:
-            text = ev.get("data", {}).get("text", "") or ev.get("data", {}).get("query", "") or ev.get("data", {}).get("response", "")
-            if text:
-                user_lines.append(text)
-            if len(user_lines) >= 2:
-                break
+    # Multi-Turn Context Aggregation: 이전 대화 맥락을 효과적으로 집계
+    def build_effective_query(history: List[Dict[str, Any]], current_query: str) -> tuple:
+        """
+        이전 대화 맥락을 효과적으로 집계하여 effective_query 생성
+        """
+        # 1. 사용자 질문들 수집
+        user_queries = []
+        for ev in reversed(history[-10:]):
+            if ev.get("role") == "user":
+                text = ev.get("data", {}).get("text") or ev.get("data", {}).get("query") or ev.get("data", {}).get("response", "")
+                if text:
+                    user_queries.append(text)
+        
+        # 2. 시스템 Clarify 질문 수집
+        clarify_questions = []
+        for ev in reversed(history[-10:]):
+            if ev.get("role") == "system" and ev.get("type") == "clarify":
+                guide = ev.get("data", {}).get("clarify_guidance", "")
+                if guide:
+                    clarify_questions.append(guide)
+        
+        # 3. 누락된 정보 추적
+        missing_info_history = []
+        for ev in reversed(history[-10:]):
+            if ev.get("type") == "evidence":
+                missing = ev.get("data", {}).get("missing_info", [])
+                missing_info_history.extend(missing)
+        
+        # 4. Effective Query 구성
+        if len(user_queries) >= 2:
+            # 이전 질문 + 현재 질문 결합
+            effective = f"{user_queries[-2]} {user_queries[-1]} {current_query}"
+        elif user_queries:
+            effective = f"{user_queries[-1]} {current_query}"
+        else:
+            effective = current_query
+        
+        # 누락된 정보가 이번 질문에 포함되었는지 확인
+        remaining_missing = []
+        if missing_info_history:
+            missing_set = set(missing_info_history[-3:])  # 최근 3개만
+            
+            # 예: "부품명"이 누락되었다고 했는데, 이번 질문에 "송풍기"가 포함되면 제거
+            if any(keyword in effective for keyword in ["송풍기", "모터", "댐퍼", "필터", "펌프", "압축기"]):
+                missing_set.discard("부품명")
+            if any(keyword in effective for keyword in ["회전 안 함", "회전하지 않", "소음", "과열", "누수", "진동"]):
+                missing_set.discard("증상")
+            if any(keyword in effective for keyword in ["전원", "차단기", "비상정지", "보호계전기"]):
+                missing_set.discard("운전상태")
+            
+            remaining_missing = list(missing_set)
+        
+        return effective, remaining_missing
     
-    if user_lines:
-        history_context = " \n".join(reversed(user_lines))
-    
-    effective_query = f"{history_context} \n{query}" if history_context else query
+    # Effective Query 생성
+    effective_query, remaining_missing = build_effective_query(history, query)
     normalized_query = normalize_query_style(effective_query)
     
     # Hybrid Search + Rerank
@@ -210,9 +251,13 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
     # GREEN → 최종 답변 생성
     else:
         snippets = [h["source"]["content"] for h in used_hits]
-        answer_text = llm_generate_answer(effective_query, snippets)
+        answer_result = llm_generate_answer(effective_query, snippets, used_hits)
         
-        # TTS 생성
+        # 구조화된 답변에서 TTS 텍스트 추출
+        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+        structured_answer = answer_result  # 전체 구조화된 답변
+        
+        # TTS 생성 (TTS 친화적 텍스트 사용)
         try:
             tts_result = text_to_speech(answer_text)
         except Exception as e:
