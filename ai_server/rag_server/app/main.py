@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
 from app.routers import chat_router, tts_router, stt_router, clarify_router, ar_process
 from app.sockets.socket_handler import init_socketio, sio
+from app.core.config import settings
 
 USE_SOCKETIO = True
 
