@@ -1,7 +1,8 @@
 # === Bridge Server (Python 3.10) ===
+# threading 모드 사용 (eventlet 제거)
 python-socketio[server]==5.11.3
 python-engineio==4.12.3
-eventlet==0.36.1
+werkzeug>=2.0.0  # WSGI 서버용 (threading 모드에서 필요)
 
 # === Google Cloud STT ===
 google-cloud-speech==2.20.0
