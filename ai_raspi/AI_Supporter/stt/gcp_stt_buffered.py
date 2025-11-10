@@ -91,13 +91,16 @@ class GcpBufferedStt:
         # 마이크 안정화 대기 (0.1초)
         await asyncio.sleep(0.1)
         
+        print("=" * 60)
+        print(f"🎤 [단계 3-1] 음성 수집 시작")
+        print(f"   수집 시간: {self.buffer_duration}초")
+        print(f"   음성 소스: {type(mic).__name__}")
+        print("=" * 60)
+        
         # 3~5초 동안 음성 수집
         buffer = []
         start_time = time.time()
         target_duration = self.buffer_duration
-        
-        print(f"🎤 음성 수집 시작 ({target_duration}초)...")
-        print(f"   음성 소스: {type(mic).__name__}")
         
         chunk_count = 0
         while time.time() - start_time < target_duration:
