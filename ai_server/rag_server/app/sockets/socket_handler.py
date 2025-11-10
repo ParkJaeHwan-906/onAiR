@@ -881,11 +881,7 @@ async def handle_clarify_response(sid, data):
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
     sender_device = device_map.get(sid, "unknown")
-
-    if sender_device == "unknown":
-        return
-
-    if not data:
+    if sender_device == "unknown" or not data:
         return
 
     np_data = np.frombuffer(data, np.uint8)
@@ -908,31 +904,38 @@ async def handle_video_frame(sid, data):
         updated_markers = []
 
         for m in ar_markers:
-            world_point = np.array(m["point"], dtype=np.float32).reshape(3, 1)
+            # --- 월드 좌표 복원 ---
+            wx, wy = float(m["x"]), float(m["y"])
+            wz = 0.0  # 평면 z=0 기준
+            world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
+
             size = m.get("size", 1.0)
 
-            # ---- 카메라 좌표계로 변환 ----
+            # --- 카메라 좌표계로 변환 ---
             cam_point = R @ (world_point - t)
             if cam_point[2, 0] <= 0:
                 continue
 
-            # ---- 2D 투영 (픽셀 좌표계) ----
+            # --- 2D 투영 (픽셀 좌표계) ---
             uv = motion_core.K @ cam_point
             u = float(uv[0, 0] / uv[2, 0])
             v = float(uv[1, 0] / uv[2, 0])
 
-            # ---- 깊이에 따른 크기 조정 ----
-            proj_size = size / cam_point[2, 0]  # 깊이 반비례 scaling
+            # --- 깊이에 따른 크기 조정 ---
+            proj_size = size / cam_point[2, 0]
 
             updated_markers.append({
                 "idx": m["idx"],
-                "x": round(u, 2),       # ← u → x
-                "y": round(v, 2),       # ← v → y
+                "x": round(u, 2),
+                "y": round(v, 2),
                 "size": round(proj_size, 3)
             })
-        
+
         if updated_markers:
+            # ✅ ar_markers 자체도 갱신 (프레임 단위 업데이트)
             ar_markers[:] = updated_markers
+
+            # ✅ PC 클라이언트로 브로드캐스트
             await broadcast_to("pc", "ar-info", {"markers": ar_markers})
             # print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
 
@@ -999,13 +1002,13 @@ async def handle_control_raspi(sid, data):
 # ========================================
 
 # 전역 관리 리스트
-ar_markers = []  # [{ "idx": int, "point": (x, y, z), "size": float }, ...]
+ar_markers = []  # [{ "idx": int, "x": float, "y": float, "size": float }, ...]
 
 async def handle_ar_marker(sid, data):
     """
     웹페이지에서 AR 마커 생성을 요청하면,
-    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)와 상대 크기(size)를 계산하고
-    이를 저장 및 클라이언트로 전송합니다.
+    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)를 계산하고
+    상대 크기(size)를 추정해 저장 및 클라이언트로 전송합니다.
     """
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
@@ -1024,25 +1027,27 @@ async def handle_ar_marker(sid, data):
     if rel_size is None:
         rel_size = 1.0  # fallback 값
 
-    # === 2️⃣ 픽셀 → 월드 좌표 변환 ===
+    # === 2️⃣ 픽셀 → 월드 좌표 변환 (plane_z=0 기준)
     world_point = motion_core.pixel_to_world_on_plane(marker_x, marker_y, plane_z=0.0)
     if world_point is None:
-        world_point = (0.0, 0.0, 0.0)
+        wx, wy, wz = 0.0, 0.0, 0.0
+    else:
+        wx, wy, wz = world_point
 
-    # === 3️⃣ 전역 리스트에 저장 ===
+    # === 3️⃣ 전역 리스트에 저장 (단순화된 구조)
     marker_idx = len(ar_markers) + 1
     marker_info = {
         "idx": marker_idx,
-        "point": world_point,
+        "x": round(wx, 3),
+        "y": round(wy, 3),
         "size": round(rel_size, 3)
     }
     ar_markers.append(marker_info)
 
     # === 4️⃣ 콘솔 로그 출력 ===
-    wx, wy, wz = world_point
     print(f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
           f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}")
 
-    # === 5️⃣ 클라이언트로 다시 전송 ===
-    await sio.emit("ar-info", ar_markers, to=sid)
-    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}")
+    # === 5️⃣ 클라이언트로 전송 ===
+    await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
+    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, total={len(ar_markers)}")
