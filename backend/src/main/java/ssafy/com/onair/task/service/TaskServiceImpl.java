@@ -31,8 +31,10 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public List<TaskListDto> getTaskList(CustomUserDetails user, Long equipmentId, Integer action) {
-        return user.getUserInfo().getRole().equals("관리자") ? tasksRepository.getTaskListAsAdmin(user.getCompanyId(), equipmentId, action) :
-                tasksRepository.getTaskListAsWorker(user.getCompanyId(), user.getUserInfo().getEquipmentId(), user.getUserAccountId(), action);
+        List<TaskListDto> taskList = (user.getUserInfo().getRole().equals("관리자") ? tasksRepository.getTaskListAsAdmin(user.getCompanyId(), equipmentId, action) :
+                tasksRepository.getTaskListAsWorker(user.getCompanyId(), user.getUserInfo().getEquipmentId(), user.getUserAccountId(), action));
+        taskList.forEach(TaskListDto::mapAction);
+        return taskList;
     }
 
     @Transactional
