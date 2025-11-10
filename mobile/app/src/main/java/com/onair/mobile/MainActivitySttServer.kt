@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
@@ -53,7 +54,7 @@ class MainActivitySttServer : AppCompatActivity() {
     
     // 서버 URL 설정
     // EC2에 배포된 FastAPI 서버 URL
-    private val FASTAPI_SERVER_URL = "https://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
+    private val FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
 
@@ -535,10 +536,12 @@ class MainActivitySttServer : AppCompatActivity() {
             // isWaitingForClarification은 이미 true 상태 유지
         } else {
             // 최종 답변 도착
-            handleFinalAnswer(ragResponse)
-            isWaitingForClarification = false
-            sessionManager.resetSession()
-            currentSessionId = null
+            lifecycleScope.launch {
+                handleFinalAnswer(ragResponse)
+                isWaitingForClarification = false
+                sessionManager.resetSession()
+                currentSessionId = null
+            }
         }
     }
     
@@ -589,7 +592,7 @@ class MainActivitySttServer : AppCompatActivity() {
         // 기타 리소스 정리
         socketIoSttClient.disconnect()
         sttRepository.cleanup()
-        intentRepository.cleanup()
+        // intentRepository.cleanup()  // IntentRepository에는 cleanup 메서드가 없음
         ttsRepository.cleanup()
         Log.i(TAG, "🛑 리소스 정리 완료")
     }

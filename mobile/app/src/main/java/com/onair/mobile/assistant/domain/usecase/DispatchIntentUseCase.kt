@@ -3,6 +3,7 @@ package com.onair.mobile.assistant.domain.usecase
 import android.util.Log
 import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.core.model.dto.IntentClassificationDto
+import com.onair.mobile.assistant.core.model.dto.RagResponse
 import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.domain.repository.LlmRepository
 

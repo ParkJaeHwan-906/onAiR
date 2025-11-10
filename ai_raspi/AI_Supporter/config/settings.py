@@ -20,9 +20,9 @@ SILENCE_TIMEOUT_SEC = 0.5  # 침묵 타임아웃 (초)
 
 # === FastAPI 서버 설정 ===
 # FastAPI 서버 URL (Socket.IO 서버도 통합되어 있음)
-# EC2 배포 주소: "https://k13a407.p.ssafy.io/ai"
+# EC2 배포 주소: "http://k13a407.p.ssafy.io/ai"
 # 로컬 테스트 시: "http://localhost:8000"
-FASTAPI_SERVER_URL = "https://k13a407.p.ssafy.io/ai"
+FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"
 
 # RAG/WS 엔드포인트 (필요 시 수정 가능)
 RAG_CHAT_ENDPOINT = "/rag/chat"
