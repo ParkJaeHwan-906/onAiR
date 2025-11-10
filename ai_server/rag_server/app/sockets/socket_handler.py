@@ -19,6 +19,7 @@ from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
 from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
+from app.ar import motion_core
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -878,8 +879,12 @@ async def handle_clarify_response(sid, data):
 
 @sio.on("video_frame")
 async def handle_video_frame(sid, data):
-    """라즈베리파이 → JPEG binary 수신 후 모션 추정"""
+    """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
     sender_device = device_map.get(sid, "unknown")
+
+    if sender_device == "unknown":
+        return
+
     if not data:
         return
 
@@ -889,21 +894,50 @@ async def handle_video_frame(sid, data):
         print("⚠️ Failed to decode frame")
         return
 
-    # === 모션 계산 ===
-    # result = await motion_core.process_frame(frame, sid=sid)
+    # === 1️⃣ 모션 계산 ===
+    result = await motion_core.process_frame(frame, sid=sid)
+    if result["status"] == "ok":
+        x, y, z = result["x"], result["y"], result["z"]
+        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+    else:
+        print(f"⚠️ Motion estimation status: {result['status']}")
 
-    # === 결과 전송 ===
-    # if result["status"] == "ok":
-    #     x, y, z = result["x"], result["y"], result["z"]
-    #     print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-    #     await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
-    # else:
-    #     print(f"⚠️ Motion estimation status: {result['status']}")
+    # === 2️⃣ AR 마커 업데이트 ===
+    if len(ar_markers) > 0:
+        R, t = motion_core.get_pose()
+        updated_markers = []
 
-    # === 프레임 브로드캐스트 (PC 디스플레이용) ===
+        for m in ar_markers:
+            world_point = np.array(m["point"], dtype=np.float32).reshape(3, 1)
+            size = m.get("size", 1.0)
+
+            # ---- 카메라 좌표계로 변환 ----
+            cam_point = R @ (world_point - t)
+            if cam_point[2, 0] <= 0:
+                continue
+
+            # ---- 2D 투영 (픽셀 좌표계) ----
+            uv = motion_core.K @ cam_point
+            u = float(uv[0, 0] / uv[2, 0])
+            v = float(uv[1, 0] / uv[2, 0])
+
+            # ---- 깊이에 따른 크기 조정 ----
+            proj_size = size / cam_point[2, 0]  # 깊이 반비례 scaling
+
+            updated_markers.append({
+                "idx": m["idx"],
+                "x": round(u, 2),       # ← u → x
+                "y": round(v, 2),       # ← v → y
+                "size": round(proj_size, 3)
+            })
+
+        if updated_markers:
+            await broadcast_to("pc", "ar-info", {"markers": updated_markers})
+            print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
+
+    # === 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용) ===
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-
 
 # ========================================
 # Clarify 입력 수신 (모바일 → FastAPI)
@@ -962,14 +996,52 @@ async def handle_control_raspi(sid, data):
 # ========================================
 # AR 마커 생성 이벤트
 # ========================================
+
+# 전역 관리 리스트
+ar_markers = []  # [{ "idx": int, "point": (x, y, z), "size": float }, ...]
+
 async def handle_ar_marker(sid, data):
     """
-    웹페이지에서 AR 마커 생성을 요청하면 해당 좌표에 AR 오브젝트를 생성하고, 좌표 추적을 시작합니다.
+    웹페이지에서 AR 마커 생성을 요청하면,
+    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)와 상대 크기(size)를 계산하고
+    이를 저장 및 클라이언트로 전송합니다.
     """
     sender_device = device_map.get(sid, "unknown")
-    
-    marker_x = data.get("marker_x", None)
-    marker_y = data.get("marker_y", None)
-    print(f"AR 마커 생성 좌표 : {marker_x}, {marker_y}")
-    
+    if sender_device == "unknown":
+        print("⚠️ Unknown sender")
+        return
 
+    marker_x = data.get("marker_x")
+    marker_y = data.get("marker_y")
+
+    if marker_x is None or marker_y is None:
+        print("⚠️ Invalid marker data")
+        return
+
+    # === 1️⃣ 상대 size 계산 ===
+    rel_size = motion_core.relative_size_at(marker_x, marker_y)
+    if rel_size is None:
+        rel_size = 1.0  # fallback 값
+
+    # === 2️⃣ 픽셀 → 월드 좌표 변환 ===
+    world_point = motion_core.pixel_to_world_on_plane(marker_x, marker_y, plane_z=0.0)
+    if world_point is None:
+        world_point = (0.0, 0.0, 0.0)
+
+    # === 3️⃣ 전역 리스트에 저장 ===
+    marker_idx = len(ar_markers) + 1
+    marker_info = {
+        "idx": marker_idx,
+        "point": world_point,
+        "size": round(rel_size, 3)
+    }
+    ar_markers.append(marker_info)
+
+    # === 4️⃣ 콘솔 로그 출력 ===
+    wx, wy, wz = world_point
+    print(f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
+          f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}")
+
+    # === 5️⃣ 클라이언트로 다시 전송 ===
+    await sio.emit("ar-info", marker_info, to=sid)
+    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}")
