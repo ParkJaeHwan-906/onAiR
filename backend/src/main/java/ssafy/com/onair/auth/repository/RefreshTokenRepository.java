@@ -19,7 +19,8 @@ public interface RefreshTokenRepository {
     @Select("""
             SELECT `refresh_token` FROM `refresh_token`
             WHERE `user_account_id` = #{userAccountId}
-            AND `expired_at` > NOW();
+            AND `expired_at` > NOW()
+            LIMIT 1;
             """)
     Optional<String> selectRefreshTokenByUserAccountId(Long userAccountId);
 
