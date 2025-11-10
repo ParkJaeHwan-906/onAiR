@@ -47,6 +47,9 @@ MEL_FB = mel_filterbank()
 # -----------------------------
 class WakewordDetector:
     def __init__(self, model_path="/home/pi/wakeword_onair_cnn.tflite"):
+        # model_path가 None이면 기본 경로 사용
+        if model_path is None:
+            model_path = "/home/pi/wakeword_onair_cnn.tflite"
         self.model_path = model_path
         self.interpreter = None
         self.input_details = None
@@ -58,7 +61,14 @@ class WakewordDetector:
 
     def _load_model(self):
         """TFLite 모델 로드"""
+        import os
         try:
+            # 파일 존재 여부 확인
+            if not os.path.exists(self.model_path):
+                print(f"⚠️ Wakeword 모델 파일을 찾을 수 없습니다: {self.model_path}")
+                self.interpreter = None
+                return
+            
             self.interpreter = tflite.Interpreter(model_path=self.model_path)
             self.interpreter.allocate_tensors()
             self.input_details = self.interpreter.get_input_details()[0]
@@ -66,6 +76,7 @@ class WakewordDetector:
             print(f"✅ Wakeword 모델 로드 완료: {self.model_path}")
         except Exception as e:
             print(f"⚠️ Wakeword 모델 로드 실패: {e}")
+            print(f"   모델 경로: {self.model_path}")
             self.interpreter = None
 
     def extract_features(self, audio):
@@ -94,36 +105,59 @@ class WakewordDetector:
         pred = self.interpreter.get_tensor(self.output_details["index"])[0]
         return pred
 
+    def process_audio_chunk(self, audio_chunk):
+        """
+        MicStream에서 받은 오디오 청크를 처리 (16000Hz 기대)
+        별도 스트림을 열지 않고 외부에서 오디오 데이터를 받아서 처리
+        주의: 이 메서드는 콜백에서 호출되므로 블로킹 작업을 하면 안 됨
+        """
+        if self.interpreter is None or not self.is_running:
+            return
+        
+        # 버퍼에 추가
+        if not hasattr(self, 'audio_buffer'):
+            self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
+        
+        # 중복 방지: 최근 감지 시간 확인
+        if not hasattr(self, 'last_detection_time'):
+            self.last_detection_time = 0
+        
+        # 오디오 데이터를 버퍼에 추가 (1차원 배열로 변환)
+        if isinstance(audio_chunk, np.ndarray):
+            if len(audio_chunk.shape) > 1:
+                audio_chunk = audio_chunk.flatten()
+            self.audio_buffer.extend(audio_chunk)
+        
+        # 버퍼가 충분히 쌓이면 (1초 이상) Wakeword 감지
+        # 중복 방지: 최근 1초 이내에 감지했으면 스킵
+        current_time = time.time()
+        if len(self.audio_buffer) >= SAMPLE_RATE and (current_time - self.last_detection_time) > 1.0:
+            audio = np.array(list(self.audio_buffer))
+            pred = self.predict_wakeword(audio)
+            if pred is not None:
+                label = "onair" if np.argmax(pred) == 0 else "negative"
+                conf = np.max(pred)
+                if label == "onair" and conf > WAKEWORD_THRESHOLD:
+                    print(f"🚀 Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
+                    self.detection_queue.put(True)
+                    self.audio_buffer.clear()
+                    self.last_detection_time = current_time  # 중복 방지
+
     def _detection_loop(self):
-        """Wakeword 감지 루프 (별도 스레드에서 실행)"""
-        buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
-
-        def callback(indata, frames, time_info, status):
-            buffer.extend(indata[:, 0])
-            if len(buffer) >= SAMPLE_RATE:
-                audio = np.array(buffer)
-                pred = self.predict_wakeword(audio)
-                if pred is not None:
-                    label = "onair" if np.argmax(pred) == 0 else "negative"
-                    conf = np.max(pred)
-                    if label == "onair" and conf > WAKEWORD_THRESHOLD:
-                        print(f"🚀 Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
-                        self.detection_queue.put(True)
-                        buffer.clear()
-                        time.sleep(1.0)  # 중복 방지
-
-        try:
-            with sd.InputStream(
-                callback=callback,
-                channels=1,
-                samplerate=SAMPLE_RATE,
-                device="hw:CARD=sndrpigooglevoi,DEV=0"  # 명시적 장치 지정
-            ):
-                print("🎧 Wakeword 감지 대기 중... (onAir)")
-                while self.is_running:
-                    time.sleep(0.1)
-        except Exception as e:
-            print(f"❌ Wakeword 감지 오류: {e}")
+        """Wakeword 감지 루프 (별도 스레드에서 실행) - MicStream에서 오디오 데이터를 받음"""
+        # 모델이 없으면 더미 모드
+        if self.interpreter is None:
+            print("⚠️ Wakeword 모델이 없어 더미 모드로 동작합니다")
+            while self.is_running:
+                time.sleep(0.1)
+            return
+        
+        # 오디오 버퍼 초기화
+        self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
+        
+        print("🎧 Wakeword 감지 대기 중... (MicStream에서 오디오 데이터 수신)")
+        while self.is_running:
+            time.sleep(0.1)
 
     def start(self):
         """Wakeword 감지 시작"""
