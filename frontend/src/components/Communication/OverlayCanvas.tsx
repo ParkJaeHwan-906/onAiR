@@ -89,11 +89,15 @@ export const OverlayCanvas = ({
         // 배열인지 확인하고 안전하게 처리
         if (Array.isArray(data)) {
           setArMarkers(data);
-        } else if (data && typeof data === 'object') {
-          // 객체로 감싸져 있을 수 있음 (예: { markers: [...] })
-          console.warn('Data is not an array, trying to extract:', data);
-          // 빈 배열로 설정하여 에러 방지
-          setArMarkers([]);
+        } else if (data && typeof data === 'object' && 'markers' in data) {
+          // 객체로 감싸져 있는 경우 (예: { markers: [...] })
+          const markersData = data as { markers: unknown };
+          if (Array.isArray(markersData.markers)) {
+            setArMarkers(markersData.markers);
+          } else {
+            console.warn('data.markers is not an array:', markersData.markers);
+            setArMarkers([]);
+          }
         } else {
           console.error('Invalid ar-info data:', data);
           setArMarkers([]);
