@@ -58,8 +58,10 @@ public class SseManager {
                             .event()
                             .name(request.getEventName())
                             .data(request.getData())
+                            .comment("flush")
             );
         } catch (IOException e) {
+            emitter.complete();
             throw new IllegalArgumentException("SSE 전송에 실패했습니다.");
         }
     }
@@ -130,9 +132,9 @@ public class SseManager {
     }
 
     /**
-     * SSE 연결 유지를 위해 모든 emitter에게 30초마다 heart beat 이벤트 전달
+     * SSE 연결 유지를 위해 모든 emitter에게 10초마다 heart beat 이벤트 전달
      */
-    @Scheduled(fixedRate = 30 * 1000)
+    @Scheduled(fixedRate = 10 * 1000)
     public void sendHeartBeat(){
         this.emitters.forEach((accountId, emitter) -> {
             sendSseMessage(emitter, SseMessageDto.builder()
