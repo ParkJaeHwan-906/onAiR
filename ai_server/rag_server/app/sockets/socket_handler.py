@@ -930,9 +930,10 @@ async def handle_video_frame(sid, data):
                 "y": round(v, 2),       # ← v → y
                 "size": round(proj_size, 3)
             })
-
+        
         if updated_markers:
-            await broadcast_to("pc", "ar-info", {"markers": updated_markers})
+            ar_markers[:] = updated_markers
+            await broadcast_to("pc", "ar-info", {"markers": ar_markers})
             # print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
 
     # === 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용) ===
@@ -1043,5 +1044,5 @@ async def handle_ar_marker(sid, data):
           f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}")
 
     # === 5️⃣ 클라이언트로 다시 전송 ===
-    await sio.emit("ar-info", marker_info, to=sid)
+    await sio.emit("ar-info", ar_markers, to=sid)
     print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}")
