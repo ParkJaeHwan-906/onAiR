@@ -1036,56 +1036,58 @@ async def handle_video_frame(sid, data):
         print("⚠️ Failed to decode frame")
         return
 
-    # === 1️⃣ 모션 계산 ===
+    # 1) 모션 계산
     result = await motion_core.process_frame(frame, sid=sid)
-    if result["status"] == "ok":
-        x, y, z = result["x"], result["y"], result["z"]
-        # print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-    # else:
-        # print(f"⚠️ Motion estimation status: {result['status']}")
+    # 로그는 필요시만
+    # if result["status"] == "ok":
+    #     x, y, z = result["x"], result["y"], result["z"]
 
-    # === 2️⃣ AR 마커 업데이트 ===
-    if len(ar_markers) > 0:
+    # 2) AR 마커 업데이트 (새 포맷: {idx, info:{x,y,size}})
+    if ar_markers:
         R, t = motion_core.get_pose()
         updated_markers = []
 
         for m in ar_markers:
-            # --- 월드 좌표 복원 ---
-            wx, wy = float(m["x"]), float(m["y"])
-            wz = 0.0  # 평면 z=0 기준
-            world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
-
-            size = m.get("size", 1.0)
-
-            # --- 카메라 좌표계로 변환 ---
-            cam_point = R @ (world_point - t)
-            if cam_point[2, 0] <= 0:
+            info = m.get("info", {})
+            if "x" not in info or "y" not in info:
                 continue
 
-            # --- 2D 투영 (픽셀 좌표계) ---
+            # 월드 평면(z=0) 좌표 → 3D 컬럼벡터
+            wx, wy = float(info["x"]), float(info["y"])
+            wz = 0.0
+            world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
+
+            base_size = float(info.get("size", 1.0))
+
+            # 카메라 좌표계로 변환: P_cam = R * (P_world - t)
+            cam_point = R @ (world_point - t)
+            if cam_point[2, 0] <= 0:
+                # 카메라 뒤쪽이면 스킵
+                continue
+
+            # 2D 투영 (픽셀 좌표)
             uv = motion_core.K @ cam_point
             u = float(uv[0, 0] / uv[2, 0])
             v = float(uv[1, 0] / uv[2, 0])
 
-            # --- 깊이에 따른 크기 조정 ---
-            proj_size = size / cam_point[2, 0]
+            # 깊이에 따른 크기 조정 (반비례)
+            proj_size = base_size / cam_point[2, 0]
 
             updated_markers.append({
                 "idx": m["idx"],
-                "x": round(u, 2),
-                "y": round(v, 2),
-                "size": round(proj_size, 3)
+                "info": {
+                    "x": round(u, 2),      # 화면 좌표 x
+                    "y": round(v, 2),      # 화면 좌표 y
+                    "size": round(proj_size, 3)
+                }
             })
 
         if updated_markers:
-            # ✅ ar_markers 자체도 갱신 (프레임 단위 업데이트)
+            # 프레임 기준으로 리스트 갱신
             ar_markers[:] = updated_markers
-
-            # ✅ PC 클라이언트로 브로드캐스트
             await broadcast_to("pc", "ar-info", {"markers": ar_markers})
-            # print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
 
-    # === 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용) ===
+    # 3) 프레임 브로드캐스트 (PC 디스플레이용)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
@@ -1146,9 +1148,8 @@ async def handle_control_raspi(sid, data):
 # ========================================
 # AR 마커 생성 이벤트
 # ========================================
-
 # 전역 관리 리스트
-ar_markers = []  # [{ "idx": int, "x": float, "y": float, "size": float }, ...]
+ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
 
 async def handle_ar_marker(sid, data):
     """
@@ -1180,21 +1181,25 @@ async def handle_ar_marker(sid, data):
     else:
         wx, wy, wz = world_point
 
-    # === 3️⃣ 전역 리스트에 저장 (단순화된 구조)
+    # === 3️⃣ 전역 리스트에 저장 (info 필드 구조)
     marker_idx = len(ar_markers) + 1
     marker_info = {
         "idx": marker_idx,
-        "x": round(wx, 3),
-        "y": round(wy, 3),
-        "size": round(rel_size, 3)
+        "info": {
+            "x": round(wx, 3),
+            "y": round(wy, 3),
+            "size": round(rel_size, 3)
+        }
     }
     ar_markers.append(marker_info)
 
     # === 4️⃣ 콘솔 로그 출력 ===
-    print(f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
-          f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}")
+    print(
+        f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
+        f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}"
+    )
 
     # === 5️⃣ 클라이언트로 전송 ===
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, total={len(ar_markers)}")
-    print("send data : ", ar_markers)
+    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, data={ar_markers}")
+
