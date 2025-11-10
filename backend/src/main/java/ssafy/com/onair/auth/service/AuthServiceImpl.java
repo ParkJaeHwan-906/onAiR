@@ -93,8 +93,8 @@ public class AuthServiceImpl implements AuthService{
     @Override
     public LoginResponseDto regenerateRefreshToken(RegenerateRefreshTokenRequestDto request) {
         Long userAccountId = jwtTokenProvider.getUserAccountId(request.getRefreshToken());
-        if(!refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId)
-                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다.")).equals(request.getRefreshToken())) throw new IllegalArgumentException("유효하지 않은 토큰입니다.");
+        refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId, request.getRefreshToken())
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다."));
         refreshTokenRepository.deleteRefreshTokenByUserAccountId(userAccountId);
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(userAccountId))
