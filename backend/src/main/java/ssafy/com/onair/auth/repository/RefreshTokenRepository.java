@@ -20,9 +20,10 @@ public interface RefreshTokenRepository {
             SELECT `refresh_token` FROM `refresh_token`
             WHERE `user_account_id` = #{userAccountId}
             AND `expired_at` > NOW()
+            AND `refresh_token` = #{refreshToken}
             LIMIT 1;
             """)
-    Optional<String> selectRefreshTokenByUserAccountId(Long userAccountId);
+    Optional<String> selectRefreshTokenByUserAccountId(Long userAccountId, String refreshToken);
 
     @Delete("""
             DELETE FROM `refresh_token`
