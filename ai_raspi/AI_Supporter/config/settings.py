@@ -24,3 +24,8 @@ SILENCE_TIMEOUT_SEC = 0.5  # 침묵 타임아웃 (초)
 # 로컬 테스트 시: "http://localhost:8000"
 FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"
 
+# === 디버그 모드 (단계별 수동 실행) ===
+DEBUG_STEP_BY_STEP = True  # True: 각 단계마다 파일 트리거 대기, False: 자동 진행
+DEBUG_STEP_TRIGGER_FILE = "/tmp/next_step_raspi"  # 다음 단계 진행 트리거 파일 경로
+DEBUG_STEP_WAIT_TIMEOUT = 300  # 최대 대기 시간 (초, 기본 5분)
+
