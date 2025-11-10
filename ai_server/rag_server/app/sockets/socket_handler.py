@@ -899,7 +899,7 @@ async def handle_video_frame(sid, data):
     if result["status"] == "ok":
         x, y, z = result["x"], result["y"], result["z"]
         # print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-    else:
+    # else:
         # print(f"⚠️ Motion estimation status: {result['status']}")
 
     # === 2️⃣ AR 마커 업데이트 ===
