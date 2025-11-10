@@ -85,44 +85,44 @@ async def broadcast_to(device_types, event: str, payload: dict):
     sent_count = 0
     
     # 디버깅: 현재 device_map 상태 출력
-    print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
-    print(f"   현재 device_map: {dict(device_map)}")
-    print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    # print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+    # print(f"   현재 device_map: {dict(device_map)}")
+    # print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
     
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
-        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                print(f"   Payload: {str(payload)[:100]}...")
+                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    if sent_count == 0:
-        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    else:
-        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    # if sent_count == 0:
+    #     print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    # else:
+    #     print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -165,11 +165,11 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
     
-    print("=" * 60)
-    print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
-    print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
-    print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
-    print("=" * 60)
+    # print("=" * 60)
+    # print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
+    # print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
+    # print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
+    # print("=" * 60)
     
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -247,10 +247,10 @@ async def handle_stt_result(sid, data):
                 "stt_confidence": confidence  # STT 신뢰도
             })
             
-            print("=" * 60)
-            print(f"✅ [단계 8 완료] 모바일로 intent_result 이벤트 전송 완료")
-            print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
-            print("=" * 60)
+            # print("=" * 60)
+            # print(f"✅ [단계 8 완료] 모바일로 intent_result 이벤트 전송 완료")
+            # print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
+            # print("=" * 60)
             
             # AI_SUPPORTER 분기인 경우 CV 모델 실행
             if intent == "AI_SUPPORTER":
@@ -898,7 +898,7 @@ async def handle_video_frame(sid, data):
     result = await motion_core.process_frame(frame, sid=sid)
     if result["status"] == "ok":
         x, y, z = result["x"], result["y"], result["z"]
-        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+        # print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
     else:
         print(f"⚠️ Motion estimation status: {result['status']}")
 
@@ -933,7 +933,7 @@ async def handle_video_frame(sid, data):
 
         if updated_markers:
             await broadcast_to("pc", "ar-info", {"markers": updated_markers})
-            print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
+            # print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
 
     # === 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용) ===
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
