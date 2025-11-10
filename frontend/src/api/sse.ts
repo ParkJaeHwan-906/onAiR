@@ -92,6 +92,12 @@ export const connectSSE = (
       onMessage(event);
     });
 
+    eventSource.addEventListener("heart beat", (event: any) => {
+      console.log("SSE heart beat 이벤트 수신:", event.data);
+      // 연결 성공 이벤트
+      onMessage(event);
+    });
+
     // 오류 발생 시
     eventSource.onerror = () => {
       const readyState = eventSource?.readyState;
