@@ -33,7 +33,7 @@ class TokenManager(private val context: Context) {
         private const val PREFERENCES_KEY_REFRESH_TOKEN = "refresh_token"
         
         // TODO: 테스트 완료 후 제거 - REFRESH_TOKEN 하드코딩 (임시)
-        private const val HARDCODED_REFRESH_TOKEN = "YOUR_REFRESH_TOKEN_HERE"  // 여기에 실제 REFRESH_TOKEN 입력
+        private const val HARDCODED_REFRESH_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI0IiwidHlwZSI6InJlZnJlc2giLCJpYXQiOjE3NjI1MjYzMDAsImV4cCI6MTc2Mjk1ODMwMH0.qUJN4pPNkXj1oU0BAqmjsU6HPdzQCpaQaP_KaJemgFQ"  // 여기에 실제 REFRESH_TOKEN 입력
         private const val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL
     }
     
@@ -138,7 +138,7 @@ class TokenManager(private val context: Context) {
                 val response = httpClient.newCall(request).execute()
                 
                 if (!response.isSuccessful) {
-                    Log.e(TAG, "❌ 토큰 갱신 실패: HTTP ${response.code()}")
+                    Log.e(TAG, "❌ 토큰 갱신 실패: HTTP ${response.code}")
                     response.body?.let { body ->
                         Log.e(TAG, "응답: ${body.string()}")
                     }

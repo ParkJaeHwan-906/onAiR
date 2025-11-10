@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
@@ -53,13 +54,31 @@ class MainActivitySttServer : AppCompatActivity() {
     
     // 서버 URL 설정
     // EC2에 배포된 FastAPI 서버 URL
-    private val FASTAPI_SERVER_URL = "https://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
+    private val FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
+
+    // 테스트용 UI 참조
+    private lateinit var statusText: android.widget.TextView
+    private lateinit var intentText: android.widget.TextView
+    private lateinit var clarifyText: android.widget.TextView
+    private lateinit var finalAnswerText: android.widget.TextView
+    private lateinit var logText: android.widget.TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)  // 기본 레이아웃 사용
+        
+        // UI 참조 초기화
+        statusText = findViewById(R.id.status_text)
+        intentText = findViewById(R.id.intent_text)
+        clarifyText = findViewById(R.id.clarify_text)
+        finalAnswerText = findViewById(R.id.final_answer_text)
+        logText = findViewById(R.id.log_text)
+        
+        // 초기 상태 표시
+        updateStatus("Socket.IO 연결 대기 중...")
+        addLog("🚀 MainActivitySttServer 시작")
         
         // STT Repository 초기화
         sttRepository = SttRepositoryImpl(this)
@@ -86,6 +105,7 @@ class MainActivitySttServer : AppCompatActivity() {
             onSttResult = { text, type, confidence ->
                 // STT 텍스트 수신 (레거시 WebSocket 대신 Socket.IO 사용)
                 Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
+                addLog("🧠 STT 수신: $text")
                 sttRepository.receiveFromRaspberryPi(text)
             },
             onClarifyResponse = { ragResponse ->
@@ -115,6 +135,24 @@ class MainActivitySttServer : AppCompatActivity() {
             onClarifyQaTurn = { qaTurn ->
                 // Clarify 질문/답변 턴 수신 (작업자 질문 + LLM 답변)
                 handleClarifyQaTurn(qaTurn)
+            },
+            onConnect = {
+                // Socket.IO 연결 성공
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+                updateStatus("✅ Socket.IO 연결 성공")
+                addLog("✅ Socket.IO 서버 연결 성공")
+            },
+            onDisconnect = {
+                // Socket.IO 연결 종료
+                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+                updateStatus("❌ Socket.IO 연결 종료")
+                addLog("❌ Socket.IO 서버 연결 종료")
+            },
+            onConnectError = { error ->
+                // Socket.IO 연결 오류
+                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
+                updateStatus("❌ Socket.IO 연결 오류")
+                addLog("❌ Socket.IO 연결 오류: $error")
             }
         )
         
@@ -146,9 +184,13 @@ class MainActivitySttServer : AppCompatActivity() {
         try {
             socketIoSttClient.connect()
             Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL (Socket.IO 경로: /ws)")
+            updateStatus("Socket.IO 연결 시도 중...")
+            addLog("🔌 Socket.IO 연결 시도: $FASTAPI_SERVER_URL")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
             e.printStackTrace()
+            updateStatus("❌ Socket.IO 연결 실패")
+            addLog("❌ 연결 실패: ${e.message}")
         }
     }
     
@@ -267,9 +309,34 @@ class MainActivitySttServer : AppCompatActivity() {
     private fun updateIntentUI(intentType: IntentType, message: String) {
         runOnUiThread {
             Log.i(TAG, "🖥️ UI 업데이트: intent=$intentType, message=$message")
-            // TODO: 실제 UI 업데이트 로직 구현
-            // 예: findViewById<TextView>(R.id.status_text)?.text = message
-            // 또는 ViewModel을 통해 상태 업데이트
+            intentText.text = "Intent: $intentType - $message"
+            updateStatus(message)
+            addLog("📩 Intent 결과: $intentType - $message")
+        }
+    }
+    
+    /**
+     * 상태 텍스트 업데이트
+     */
+    private fun updateStatus(message: String) {
+        runOnUiThread {
+            statusText.text = message
+        }
+    }
+    
+    /**
+     * 로그 추가
+     */
+    private fun addLog(message: String) {
+        runOnUiThread {
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val logMessage = "[$timestamp] $message\n"
+            logText.append(logMessage)
+            // 스크롤을 맨 아래로
+            val scrollView = logText.parent as? android.widget.ScrollView
+            scrollView?.post {
+                scrollView.fullScroll(android.view.View.FOCUS_DOWN)
+            }
         }
     }
     
@@ -345,33 +412,45 @@ class MainActivitySttServer : AppCompatActivity() {
      */
     private fun handleClarifyQaTurn(qaTurn: ClarifyQaTurnDto) {
         Log.i(TAG, "📩 Clarify 질문/답변 턴 수신: session_id=${qaTurn.session_id}, turn_id=${qaTurn.turn_id}, need_clarify=${qaTurn.need_clarify}")
+        addLog("📩 Clarify Q&A 턴 수신: turn_id=${qaTurn.turn_id}, need_clarify=${qaTurn.need_clarify}")
         
         lifecycleScope.launch {
             try {
                 if (qaTurn.status == "error") {
                     Log.e(TAG, "❌ Clarify 질문/답변 턴 오류: ${qaTurn.user_question}")
-                    // TODO: 에러 처리 UI 업데이트
+                    addLog("❌ Clarify 오류: ${qaTurn.user_question}")
+                    updateStatus("Clarify 오류 발생")
                     return@launch
                 }
                 
                 // 모바일 화면에 작업자 질문 + LLM 답변 표시
-                // TODO: 실제 UI 구현 - 작업자 질문과 LLM 답변을 화면에 표시
+                runOnUiThread {
+                    clarifyText.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
+                    updateStatus("Clarify 진행 중...")
+                }
+                
                 Log.i(TAG, "💬 작업자 질문: ${qaTurn.user_question}")
                 Log.i(TAG, "🤖 LLM 답변: ${qaTurn.llm_answer}")
+                addLog("💬 질문: ${qaTurn.user_question}")
+                addLog("🤖 답변: ${qaTurn.llm_answer.take(50)}...")
                 
                 // TTS 음성 파일 재생
                 if (qaTurn.audio_content != null && qaTurn.audio_content.isNotBlank()) {
+                    addLog("🔊 TTS 재생 시작")
                     ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding)
                 }
                 
                 // need_clarify가 false면 최종 답변 대기 (final_answer 이벤트 수신 대기)
                 if (!qaTurn.need_clarify) {
                     Log.i(TAG, "✅ 충분히 구체화됨 - 최종 답변 대기 중")
+                    addLog("✅ 충분히 구체화됨 - 최종 답변 대기 중")
+                    updateStatus("최종 답변 생성 중...")
                     // final_answer 이벤트를 기다림
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Clarify 질문/답변 턴 처리 실패: ${e.message}")
                 e.printStackTrace()
+                addLog("❌ Clarify 처리 실패: ${e.message}")
             }
         }
     }
@@ -409,12 +488,24 @@ class MainActivitySttServer : AppCompatActivity() {
      */
     private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
         Log.i(TAG, "✅ 최종 답변 수신: session_id=${finalAnswer.session_id}, answer=${finalAnswer.answer.take(50)}...")
+        addLog("✅ 최종 답변 수신: ${finalAnswer.answer.take(100)}...")
+        
+        // UI 업데이트
+        runOnUiThread {
+            finalAnswerText.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
+            updateStatus("최종 답변 수신 완료")
+        }
         
         handleFinalAnswer(
             answer = finalAnswer.answer,
             audioContent = finalAnswer.audio_content,
             mimeType = finalAnswer.audio_encoding
         )
+        
+        // TTS 재생 로그
+        if (finalAnswer.audio_content != null && finalAnswer.audio_content.isNotBlank()) {
+            addLog("🔊 최종 답변 TTS 재생 시작")
+        }
         
         isWaitingForClarification = false
         sessionManager.resetSession()
@@ -463,10 +554,12 @@ class MainActivitySttServer : AppCompatActivity() {
             // isWaitingForClarification은 이미 true 상태 유지
         } else {
             // 최종 답변 도착
-            handleFinalAnswer(ragResponse)
-            isWaitingForClarification = false
-            sessionManager.resetSession()
-            currentSessionId = null
+            lifecycleScope.launch {
+                handleFinalAnswer(ragResponse)
+                isWaitingForClarification = false
+                sessionManager.resetSession()
+                currentSessionId = null
+            }
         }
     }
     
@@ -517,7 +610,7 @@ class MainActivitySttServer : AppCompatActivity() {
         // 기타 리소스 정리
         socketIoSttClient.disconnect()
         sttRepository.cleanup()
-        intentRepository.cleanup()
+        // intentRepository.cleanup()  // IntentRepository에는 cleanup 메서드가 없음
         ttsRepository.cleanup()
         Log.i(TAG, "🛑 리소스 정리 완료")
     }

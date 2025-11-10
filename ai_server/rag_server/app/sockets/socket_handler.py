@@ -81,12 +81,19 @@ async def broadcast_to(device_types, event: str, payload: dict):
     # ✅ dictionary snapshot으로 안전한 iteration
     targets = list(device_map.items())
     sent_count = 0
+    
+    # 연결된 디바이스 확인
+    available_devices = [dev for sid, dev in targets if dev in device_types]
+    if not available_devices:
+        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        return
 
     for sid, dev in targets:
         if dev in device_types:
             try:
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
+                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:10]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
                 print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
@@ -96,6 +103,9 @@ async def broadcast_to(device_types, event: str, payload: dict):
                         del device_map[sid]
                 except Exception:
                     pass
+    
+    if sent_count == 0:
+        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
 
 
 # ========================================
@@ -105,7 +115,11 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        print(f"✅ Client connected: {sid}")
+        # 클라이언트 정보 확인
+        user_agent = environ.get("HTTP_USER_AGENT", "unknown")
+        remote_addr = environ.get("REMOTE_ADDR", "unknown")
+        print(f"✅ Client connected: {sid} (from {remote_addr}, user_agent={user_agent[:50]}...)")
+        
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
@@ -135,6 +149,7 @@ async def handle_register_device(sid, data):
         await sio.save_session(sid, {"device": device})
     
     print(f"🔗 Registered device: {device} ({sid})")
+    print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
 
@@ -182,6 +197,8 @@ async def handle_stt_result(sid, data):
             intent_result = classify_intent(stt_text)
             intent = intent_result.get("intent", "AI_SUPPORTER")
             
+            # 모바일로 Intent 결과 전송
+            print(f"📤 모바일로 intent_result 이벤트 전송 준비: intent={intent}, text='{stt_text[:50]}...'")
             await broadcast_to("mobile", "intent_result", {
                 "text": stt_text,
                 "intent": intent,
@@ -202,10 +219,12 @@ async def handle_stt_result(sid, data):
                         print(f"⚠️ CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
                         
                         # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                        print(f"📤 모바일로 cv_detection_failed 이벤트 전송 준비")
                         await broadcast_to("mobile", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                         })
                         
+                        print(f"📤 라즈베리파이로 cv_detection_failed 이벤트 전송 준비")
                         await broadcast_to("raspi", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
                         })
