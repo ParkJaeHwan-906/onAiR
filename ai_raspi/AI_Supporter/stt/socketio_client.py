@@ -114,7 +114,10 @@ class SocketIOClient:
         async def handle_cv_detection_failed(data):
             """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
             message = data.get("message", "")
-            logger.info(f"⚠️ CV 모델 오류 탐지 실패: {message}")
+            logger.info("=" * 60)
+            logger.info(f"📩 [단계 11] 라즈베리파이(Python 3.13): cv_detection_failed 이벤트 수신")
+            logger.info(f"   메시지: {message}")
+            logger.info("=" * 60)
             
             # 라즈베리파이: 마이크 ON + Streaming STT 즉시 시작
             # 주의: Streaming STT는 Python 3.10 프로세스에서 실행되어야 함
@@ -126,18 +129,30 @@ class SocketIOClient:
                 # 세션 ID 생성 (Clarify 세션용)
                 import uuid
                 session_id = str(uuid.uuid4())
-                logger.info(f"📤 Streaming STT 세션 시작 명령 전송: session_id={session_id}")
+                
+                logger.info("=" * 60)
+                logger.info(f"📤 [단계 12-1] 브리지 서버로 Streaming STT 시작 명령 전송 준비")
+                logger.info(f"   Session ID: {session_id}")
+                logger.info("=" * 60)
                 
                 # 브리지 클라이언트를 통해 Python 3.10에 Streaming STT 시작 명령 전송
                 # 브리지 클라이언트는 manager를 통해 접근 가능
                 if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
-                    try:
-                        self.manager.bridge_client.sio.emit('start_streaming_stt', {'session_id': session_id})
-                        logger.info(f"✅ 브리지 서버로 Streaming STT 시작 명령 전송 완료: session_id={session_id}")
-                    except Exception as e:
-                        logger.error(f"❌ 브리지 서버로 Streaming STT 시작 명령 전송 실패: {e}")
+                    success = self.manager.bridge_client.emit_start_streaming_stt(session_id)
+                    if success:
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [단계 12-1 완료] 브리지 서버로 Streaming STT 시작 명령 전송 완료")
+                        logger.info(f"   Session ID: {session_id}")
+                        logger.info("=" * 60)
+                    else:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [단계 12-1 실패] 브리지 서버로 Streaming STT 시작 명령 전송 실패")
+                        logger.error(f"   Session ID: {session_id}")
+                        logger.error("=" * 60)
                 else:
+                    logger.warning("=" * 60)
                     logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. Streaming STT 시작 명령을 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
         
         @self.sio.on("control_raspi")
         async def handle_control_raspi(data):
@@ -153,7 +168,7 @@ class SocketIOClient:
                     self.manager.set_stt_mode("streaming")
                     # 마이크 활성화
                     mic = self.manager.get_mic_stream()
-                    if mic and not mic.stream.is_active():
+                    if mic and not mic.is_active():
                         mic.resume()
                         logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
                     
@@ -193,7 +208,7 @@ class SocketIOClient:
                     # 스트리밍 모드로 전환 시 마이크 활성화
                     if mode == "streaming":
                         mic = self.manager.get_mic_stream()
-                        if mic and not mic.stream.is_active():
+                        if mic and not mic.is_active():
                             mic.resume()
                             logger.info("🔊 마이크 ON (스트리밍 모드 전환)")
             
