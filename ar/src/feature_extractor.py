@@ -8,9 +8,9 @@ import numpy as np
 def _extract_features_uniform_gftt(
     gray: np.ndarray,
     *,
-    grid_rows: int = 4,        # [권장 5~8] 세로 분할 개수 (영상 높이 기준)
-    grid_cols: int = 6,        # [권장 6~10] 가로 분할 개수 (영상 폭 기준)
-    max_per_cell: int = 50,    # [권장 30~60] 각 셀당 최대 코너 수
+    grid_rows: int = 6,        # [권장 5~8] 세로 분할 개수 (영상 높이 기준)
+    grid_cols: int = 8,        # [권장 6~10] 가로 분할 개수 (영상 폭 기준)
+    max_per_cell: int = 25,    # [권장 30~60] 각 셀당 최대 코너 수 -> 1200 개 max 로 특징점 고정
     quality_level: float = 0.05,  # [범위 0.01~0.1] 낮을수록 더 많은 코너 검출
     min_distance: int = 10,        # [범위 3~10 px] 한 셀 내부에서 코너 간 최소 간격
     block_size: int = 7,          # [범위 3~9] GFTT 윈도우 크기 (주변 블록 크기)
