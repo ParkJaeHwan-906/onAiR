@@ -6,7 +6,8 @@ GCP_CREDENTIAL_PATH = "/home/pi/AI_Supporter/secrets/stt-key.json"
 LANGUAGE = "ko-KR"
 
 # === 오디오 설정 ===
-RATE = 16000            # 샘플레이트 (Hz)
+MIC_RATE = 48000        # 마이크 실제 샘플레이트 (Hz) - 마이크 하드웨어 스펙
+RATE = 16000            # STT용 샘플레이트 (Hz) - GCP STT는 16000Hz 사용
 CHUNK_MS = 100          # 청크 단위 (ms)
 CHANNELS = 1            # 마이크 채널 (모노)
 DEVICE_INDEX = None     # 기본 마이크 자동 선택
