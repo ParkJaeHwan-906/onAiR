@@ -25,6 +25,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Object>> handleException(Exception e) {
         log.error("Exception Reason : {}", e.getMessage());
         return ResponseEntity.internalServerError().body(ApiResponse.fail("서버 내부 오류가 발생했습니다."));
+//        return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getCause().getMessage()));
     }
 
     @ExceptionHandler(BindException.class)
