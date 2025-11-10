@@ -167,6 +167,16 @@ def run_stt_loop():
                 time.sleep(0.5)  # 0.5초 대기 (단계 구분)
                 
                 logger.info("=" * 60)
+                logger.info("⏳ [단계 2-1] 사용자 발화 준비 대기 중... (3초)")
+                logger.info("   💡 이제 말씀해주세요!")
+                logger.info("=" * 60)
+                
+                # 3초 대기 (사용자가 말할 시간 제공)
+                for i in range(3, 0, -1):
+                    logger.info(f"   ⏰ {i}초 후 버퍼링 STT 세션 시작...")
+                    time.sleep(1)
+                
+                logger.info("=" * 60)
                 logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
                 logger.info("=" * 60)
                 
