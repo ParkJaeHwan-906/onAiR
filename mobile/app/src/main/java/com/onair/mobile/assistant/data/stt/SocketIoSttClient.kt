@@ -37,7 +37,10 @@ class SocketIoSttClient(
     private val onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
     private val onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
     private val onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
-    private val onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null  // Clarify 질문/답변 턴 콜백
+    private val onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
+    private val onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
+    private val onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
+    private val onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
 ) {
     private val TAG = "SocketIoSttClient"
     private var socket: Socket? = null
@@ -67,17 +70,22 @@ class SocketIoSttClient(
                 
                 // 디바이스 등록
                 registerDevice()
+                
+                // 연결 성공 콜백 호출
+                onConnect?.invoke()
             }
             
             socket?.on(Socket.EVENT_DISCONNECT) {
                 isConnected = false
                 Log.i(TAG, "🔌 Socket.IO 서버 연결 종료")
+                onDisconnect?.invoke()
             }
             
             socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
-                val error = args?.getOrNull(0)
+                val error = args?.getOrNull(0)?.toString() ?: "Unknown error"
                 Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
                 isConnected = false
+                onConnectError?.invoke(error)
             }
             
             // stt_result 이벤트 수신
