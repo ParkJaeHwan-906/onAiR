@@ -91,6 +91,10 @@ services:
       # Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_PREFIX=rag_chat
+      # Debug Mode (단계별 수동 실행)
+      # 🐛 디버그 모드 ON: 아래 주석 해제, OFF: 주석 처리
+      # - DEBUG_STEP_BY_STEP=true
+      - DEBUG_STEP_BY_STEP=false
 
 
 # 도커 네트워크 설정 
