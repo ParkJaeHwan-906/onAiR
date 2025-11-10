@@ -1,27 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".MainActivity">
-<!--    <io.livekit.android.renderer.SurfaceViewRenderer-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="match_parent"-->
-<!--        android:id="@+id/renderer" />-->
-<!--    <io.livekit.android.renderer.TextureViewRenderer-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:id="@+id/local_camera"-->
-<!--        tools:ignore="MissingConstraints" />-->
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/next_button"
-        android:text="next"
-        />
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:id="@+id/frame_layout">
+
+    </FrameLayout>
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/bottom_navigation_bar"
+        app:menu="@menu/bottom_navigation_menu"
+        style="@style/CustomBottomNavigationView" />
 
 </LinearLayout>
