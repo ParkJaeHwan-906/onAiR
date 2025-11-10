@@ -24,6 +24,3 @@ SILENCE_TIMEOUT_SEC = 0.5  # 침묵 타임아웃 (초)
 # 로컬 테스트 시: "http://localhost:8000"
 FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"
 
-# RAG/WS 엔드포인트 (필요 시 수정 가능)
-RAG_CHAT_ENDPOINT = "/rag/chat"
-WS_CHAT_ENDPOINT = "/ws/chat"
