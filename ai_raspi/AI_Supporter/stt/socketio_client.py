@@ -28,7 +28,20 @@ class SocketIOClient:
         from urllib.parse import urlparse
         parsed_url = urlparse(self.server_url)
         self.hostname = parsed_url.hostname
-        self.port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
+        
+        # HTTP인 경우 포트를 명시적으로 80으로 설정 (HTTPS 리다이렉트 방지)
+        if parsed_url.scheme == 'http':
+            # 포트가 명시되지 않았으면 80으로 설정
+            if parsed_url.port is None:
+                # URL에 포트를 명시적으로 추가하여 HTTP 강제
+                if not self.server_url.endswith('/'):
+                    self.server_url = f"{self.server_url}:80"
+                else:
+                    self.server_url = f"{self.server_url.rstrip('/')}:80/"
+                parsed_url = urlparse(self.server_url)
+            self.port = parsed_url.port or 80
+        else:
+            self.port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
         
         # 자동 재연결 설정
         # SSL 검증은 기본값 사용 (인증서 검증 활성화)
