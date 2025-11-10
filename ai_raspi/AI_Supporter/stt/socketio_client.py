@@ -5,6 +5,8 @@ Socket.IO 클라이언트
 import asyncio
 import logging
 import socketio
+import ssl
+import aiohttp
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,16 @@ class SocketIOClient:
         """
         # FastAPI 서버 URL 사용 (Socket.IO 서버도 여기에 통합되어 있음)
         self.server_url = settings.FASTAPI_SERVER_URL
+        
+        # URL에서 호스트명과 포트 추출
+        from urllib.parse import urlparse
+        parsed_url = urlparse(self.server_url)
+        self.hostname = parsed_url.hostname
+        self.port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
+        
         # 자동 재연결 설정
+        # SSL 검증은 기본값 사용 (인증서 검증 활성화)
+        # 실제 인증서 문제는 서버 측에서 해결해야 함
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
             reconnection_attempts=5,  # 최대 5회 재시도
@@ -212,6 +223,32 @@ class SocketIOClient:
             """서버로부터 pong 응답 수신"""
             logger.debug(f"🏓 Pong 수신: {data}")
     
+    def _check_server_certificate(self):
+        """
+        서버의 SSL 인증서 정보를 확인합니다.
+        호스트명 불일치 문제 진단에 사용됩니다.
+        """
+        try:
+            import socket
+            context = ssl.create_default_context()
+            with socket.create_connection((self.hostname, self.port), timeout=5) as sock:
+                with context.wrap_socket(sock, server_hostname=self.hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    logger.info(f"📜 서버 인증서 정보:")
+                    logger.info(f"   주체: {cert.get('subject', 'N/A')}")
+                    logger.info(f"   발급자: {cert.get('issuer', 'N/A')}")
+                    if 'subjectAltName' in cert:
+                        logger.info(f"   대체 이름: {cert['subjectAltName']}")
+                    return cert
+        except ssl.SSLCertVerificationError as e:
+            logger.warning(f"⚠️ SSL 인증서 검증 실패: {e}")
+            logger.warning(f"   서버의 인증서가 '{self.hostname}'에 대해 유효하지 않을 수 있습니다.")
+            logger.warning(f"   서버 측에서 인증서를 올바르게 설정해야 합니다.")
+            return None
+        except Exception as e:
+            logger.debug(f"인증서 확인 중 오류: {e}")
+            return None
+    
     async def connect(self):
         """
         Socket.IO 서버에 연결합니다.
@@ -223,12 +260,28 @@ class SocketIOClient:
             logger.warning("⚠️ 이미 Socket.IO 서버에 연결되어 있습니다.")
             return True
         
+        # HTTPS인 경우 인증서 정보 확인 (디버깅용)
+        if self.server_url.startswith('https://'):
+            cert_info = self._check_server_certificate()
+            if cert_info is None:
+                logger.warning("⚠️ 서버 인증서 확인 실패. 연결을 시도하지만 실패할 수 있습니다.")
+        
         try:
             logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url} (경로: /ws)")
             # Socket.IO 경로는 /ws로 설정 (FastAPI 서버에 통합된 Socket.IO 서버)
             await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
+        except ssl.SSLCertVerificationError as e:
+            logger.error(f"❌ SSL 인증서 검증 실패: {e}")
+            logger.error(f"   서버 URL: {self.server_url}")
+            logger.error(f"   호스트명: {self.hostname}")
+            logger.error(f"   해결 방법:")
+            logger.error(f"   1. 서버 측에서 인증서가 '{self.hostname}'에 대해 올바르게 설정되었는지 확인")
+            logger.error(f"   2. 서버의 인증서가 만료되지 않았는지 확인")
+            logger.error(f"   3. 서버의 인증서 체인이 올바른지 확인")
+            self.connected = False
+            return False
         except Exception as e:
             logger.error(f"❌ Socket.IO 서버 연결 실패: {e}")
             self.connected = False

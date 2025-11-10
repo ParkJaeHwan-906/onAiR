@@ -49,15 +49,21 @@ def run_stt_loop():
     
     # 마이크 초기화 및 시작 (항상 켜져있음)
     mic = MicStream()
+    
+    # Wakeword 감지기 초기화 (마이크 시작 전에 초기화)
+    wakeword_detector = init_wakeword_detector()
+    
+    # MicStream에 Wakeword 감지기 콜백 연결
+    if wakeword_detector and wakeword_detector.interpreter is not None:
+        mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
+        logger.info("✅ Wakeword 감지기가 MicStream에 연결되었습니다")
+    
     mic.start()  # 스트림 생성 및 시작 (마이크 ON)
     logger.info("🔊 마이크 ON (항상 활성 상태)")
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
     streaming_stt = GcpStreamingStt()
-    
-    # Wakeword 감지기 초기화
-    init_wakeword_detector()
     
     async def broadcast(msg):
         """STT 결과를 브리지 서버(Socket.IO)로 전송"""
