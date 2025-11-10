@@ -67,7 +67,7 @@ class SseTaskClient(
                 val response = call!!.execute()
                 
                 if (!response.isSuccessful) {
-                    throw IOException("SSE 연결 실패: HTTP ${response.code()}")
+                    throw IOException("SSE 연결 실패: HTTP ${response.code}")
                 }
                 
                 val responseBody = response.body ?: throw IOException("Response body가 null입니다.")

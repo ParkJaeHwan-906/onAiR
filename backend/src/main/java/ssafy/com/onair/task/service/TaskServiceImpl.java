@@ -80,13 +80,13 @@ public class TaskServiceImpl implements TaskService {
     @Transactional
     @Override
     public Boolean reAssignTask(CustomUserDetails user, ReAssignTaskRequestDto request) {
-        if(tasksRepository.assignTaskToWorker(request.getUserAccountId(), request.getTaskId()) != 1) throw new IllegalArgumentException("잘못된 요청입니다.");
+        if(tasksRepository.assignTaskToWorker(request.getUserAccountId(), request.getTaskId()) != 1) throw new IllegalArgumentException("작업할당에 실패했습니다.");
         sseManager.taskAssign(user.getCompanyId(),
                 tasksRepository.selectEquipmentIdById(request.getTaskId())
-                        .orElseThrow(() -> new IllegalArgumentException("잘못된 요청입니다.")),
+                        .orElseThrow(() -> new IllegalArgumentException("작업이 존재하지 않습니다.")),
                 mkTaskAssignMessage(request.getTaskId(), request.getUserAccountId(),
                         usersRepository.selectUserNameByUserAccountId(request.getUserAccountId())
-                                .orElseThrow(() -> new IllegalArgumentException("잘못된 요청입니다."))));
+                                .orElseThrow(() -> new IllegalArgumentException("작업자를 찾을 수 없습니다."))));
         return true;
     }
 }

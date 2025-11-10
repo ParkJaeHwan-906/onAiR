@@ -1,143 +1,113 @@
+"""
+라즈베리파이 메인 프로그램 (Python 3.13용)
+- Socket.IO 클라이언트 실행 (Python 3.13에서만 동작)
+- 브리지 서버 실행 (Python 3.10에서 오는 STT 결과 수신)
+- 브리지 클라이언트 실행 (STT 결과를 Socket.IO로 전송)
+"""
 import threading
 import asyncio
-import uvicorn
 import logging
 import json
-from stt.mic_stream import MicStream
-from stt.gcp_stt_buffered import GcpBufferedStt
-from stt.gcp_stt_stream import GcpStreamingStt
-from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
 from stt.socketio_client import SocketIOClient
-from server.app import app, manager
+from bridge.stt_bridge_client import SttBridgeClient
+from server.app import manager  # manager만 사용 (app은 레거시)
 from config import settings
+
+# Streaming STT는 Python 3.10에서만 동작하므로, 
+# Python 3.13에서는 인스턴스를 생성하지 않고 None으로 설정
+# 실제 Streaming STT는 Python 3.10 프로세스에서 처리됨
+try:
+    from stt.gcp_stt_stream import GcpStreamingStt
+    from stt.mic_stream import MicStream
+    STREAMING_STT_AVAILABLE = True
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"⚠️ Streaming STT를 사용할 수 없습니다 (Python 3.10에서만 동작): {e}")
+    STREAMING_STT_AVAILABLE = False
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def run_stt_loop():
+def run_socketio_client():
     """
-    메인 STT 루프
-    설계에 따른 동작 흐름:
-    ① 대기 (마이크 ON, Wakeword 감지 중)
-    ② Wakeword 감지
-    ③ 버퍼링 방식 STT 실행 (마이크 ON 상태)
-    ④ 텍스트 전송 → 마이크 OFF (Intent 분류 중간)
-    ⑤ Intent 분류 완료 후 모드 전환
-    ⑥ 스트리밍 방식 STT 시작 (마이크 ON)
-    ⑦ 서비스 종료 → STT 세션 OFF (마이크는 계속 ON)
-    ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
-    
-    참고: 마이크는 항상 켜져있고, 버퍼링 STT 후 Intent 분류 중간에만 OFF됩니다.
-    Socket.IO 클라이언트가 자동으로 서버에 연결되어 디바이스 등록을 수행합니다.
-    모드 전환은 Android에서 HTTP POST /api/stt/mode 로 {"mode": "streaming"} 전송하면 됩니다.
+    Socket.IO 클라이언트 및 브리지 클라이언트 실행 (Python 3.13에서 실행)
+    - Socket.IO 클라이언트: FastAPI 서버와 통신
+    - 브리지 서버: Python 3.10에서 오는 STT 결과 수신
+    - 브리지 클라이언트: STT 결과를 Socket.IO로 전송
     """
-    # 마이크 초기화 및 시작 (항상 켜져있음)
-    mic = MicStream()
-    mic.start()  # 스트림 생성 및 시작 (마이크 ON)
-    print("🔊 마이크 ON (항상 활성 상태)")
-    
-    # 마이크 인스턴스를 manager에 등록 (FastAPI 엔드포인트에서 접근 가능하도록)
-    manager.set_mic_stream(mic)
-    
-    # Socket.IO 클라이언트 초기화 및 연결
-    socketio_client = SocketIOClient(manager=manager)  # manager 전달
-    manager.set_socketio_client(socketio_client)
-    
     # 이벤트 루프 생성
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    # Socket.IO 연결 (비동기로 실행)
-    async def connect_socketio():
-        """Socket.IO 서버 연결"""
+    # Socket.IO 클라이언트 초기화
+    socketio_client = SocketIOClient(manager=manager)
+    manager.set_socketio_client(socketio_client)
+    
+    # Streaming STT 인스턴스 생성 및 등록 (Python 3.13에서 사용 가능한 경우)
+    # 주의: 실제 Streaming STT는 Python 3.10에서 실행되지만,
+    # cv_detection_failed 이벤트 처리를 위해 인스턴스가 필요함
+    if STREAMING_STT_AVAILABLE:
+        try:
+            # MicStream은 Python 3.10에서만 사용 가능하므로 None으로 설정
+            # 실제 마이크 스트림은 Python 3.10 프로세스에서 관리됨
+            streaming_stt = GcpStreamingStt(socketio_client=socketio_client)
+            manager.set_streaming_stt_instance(streaming_stt)
+            logger.info("✅ Streaming STT 인스턴스 등록 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Streaming STT 인스턴스 생성 실패: {e}")
+            logger.warning("   Streaming STT는 Python 3.10 프로세스에서 처리됩니다.")
+    else:
+        logger.info("ℹ️ Streaming STT는 Python 3.10 프로세스에서 처리됩니다.")
+    
+    # 브리지 클라이언트 초기화
+    bridge_client = SttBridgeClient()
+    bridge_client.set_fastapi_socketio_client(socketio_client)
+    manager.bridge_client = bridge_client  # manager에 브리지 클라이언트 등록
+    
+    async def main_async():
+        """비동기 메인 함수"""
+        # Socket.IO 서버 연결
         try:
             connected = await socketio_client.connect()
             if connected:
-                print(f"✅ Socket.IO 서버 연결 성공: {settings.FASTAPI_SERVER_URL} (경로: /ws)")
+                logger.info(f"✅ Socket.IO 서버 연결 성공: {settings.FASTAPI_SERVER_URL} (경로: /ws)")
             else:
-                print(f"⚠️ Socket.IO 서버 연결 실패: {settings.FASTAPI_SERVER_URL}")
+                logger.warning(f"⚠️ Socket.IO 서버 연결 실패: {settings.FASTAPI_SERVER_URL}")
+                return
         except Exception as e:
-            print(f"❌ Socket.IO 연결 오류: {e}")
-    
-    # Socket.IO 연결 실행
-    loop.run_until_complete(connect_socketio())
-    
-    # STT 인스턴스 생성
-    buffered_stt = GcpBufferedStt()
-    streaming_stt = GcpStreamingStt()
-    
-    # Streaming STT 인스턴스를 manager에 등록 (종료 신호 처리용)
-    manager.set_streaming_stt_instance(streaming_stt)
-    
-    # Wakeword 감지기 초기화
-    init_wakeword_detector()
+            logger.error(f"❌ Socket.IO 연결 오류: {e}")
+            return
+        
 
-    async def broadcast(msg):
-        """WebSocket으로 메시지 브로드캐스트"""
-        await manager.broadcast(msg)
-
-    async def stt_session():
-        """STT 세션 실행 (모드에 따라 버퍼링/스트리밍 선택)"""
+        
+        bridge_thread = threading.Thread(target=bridge_client.connect, daemon=True)
+        bridge_thread.start()
+        logger.info("✅ 브리지 서버(Socket.IO) 연결 시도 중 (스레드 실행)")
+        
         try:
-            # 모드 확인
-            mode = manager.get_stt_mode()
-            print(f"📝 STT 모드: {mode}")
-            
-            if mode == "buffered":
-                # 버퍼링 방식: 3~5초 수집 후 일괄 처리 (분기처리 이전)
-                # 마이크는 이미 켜져있음
-                await buffered_stt.run(mic, broadcast)
-                # 버퍼링 STT 후 텍스트 전송 완료 → 마이크는 buffered_stt.run() 내부에서 OFF됨
-            else:
-                # 스트리밍 방식: 실시간 인식 (분기처리 이후)
-                # Intent 분류 완료 후 스트리밍 모드로 전환됨
-                print("🎤 스트리밍 모드 시작 (실시간 음성 인식)")
-                # 마이크 다시 활성화 (Intent 분류 중간에 OFF되었으므로)
-                if not mic.stream.is_active():
-                    mic.resume()
-                    print("🔊 마이크 ON (스트리밍 모드 시작)")
-                
-                # Streaming STT 인스턴스에 Socket.IO 클라이언트 설정
-                streaming_stt.socketio_client = socketio_client
-                
-                # 세션 ID 생성 (Clarify 세션용)
-                import uuid
-                session_id = str(uuid.uuid4())
-                
-                print(f"📤 Socket.IO를 통해 Streaming STT 전송 시작 (session_id={session_id})")
-                await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                # 스트리밍 종료 후 마이크는 켜둠 (다음 Wakeword 대기)
-                print("🟢 스트리밍 모드 종료, 마이크는 계속 ON")
-                
-        except Exception as e:
-            print(f"❌ STT 세션 오류: {e}")
-            # 에러 발생 시에도 마이크는 켜둠 (다음 Wakeword 대기를 위해)
-            if not mic.stream.is_active():
-                mic.resume()
-
-    print("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
-    print("📌 모드 전환: 모바일에서 Socket.IO를 통해 제어 명령 전송")
-    try:
-        while True:
-            # ① 대기 상태 (마이크 ON, Wakeword 감지 중)
-            # ② Wakeword 감지 대기
-            if wait_for_wakeword():
-                print("🚀 Wakeword 감지됨: STT 세션 시작")
-                
-                # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
-                loop.run_until_complete(stt_session())
-                
-                print("🟢 STT 세션 종료, 다시 대기 중... (마이크 ON, 다음 Wakeword 대기)")
-    except KeyboardInterrupt:
-        print("🛑 종료 중...")
-        streaming_stt.stop()
-        # Socket.IO 연결 종료
-        loop.run_until_complete(socketio_client.disconnect())
-        mic.stop()
-        stop_wakeword_detector()
-        print("✅ 종료 완료")
+            # 무한 대기 (Ctrl+C로 종료)
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("🛑 종료 중...")
+            await socketio_client.disconnect()
+            logger.info("✅ 종료 완료")
+    
+    # 비동기 메인 함수 실행
+    loop.run_until_complete(main_async())
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_stt_loop, daemon=True)
-    t.start()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    """
+    라즈베리파이 메인 프로그램 (Python 3.13용)
+    - Socket.IO 클라이언트 실행 (Python 3.13에서만 동작)
+    - 브리지 서버 실행 (Python 3.10에서 오는 STT 결과 수신)
+    - 브리지 클라이언트 실행 (STT 결과를 Socket.IO로 전송)
+    
+    실행 방법:
+    1. Python 3.13에서 이 파일 실행: python3.13 main.py
+    2. Python 3.10에서 main_py310.py 실행: python3.10 main_py310.py
+    """
+    # Socket.IO 클라이언트 및 브리지 클라이언트 실행
+    # 참고: 브리지 서버는 Python 3.10에서 실행됩니다 (main_py310.py)
+    run_socketio_client()

@@ -81,12 +81,19 @@ async def broadcast_to(device_types, event: str, payload: dict):
     # ✅ dictionary snapshot으로 안전한 iteration
     targets = list(device_map.items())
     sent_count = 0
+    
+    # 연결된 디바이스 확인
+    available_devices = [dev for sid, dev in targets if dev in device_types]
+    if not available_devices:
+        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        return
 
     for sid, dev in targets:
         if dev in device_types:
             try:
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
+                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:10]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
                 print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
@@ -96,6 +103,9 @@ async def broadcast_to(device_types, event: str, payload: dict):
                         del device_map[sid]
                 except Exception:
                     pass
+    
+    if sent_count == 0:
+        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
 
 
 # ========================================
@@ -105,7 +115,11 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        print(f"✅ Client connected: {sid}")
+        # 클라이언트 정보 확인
+        user_agent = environ.get("HTTP_USER_AGENT", "unknown")
+        remote_addr = environ.get("REMOTE_ADDR", "unknown")
+        print(f"✅ Client connected: {sid} (from {remote_addr}, user_agent={user_agent[:50]}...)")
+        
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
@@ -135,6 +149,7 @@ async def handle_register_device(sid, data):
         await sio.save_session(sid, {"device": device})
     
     print(f"🔗 Registered device: {device} ({sid})")
+    print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
 
@@ -182,6 +197,8 @@ async def handle_stt_result(sid, data):
             intent_result = classify_intent(stt_text)
             intent = intent_result.get("intent", "AI_SUPPORTER")
             
+            # 모바일로 Intent 결과 전송
+            print(f"📤 모바일로 intent_result 이벤트 전송 준비: intent={intent}, text='{stt_text[:50]}...'")
             await broadcast_to("mobile", "intent_result", {
                 "text": stt_text,
                 "intent": intent,
@@ -202,10 +219,12 @@ async def handle_stt_result(sid, data):
                         print(f"⚠️ CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
                         
                         # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                        print(f"📤 모바일로 cv_detection_failed 이벤트 전송 준비")
                         await broadcast_to("mobile", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                         })
                         
+                        print(f"📤 라즈베리파이로 cv_detection_failed 이벤트 전송 준비")
                         await broadcast_to("raspi", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
                         })
@@ -367,9 +386,13 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
     # GREEN → 최종 답변 생성
     else:
         snippets = [h["source"]["content"] for h in used_hits]
-        answer_text = llm_generate_answer(effective_query, snippets)
+        answer_result = llm_generate_answer(effective_query, snippets, used_hits)
         
-        # TTS 생성
+        # 구조화된 답변에서 TTS 텍스트 추출
+        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+        structured_answer = answer_result  # 전체 구조화된 답변
+        
+        # TTS 생성 (TTS 친화적 텍스트 사용)
         try:
             tts_result = text_to_speech(answer_text)
             audio_url = None  # 또는 파일 저장 후 URL 생성
@@ -397,21 +420,22 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
         memory.clear_history(session_id)
         clarify_sessions.pop(session_id, None)
         
-        # 모바일로 최종 답변 전송
+        # 모바일로 최종 답변 전송 (구조화된 답변 포함)
         await broadcast_to("mobile", "final_answer", {
             "session_id": session_id,
             "turn_id": turn_id,
             "status": "completed",
-            "answer": answer_text,
+            "answer": answer_text,  # TTS 친화적 텍스트
+            "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
             "audio_content": tts_result.get("audio_content") if tts_result else None,
             "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
-            "citations": [
+            "citations": structured_answer.get("citations", [
                 {
                     "section": h["source"]["section"],
                     "pages": h["source"]["pages"],
                 }
                 for h in used_hits[:3]
-            ]
+            ])
         })
         
         print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
@@ -424,10 +448,12 @@ async def process_clarify_turn(session_id: str, query: str, force_green: bool = 
 async def process_clarify_qa_turn(session_id: str, user_question: str):
     """
     Streaming STT 세션 중 Clarify 질문/답변 턴 처리:
-    1. Gemini-Flash로 clarify 여부 판단 (need_clarify)
-    2. 구체화 필요 시 소질문 생성 및 LLM 답변 생성
-    3. TTS 변환 후 clarify_qa_turn 이벤트 전송
-    4. 충분히 구체화되면 GPT-4o로 최종 답변 생성
+    1. 히스토리 컨텍스트 구성
+    2. Hybrid Search + Rerank (RAG 기반)
+    3. Evidence Check (RED/YELLOW/GREEN) - RAG 기반 판단
+    4. RED/YELLOW → Clarify 질문 생성 (Gemini-Flash) 및 LLM 답변 생성
+    5. TTS 변환 후 clarify_qa_turn 이벤트 전송
+    6. GREEN → GPT-4o로 최종 답변 생성 + TTS + 모바일 전송
     """
     # 히스토리 로드
     history = memory.get_history(session_id)
@@ -442,13 +468,73 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
     turn_id = len(clarify_sessions[session_id]["turns"]) + 1
     
     try:
-        # 1. Gemini-Flash로 clarify 여부 판단
-        clarify_result = clarify_query(user_question)
-        need_clarify = not clarify_result.get("answerable", True)
+        # 1. 히스토리 컨텍스트 구성 (이전 대화 기록 반영)
+        history_context = ""
+        user_lines = []
+        clarify_lines = []  # Clarify 질문/답변도 포함
         
-        if need_clarify:
-            # 구체화 필요: 소질문 생성 및 LLM 답변 생성
-            clarify_question = clarify_result.get("clarify", "문제 상황을 구체적으로 말씀해주세요.")
+        for ev in reversed(history):
+            role = ev.get("role")
+            event_type = ev.get("type")
+            data = ev.get("data", {})
+            
+            # 사용자 질문 (스트리밍 STT)
+            if role == "user" and event_type == "streaming_stt":
+                text = data.get("text", "")
+                if text:
+                    user_lines.append(text)
+            
+            # Clarify 질문/답변 (시스템)
+            elif role == "system" and event_type == "clarify":
+                clarify_guidance = data.get("clarify_guidance", "")
+                if clarify_guidance:
+                    clarify_lines.append(f"시스템 질문: {clarify_guidance}")
+            
+            if len(user_lines) >= 2:  # 최근 2개 질문 사용
+                break
+        
+        if user_lines:
+            history_context = " \n".join(reversed(user_lines))
+        
+        # Clarify 맥락 추가 (이전 Clarify 질문 반영)
+        if clarify_lines:
+            history_context += "\n\n" + "\n".join(reversed(clarify_lines[-2:]))  # 최근 2개 Clarify 포함
+        
+        effective_query = f"{history_context} \n{user_question}" if history_context else user_question
+        normalized_query = normalize_query_style(effective_query)
+        
+        # 2. Hybrid Search + Rerank (RAG 기반)
+        base_hits = hybrid_retrieve(normalized_query, top_k=8)
+        hits = rerank(normalized_query, base_hits, top_k=6)
+        used_hits = hits[:5]
+        
+        if not hits:
+            await broadcast_to("mobile", "clarify_qa_turn", {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "user_question": user_question,
+                "llm_answer": "관련 문서를 찾을 수 없습니다.",
+                "audio_content": None,
+                "audio_encoding": None,
+                "need_clarify": True,
+                "status": "error"
+            })
+            return
+        
+        # 3. RAG 기반 Evidence Check (RED/YELLOW/GREEN)
+        need_clarify, evidence_stats = comprehensive_evidence_check(effective_query, used_hits)
+        gate_decision = evidence_stats.get("gate_decision")
+        
+        # 히스토리를 evidence_stats에 포함 (make_clarify_prompt에서 사용)
+        evidence_stats["history"] = history
+        
+        # RED/YELLOW → Clarify 질문 생성
+        if need_clarify or gate_decision != "GREEN":
+            # RAG 기반 Clarify 질문 생성 (Gemini-Flash 사용)
+            from app.services.answerability import make_clarify_prompt
+            
+            clarified_result = make_clarify_prompt(effective_query, used_hits, evidence_stats)
+            clarify_question = clarified_result.get("guide", "문제 상황을 구체적으로 말씀해주세요.")
             
             # LLM 답변 생성 (Gemini-Flash 사용)
             try:
@@ -479,6 +565,18 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 audio_content = None
                 audio_encoding = None
             
+            # Redis에 저장
+            memory.append_event(session_id, {
+                "role": "system",
+                "type": "clarify",
+                "data": {
+                    "turn_id": turn_id,
+                    "gate_decision": gate_decision,
+                    "clarify_guidance": clarify_question,
+                    "evidence_stats": evidence_stats
+                }
+            })
+            
             # clarify_qa_turn 이벤트 전송
             await broadcast_to("mobile", "clarify_qa_turn", {
                 "session_id": session_id,
@@ -488,7 +586,10 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 "audio_content": audio_content,
                 "audio_encoding": audio_encoding,
                 "need_clarify": True,
-                "status": "success"
+                "gate_decision": gate_decision,
+                "status": "success",
+                "evidence_trace": evidence_stats.get("evidence_trace", {}),
+                "missing_info": evidence_stats.get("missing_info", [])
             })
             
             # 세션 정보 업데이트
@@ -496,53 +597,25 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 "turn_id": turn_id,
                 "user_question": user_question,
                 "llm_answer": llm_answer,
-                "need_clarify": True
+                "need_clarify": True,
+                "gate_decision": gate_decision
             })
             
-            print(f"📤 Clarify 질문/답변 턴 {turn_id} 전송 [session={session_id}]: need_clarify=True")
+            print(f"📤 Clarify 질문/답변 턴 {turn_id} 전송 [session={session_id}]: gate_decision={gate_decision}, need_clarify=True")
             
         else:
-            # 충분히 구체화됨: GPT-4o로 최종 답변 생성
-            # 히스토리 컨텍스트 구성
-            history_context = ""
-            user_lines = []
-            for ev in reversed(history):
-                if ev.get("role") == "user" and ev.get("type") == "streaming_stt":
-                    text = ev.get("data", {}).get("text", "")
-                    if text:
-                        user_lines.append(text)
-                    if len(user_lines) >= 3:  # 최근 3개 질문 사용
-                        break
+            # GREEN → 최종 답변 생성 (GPT-4o)
+            # 이미 위에서 RAG 검색 및 Evidence Check 완료됨
             
-            if user_lines:
-                history_context = " \n".join(reversed(user_lines))
-            
-            effective_query = f"{history_context} \n{user_question}" if history_context else user_question
-            normalized_query = normalize_query_style(effective_query)
-            
-            # Hybrid Search + Rerank
-            base_hits = hybrid_retrieve(normalized_query, top_k=8)
-            hits = rerank(normalized_query, base_hits, top_k=6)
-            used_hits = hits[:5]
-            
-            if not hits:
-                await broadcast_to("mobile", "clarify_qa_turn", {
-                    "session_id": session_id,
-                    "turn_id": turn_id,
-                    "user_question": user_question,
-                    "llm_answer": "관련 문서를 찾을 수 없습니다.",
-                    "audio_content": None,
-                    "audio_encoding": None,
-                    "need_clarify": False,
-                    "status": "error"
-                })
-                return
-            
-            # 최종 답변 생성 (GPT-4o)
+            # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
             snippets = [h["source"]["content"] for h in used_hits]
-            answer_text = llm_generate_answer(effective_query, snippets)
+            answer_result = llm_generate_answer(effective_query, snippets, used_hits)
             
-            # TTS 생성
+            # 구조화된 답변에서 TTS 텍스트 추출
+            answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+            structured_answer = answer_result  # 전체 구조화된 답변
+            
+            # TTS 생성 (TTS 친화적 텍스트 사용)
             try:
                 tts_result = text_to_speech(answer_text)
                 audio_content = tts_result.get("audio_content")
@@ -558,13 +631,14 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 "type": "final_answer",
                 "data": {
                     "answer": answer_text,
-                    "citations": [
+                    "structured_answer": structured_answer,
+                    "citations": structured_answer.get("citations", [
                         {
                             "section": h["source"]["section"],
                             "pages": h["source"]["pages"],
                         }
                         for h in used_hits[:3]
-                    ]
+                    ])
                 }
             })
             
@@ -572,21 +646,22 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             memory.clear_history(session_id)
             clarify_sessions.pop(session_id, None)
             
-            # 최종 답변 전송
+            # 최종 답변 전송 (구조화된 답변 포함)
             await broadcast_to("mobile", "final_answer", {
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "status": "completed",
-                "answer": answer_text,
+                "answer": answer_text,  # TTS 친화적 텍스트
+                "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
                 "audio_content": audio_content,
                 "audio_encoding": audio_encoding,
-                "citations": [
+                "citations": structured_answer.get("citations", [
                     {
                         "section": h["source"]["section"],
                         "pages": h["source"]["pages"],
                     }
                     for h in used_hits[:3]
-                ]
+                ])
             })
             
             print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
