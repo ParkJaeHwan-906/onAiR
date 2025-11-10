@@ -6,7 +6,8 @@ GCP_CREDENTIAL_PATH = "/home/pi/AI_Supporter/secrets/stt-key.json"
 LANGUAGE = "ko-KR"
 
 # === 오디오 설정 ===
-RATE = 16000            # 샘플레이트 (Hz)
+MIC_RATE = 48000        # 마이크 실제 샘플레이트 (Hz) - 마이크 하드웨어 스펙
+RATE = 16000            # STT용 샘플레이트 (Hz) - GCP STT는 16000Hz 사용
 CHUNK_MS = 100          # 청크 단위 (ms)
 CHANNELS = 1            # 마이크 채널 (모노)
 DEVICE_INDEX = None     # 기본 마이크 자동 선택
@@ -19,10 +20,7 @@ SILENCE_TIMEOUT_SEC = 0.5  # 침묵 타임아웃 (초)
 
 # === FastAPI 서버 설정 ===
 # FastAPI 서버 URL (Socket.IO 서버도 통합되어 있음)
-# EC2 배포 주소: "https://k13a407.p.ssafy.io/ai"
+# EC2 배포 주소: "http://k13a407.p.ssafy.io/ai"
 # 로컬 테스트 시: "http://localhost:8000"
-FASTAPI_SERVER_URL = "https://k13a407.p.ssafy.io/ai"
+FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"
 
-# RAG/WS 엔드포인트 (필요 시 수정 가능)
-RAG_CHAT_ENDPOINT = "/rag/chat"
-WS_CHAT_ENDPOINT = "/ws/chat"

@@ -15,7 +15,7 @@ import com.onair.mobile.assistant.domain.entity.IntentType
  */
 class IntentRepositoryImpl(
     private val context: Context,
-    private val embeddingRepository: EmbeddingRepository? = null  // 더 이상 사용하지 않음
+    private val embeddingRepository: Any? = null  // 더 이상 사용하지 않음 (타입 제거됨)
 ) : IntentRepository {
 
     private val TAG = "IntentRepository"
