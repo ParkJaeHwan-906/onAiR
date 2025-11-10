@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     EMB_ENCODING_MODE: str = "query"
     FAISS_METRIC: str = "cosine"
 
-    USE_ELASTIC: bool = True  # Hybrid 검색을 위해 기본값을 True로 변경
+    USE_ELASTIC: bool = True  # Elasticsearch 활성화 (Hybrid Search 사용)
     ES_HOST: str = "http://localhost:9200"
     ES_INDEX: str = "samkos"
 
