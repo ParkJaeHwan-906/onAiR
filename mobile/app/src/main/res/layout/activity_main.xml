@@ -6,22 +6,60 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".MainActivity">
-<!--    <io.livekit.android.renderer.SurfaceViewRenderer-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="match_parent"-->
-<!--        android:id="@+id/renderer" />-->
-<!--    <io.livekit.android.renderer.TextureViewRenderer-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:id="@+id/local_camera"-->
-<!--        tools:ignore="MissingConstraints" />-->
-    <Button
+    android:padding="16dp"
+    android:gravity="center"
+    tools:context=".MainActivitySttServer">
+
+    <!-- 테스트용 상태 표시 -->
+    <TextView
+        android:id="@+id/status_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:id="@+id/next_button"
-        android:text="next"
-        />
+        android:text="Socket.IO 연결 대기 중..."
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
 
+    <TextView
+        android:id="@+id/intent_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Intent: -"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/clarify_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Clarify: -"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/final_answer_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="최종 답변: -"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <TextView
+            android:id="@+id/log_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="로그가 여기에 표시됩니다..."
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+    </ScrollView>
 
 </LinearLayout>

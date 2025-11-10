@@ -85,13 +85,45 @@ def es_search(query: str, top_k: int) -> List[Dict[str, Any]]:
         })
     return hits
 
+# ---------- Query Expansion ----------
+def expand_query(query: str) -> str:
+    """
+    Query Expansion: 동의어 및 관련어 추가로 검색 품질 향상
+    TTS 친화적: 자연스러운 표현으로 확장
+    """
+    # 설비 유지보수 도메인 특화 동의어 매핑
+    synonym_map = {
+        "작동 안 함": ["작동하지 않음", "동작 불가", "가동 불가", "운전 불가"],
+        "작동 안해": ["작동하지 않음", "동작 불가"],
+        "소음": ["소음 발생", "이상 소음", "진동 소음", "소리가 남"],
+        "과열": ["온도 상승", "열 발생", "고온", "뜨거워짐"],
+        "누수": ["물 새는", "누수 발생", "물 샘", "물이 새요"],
+        "회전 안 함": ["회전 불가", "정지", "가동 안 됨", "돌지 않음"],
+        "안 돼": ["작동하지 않음", "동작 불가"],
+        "안돼": ["작동하지 않음", "동작 불가"],
+        "고장": ["작동 불가", "오작동", "이상"],
+        "문제": ["이상", "오작동", "고장"],
+    }
+    
+    expanded = query
+    for key, synonyms in synonym_map.items():
+        if key in query:
+            # 상위 2개만 추가 (과도한 확장 방지)
+            expanded += " " + " ".join(synonyms[:2])
+            break  # 첫 매칭만 적용
+    
+    return expanded.strip()
+
 # ---------- Hybrid Merge ----------
-def hybrid_retrieve(query: str, top_k: int = None):
+def hybrid_retrieve(query: str, top_k: int = None, expand: bool = True):
     if top_k is None:
         top_k = settings.TOP_K
 
-    dense = faiss_search(query, top_k)
-    sparse = es_search(query, top_k) if settings.USE_ELASTIC else []
+    # Query Expansion 적용
+    expanded_query = expand_query(query) if expand else query
+
+    dense = faiss_search(expanded_query, top_k)
+    sparse = es_search(expanded_query, top_k) if settings.USE_ELASTIC else []
 
     # 정규화
     dense_norm = min_max_normalize([r["score"] for r in dense])

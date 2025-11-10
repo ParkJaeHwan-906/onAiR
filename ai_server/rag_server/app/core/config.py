@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     EMB_ENCODING_MODE: str = "query"
     FAISS_METRIC: str = "cosine"
 
-    USE_ELASTIC: bool = True  # Hybrid 검색을 위해 기본값을 True로 변경
+    USE_ELASTIC: bool = True  # Elasticsearch 활성화 (Hybrid Search 사용)
     ES_HOST: str = "http://localhost:9200"
     ES_INDEX: str = "samkos"
 
@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     # =======================================
     # Intent 분류는 Gemini-Flash를 사용합니다 (app/services/intent_service.py)
     # Phi-3 및 ONNX 모델 관련 설정 제거됨
+
+    # =======================================
+    # 🌐 FastAPI Server URL
+    # =======================================
+    # FastAPI 서버 URL (모바일 앱에서 접근할 URL)
+    # EC2 배포: "http://k13a407.p.ssafy.io/ai"
+    # 로컬 개발: "http://localhost:8000"
+    # 같은 네트워크: "http://192.168.0.100:8000"
+    FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
+    FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
+    FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
 
     # =======================================
     # 🔊 TTS (Text-to-Speech) - GCP TTS

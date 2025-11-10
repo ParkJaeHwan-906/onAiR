@@ -7,6 +7,7 @@ import asyncio
 import struct
 from google.cloud import speech
 from config import settings
+import numpy as np
 
 class GcpBufferedStt:
     def __init__(self):
@@ -104,7 +105,11 @@ class GcpBufferedStt:
             if chunk is None:
                 print(f"   ⚠️ 음성 데이터 읽기 중단 (chunk={chunk_count})")
                 break
-            buffer.append(chunk)
+            if isinstance(chunk, np.ndarray):
+                buffer.append(chunk.tobytes())
+            else:
+                buffer.append(chunk)
+
             chunk_count += 1
             # 진행 상황 표시
             elapsed = time.time() - start_time

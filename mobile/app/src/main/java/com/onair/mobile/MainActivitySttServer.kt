@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
@@ -19,6 +20,9 @@ import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
+import com.onair.mobile.assistant.data.auth.TokenManager
+import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
+import com.onair.mobile.assistant.data.task.SseTaskClient
 
 /**
  * Socket.IO를 통해 라즈베리파이로부터 STT 텍스트를 수신하는 Activity
@@ -48,14 +52,33 @@ class MainActivitySttServer : AppCompatActivity() {
     
     private val TAG = "MainActivitySttServer"
     
-    // TODO: 서버 URL 설정
-    private val FASTAPI_SERVER_URL = "http://YOUR_FASTAPI_SERVER_URL:8000"  // FastAPI 서버 URL (Socket.IO 서버도 여기에 통합됨)
+    // 서버 URL 설정
+    // EC2에 배포된 FastAPI 서버 URL
+    private val FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
+
+    // 테스트용 UI 참조
+    private lateinit var statusText: android.widget.TextView
+    private lateinit var intentText: android.widget.TextView
+    private lateinit var clarifyText: android.widget.TextView
+    private lateinit var finalAnswerText: android.widget.TextView
+    private lateinit var logText: android.widget.TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)  // 기본 레이아웃 사용
+        
+        // UI 참조 초기화
+        statusText = findViewById(R.id.status_text)
+        intentText = findViewById(R.id.intent_text)
+        clarifyText = findViewById(R.id.clarify_text)
+        finalAnswerText = findViewById(R.id.final_answer_text)
+        logText = findViewById(R.id.log_text)
+        
+        // 초기 상태 표시
+        updateStatus("Socket.IO 연결 대기 중...")
+        addLog("🚀 MainActivitySttServer 시작")
         
         // STT Repository 초기화
         sttRepository = SttRepositoryImpl(this)
@@ -82,6 +105,7 @@ class MainActivitySttServer : AppCompatActivity() {
             onSttResult = { text, type, confidence ->
                 // STT 텍스트 수신 (레거시 WebSocket 대신 Socket.IO 사용)
                 Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
+                addLog("🧠 STT 수신: $text")
                 sttRepository.receiveFromRaspberryPi(text)
             },
             onClarifyResponse = { ragResponse ->
@@ -111,6 +135,24 @@ class MainActivitySttServer : AppCompatActivity() {
             onClarifyQaTurn = { qaTurn ->
                 // Clarify 질문/답변 턴 수신 (작업자 질문 + LLM 답변)
                 handleClarifyQaTurn(qaTurn)
+            },
+            onConnect = {
+                // Socket.IO 연결 성공
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+                updateStatus("✅ Socket.IO 연결 성공")
+                addLog("✅ Socket.IO 서버 연결 성공")
+            },
+            onDisconnect = {
+                // Socket.IO 연결 종료
+                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+                updateStatus("❌ Socket.IO 연결 종료")
+                addLog("❌ Socket.IO 서버 연결 종료")
+            },
+            onConnectError = { error ->
+                // Socket.IO 연결 오류
+                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
+                updateStatus("❌ Socket.IO 연결 오류")
+                addLog("❌ Socket.IO 연결 오류: $error")
             }
         )
         
@@ -123,27 +165,32 @@ class MainActivitySttServer : AppCompatActivity() {
         // WebRTC Repository 초기화
         webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
         
-        // TODO: 실제 로그인 API 연동 후 제거
-        // 임시로 제공받은 액세스 토큰 설정 (테스트용)
-        // 주의: 실제 프로덕션에서는 로그인 API를 통해 토큰을 받아야 합니다
-        if (!tokenManager.hasToken()) {
-            // BuildConfig에서 읽거나, 로그인 API를 통해 받아야 함
-            // 현재는 테스트용으로만 사용
-            val testToken = BuildConfig.DEFAULT_ACCESS_TOKEN
-            if (testToken.isNotEmpty()) {
-                tokenManager.saveAccessToken(testToken)
-                Log.i(TAG, "✅ 임시 액세스 토큰 설정 완료")
+        // TODO: 테스트 완료 후 제거 - REFRESH_TOKEN 하드코딩 (임시)
+        // REFRESH_TOKEN을 하드코딩하여 테스트
+        // TokenManager.kt의 HARDCODED_REFRESH_TOKEN 상수에 실제 REFRESH_TOKEN을 입력하세요
+        tokenManager.setupHardcodedRefreshToken()
+        
+        // REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 시도
+        lifecycleScope.launch {
+            val refreshed = tokenManager.refreshAccessToken()
+            if (refreshed) {
+                Log.i(TAG, "✅ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 완료")
             } else {
-                Log.w(TAG, "⚠️ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
+                Log.w(TAG, "⚠️ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 실패")
+                Log.w(TAG, "   TokenManager.kt의 HARDCODED_REFRESH_TOKEN을 확인하세요.")
             }
         }
         
         try {
             socketIoSttClient.connect()
             Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL (Socket.IO 경로: /ws)")
+            updateStatus("Socket.IO 연결 시도 중...")
+            addLog("🔌 Socket.IO 연결 시도: $FASTAPI_SERVER_URL")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
             e.printStackTrace()
+            updateStatus("❌ Socket.IO 연결 실패")
+            addLog("❌ 연결 실패: ${e.message}")
         }
     }
     
@@ -221,20 +268,21 @@ class MainActivitySttServer : AppCompatActivity() {
                         updateIntentUI(IntentType.OPERATOR, "통신 중...")
                         
                         // 3. Spring 서버 WebRTC API 연결 요청
-                        val accessToken = tokenManager.getAccessToken()
-                        if (accessToken != null) {
-                            // TODO: receiverAccountId를 실제 값으로 설정 (현재는 임시로 0)
-                            val receiverAccountId = 0L  // 실제 수신자 계정 ID로 변경 필요
-                            lifecycleScope.launch {
+                        // ACCESS_TOKEN이 만료되었을 수 있으므로 갱신 시도
+                        lifecycleScope.launch {
+                            val accessToken = tokenManager.ensureValidAccessToken()
+                            if (accessToken != null) {
+                                // TODO: receiverAccountId를 실제 값으로 설정 (현재는 임시로 0)
+                                val receiverAccountId = 0L  // 실제 수신자 계정 ID로 변경 필요
                                 val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
                                 if (success) {
                                     Log.i(TAG, "✅ WebRTC 연결 요청 완료")
                                 } else {
                                     Log.e(TAG, "❌ WebRTC 연결 요청 실패")
                                 }
+                            } else {
+                                Log.e(TAG, "❌ 액세스 토큰이 없어 WebRTC 연결 요청을 할 수 없습니다")
                             }
-                        } else {
-                            Log.e(TAG, "❌ 액세스 토큰이 없어 WebRTC 연결 요청을 할 수 없습니다")
                         }
                         
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지
@@ -261,9 +309,34 @@ class MainActivitySttServer : AppCompatActivity() {
     private fun updateIntentUI(intentType: IntentType, message: String) {
         runOnUiThread {
             Log.i(TAG, "🖥️ UI 업데이트: intent=$intentType, message=$message")
-            // TODO: 실제 UI 업데이트 로직 구현
-            // 예: findViewById<TextView>(R.id.status_text)?.text = message
-            // 또는 ViewModel을 통해 상태 업데이트
+            intentText.text = "Intent: $intentType - $message"
+            updateStatus(message)
+            addLog("📩 Intent 결과: $intentType - $message")
+        }
+    }
+    
+    /**
+     * 상태 텍스트 업데이트
+     */
+    private fun updateStatus(message: String) {
+        runOnUiThread {
+            statusText.text = message
+        }
+    }
+    
+    /**
+     * 로그 추가
+     */
+    private fun addLog(message: String) {
+        runOnUiThread {
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val logMessage = "[$timestamp] $message\n"
+            logText.append(logMessage)
+            // 스크롤을 맨 아래로
+            val scrollView = logText.parent as? android.widget.ScrollView
+            scrollView?.post {
+                scrollView.fullScroll(android.view.View.FOCUS_DOWN)
+            }
         }
     }
     
@@ -271,42 +344,44 @@ class MainActivitySttServer : AppCompatActivity() {
      * SSE 작업 스트림 연결 시작
      */
     private fun connectSseTaskStream() {
-        // 액세스 토큰 확인
-        val accessToken = tokenManager.getAccessToken()
-        if (accessToken == null) {
-            Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-            // TODO: 로그인 화면으로 이동하거나 토큰 입력 요청
-            return
-        }
-        
-        // 기존 연결이 있으면 종료
-        sseTaskClient?.disconnect()
-        
-        sseTaskClient = SseTaskClient(
-            baseUrl = SPRING_SERVER_URL,
-            accessToken = accessToken,
-            onConnect = {
-                Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
-            },
-            onTaskAssign = { event ->
-                Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
-                // TODO: 작업 할당 UI 업데이트
-            },
-            onTaskCancel = { event ->
-                Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
-                // TODO: 작업 취소 UI 업데이트
-            },
-            onTaskEnd = { event ->
-                Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
-                // TODO: 작업 완료 UI 업데이트
-            },
-            onError = { error ->
-                Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
-                error.printStackTrace()
+        // 액세스 토큰 확인 및 갱신
+        lifecycleScope.launch {
+            val accessToken = tokenManager.ensureValidAccessToken()
+            if (accessToken == null) {
+                Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
+                // TODO: 로그인 화면으로 이동하거나 토큰 입력 요청
+                return@launch
             }
-        )
-        
-        sseTaskClient?.connect()
+            
+            // 기존 연결이 있으면 종료
+            sseTaskClient?.disconnect()
+            
+            sseTaskClient = SseTaskClient(
+                baseUrl = SPRING_SERVER_URL,
+                accessToken = accessToken,
+                onConnect = {
+                    Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
+                },
+                onTaskAssign = { event ->
+                    Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
+                    // TODO: 작업 할당 UI 업데이트
+                },
+                onTaskCancel = { event ->
+                    Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
+                    // TODO: 작업 취소 UI 업데이트
+                },
+                onTaskEnd = { event ->
+                    Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
+                    // TODO: 작업 완료 UI 업데이트
+                },
+                onError = { error ->
+                    Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
+                    error.printStackTrace()
+                }
+            )
+            
+            sseTaskClient?.connect()
+        }
     }
     
     /**
@@ -337,33 +412,45 @@ class MainActivitySttServer : AppCompatActivity() {
      */
     private fun handleClarifyQaTurn(qaTurn: ClarifyQaTurnDto) {
         Log.i(TAG, "📩 Clarify 질문/답변 턴 수신: session_id=${qaTurn.session_id}, turn_id=${qaTurn.turn_id}, need_clarify=${qaTurn.need_clarify}")
+        addLog("📩 Clarify Q&A 턴 수신: turn_id=${qaTurn.turn_id}, need_clarify=${qaTurn.need_clarify}")
         
         lifecycleScope.launch {
             try {
                 if (qaTurn.status == "error") {
                     Log.e(TAG, "❌ Clarify 질문/답변 턴 오류: ${qaTurn.user_question}")
-                    // TODO: 에러 처리 UI 업데이트
+                    addLog("❌ Clarify 오류: ${qaTurn.user_question}")
+                    updateStatus("Clarify 오류 발생")
                     return@launch
                 }
                 
                 // 모바일 화면에 작업자 질문 + LLM 답변 표시
-                // TODO: 실제 UI 구현 - 작업자 질문과 LLM 답변을 화면에 표시
+                runOnUiThread {
+                    clarifyText.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
+                    updateStatus("Clarify 진행 중...")
+                }
+                
                 Log.i(TAG, "💬 작업자 질문: ${qaTurn.user_question}")
                 Log.i(TAG, "🤖 LLM 답변: ${qaTurn.llm_answer}")
+                addLog("💬 질문: ${qaTurn.user_question}")
+                addLog("🤖 답변: ${qaTurn.llm_answer.take(50)}...")
                 
                 // TTS 음성 파일 재생
                 if (qaTurn.audio_content != null && qaTurn.audio_content.isNotBlank()) {
+                    addLog("🔊 TTS 재생 시작")
                     ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding)
                 }
                 
                 // need_clarify가 false면 최종 답변 대기 (final_answer 이벤트 수신 대기)
                 if (!qaTurn.need_clarify) {
                     Log.i(TAG, "✅ 충분히 구체화됨 - 최종 답변 대기 중")
+                    addLog("✅ 충분히 구체화됨 - 최종 답변 대기 중")
+                    updateStatus("최종 답변 생성 중...")
                     // final_answer 이벤트를 기다림
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Clarify 질문/답변 턴 처리 실패: ${e.message}")
                 e.printStackTrace()
+                addLog("❌ Clarify 처리 실패: ${e.message}")
             }
         }
     }
@@ -401,12 +488,24 @@ class MainActivitySttServer : AppCompatActivity() {
      */
     private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
         Log.i(TAG, "✅ 최종 답변 수신: session_id=${finalAnswer.session_id}, answer=${finalAnswer.answer.take(50)}...")
+        addLog("✅ 최종 답변 수신: ${finalAnswer.answer.take(100)}...")
+        
+        // UI 업데이트
+        runOnUiThread {
+            finalAnswerText.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
+            updateStatus("최종 답변 수신 완료")
+        }
         
         handleFinalAnswer(
             answer = finalAnswer.answer,
             audioContent = finalAnswer.audio_content,
             mimeType = finalAnswer.audio_encoding
         )
+        
+        // TTS 재생 로그
+        if (finalAnswer.audio_content != null && finalAnswer.audio_content.isNotBlank()) {
+            addLog("🔊 최종 답변 TTS 재생 시작")
+        }
         
         isWaitingForClarification = false
         sessionManager.resetSession()
@@ -455,10 +554,12 @@ class MainActivitySttServer : AppCompatActivity() {
             // isWaitingForClarification은 이미 true 상태 유지
         } else {
             // 최종 답변 도착
-            handleFinalAnswer(ragResponse)
-            isWaitingForClarification = false
-            sessionManager.resetSession()
-            currentSessionId = null
+            lifecycleScope.launch {
+                handleFinalAnswer(ragResponse)
+                isWaitingForClarification = false
+                sessionManager.resetSession()
+                currentSessionId = null
+            }
         }
     }
     
@@ -509,7 +610,7 @@ class MainActivitySttServer : AppCompatActivity() {
         // 기타 리소스 정리
         socketIoSttClient.disconnect()
         sttRepository.cleanup()
-        intentRepository.cleanup()
+        // intentRepository.cleanup()  // IntentRepository에는 cleanup 메서드가 없음
         ttsRepository.cleanup()
         Log.i(TAG, "🛑 리소스 정리 완료")
     }
