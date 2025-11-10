@@ -13,6 +13,14 @@ interface ServerToClientEvents {
   video_frame: (data: ArrayBuffer) => void;
   audio_frame: (data: { frame: string }) => void;
   'marker-created': (data: { msg: string }) => void;
+  'ar-info': (data: Array<{
+    idx: number;
+    info: {
+      x: number;
+      y: number;
+      size: number;
+    };
+  }>) => void;
 }
 
 // 클라이언트 -> 서버로 보내는 이벤트 (발신: socket.emit)
@@ -23,6 +31,7 @@ interface ClientToServerEvents {
   'video-frame': (data: { frame: string }) => void;
   'audio-frame': (data: { frame: string }) => void;
   'ar-marker': (data: { marker_x: number; marker_y: number }) => void;
+  'delete-marker': (data: { idx: number }) => void;
 }
 // --- 타입 정의 끝 ---
 
