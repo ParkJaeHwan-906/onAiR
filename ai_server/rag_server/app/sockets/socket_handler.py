@@ -1051,3 +1051,4 @@ async def handle_ar_marker(sid, data):
     # === 5️⃣ 클라이언트로 전송 ===
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
     print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, total={len(ar_markers)}")
+    print("send data : ", ar_markers)
