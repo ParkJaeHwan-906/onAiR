@@ -29,7 +29,7 @@ services:
       - SPRING_SECURITY_USER_NAME=${SPRING_SECURITY_USER_NAME:-admin}
       - SPRING_SECURITY_USER_PASSWORD=${SPRING_SECURITY_USER_PASSWORD}
       # Logging
-      - LOGGING_LEVEL_SSAFY_COM_ONAIR=debug
+      - LOGGING_LEVEL_SSAFY_COM_ONAIR=info
       - LOGGING_LEVEL_COM_ZAXXER_HIKARI=info
       - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
 
@@ -89,47 +89,6 @@ services:
       # Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_PREFIX=rag_chat
-
-  elastic-search:
-    container_name: elastic-search
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
-    environment:
-      # 메모리 제한 설정 (힙 메모리 1GB로 제한)
-      # 권장 범위: 512MB ~ 2GB (데이터 크기에 따라 조정)
-      # - 최소: 512MB (소규모 데이터, ~1만 문서)
-      # - 권장: 1GB (중규모 데이터, ~10만 문서) ← 현재 설정
-      # - 최적: 2GB (대규모 데이터, ~100만 문서)
-      # 주의: 힙 메모리는 전체 컨테이너 메모리의 50% 이하로 설정 권장
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
-      # 단일 노드 모드 (클러스터 설정 불필요)
-      - discovery.type=single-node
-      # 보안 기능 비활성화 (개발 환경용)
-      - xpack.security.enabled=false
-      - xpack.security.enrollment.enabled=false
-      - xpack.security.http.ssl.enabled=false   
-      - xpack.security.transport.ssl.enabled=false
-    expose:
-      - "9200"
-    networks:
-      - onair-network
-    # 메모리 제한 설정 (컨테이너 레벨)
-    # 힙 메모리(1GB) + OS 캐시(1GB) = 총 2GB
-    # 권장 범위: 1.5GB ~ 4GB (힙 메모리의 1.5~2배)
-    mem_limit: 2g
-    mem_reservation: 1g
-    # CPU 제한 (선택사항)
-    # 권장: 1.0 ~ 2.0 코어 (쿼리 빈도에 따라 조정)
-    cpus: '1.0'
-    # 볼륨 마운트 (데이터 영속성)
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
-    # 헬스체크 (Elasticsearch 8.x는 기본 헬스체크 엔드포인트 사용)
-    healthcheck:
-      test: ["CMD-SHELL", "test -f /usr/share/elasticsearch/bin/elasticsearch && exit 0 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
 # 볼륨 설정
 volumes:
