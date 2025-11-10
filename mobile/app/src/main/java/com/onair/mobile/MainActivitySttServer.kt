@@ -135,6 +135,24 @@ class MainActivitySttServer : AppCompatActivity() {
             onClarifyQaTurn = { qaTurn ->
                 // Clarify 질문/답변 턴 수신 (작업자 질문 + LLM 답변)
                 handleClarifyQaTurn(qaTurn)
+            },
+            onConnect = {
+                // Socket.IO 연결 성공
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+                updateStatus("✅ Socket.IO 연결 성공")
+                addLog("✅ Socket.IO 서버 연결 성공")
+            },
+            onDisconnect = {
+                // Socket.IO 연결 종료
+                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+                updateStatus("❌ Socket.IO 연결 종료")
+                addLog("❌ Socket.IO 서버 연결 종료")
+            },
+            onConnectError = { error ->
+                // Socket.IO 연결 오류
+                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
+                updateStatus("❌ Socket.IO 연결 오류")
+                addLog("❌ Socket.IO 연결 오류: $error")
             }
         )
         
