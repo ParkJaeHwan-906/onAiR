@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     GCP_TTS_LANGUAGE_CODE: str = "ko-KR"
     GCP_TTS_AUDIO_ENCODING: str = "MP3"  # MP3, LINEAR16, OGG_OPUS 등
 
+    # =======================================
+    # 🐛 디버그 모드 (단계별 수동 실행)
+    # =======================================
+    DEBUG_STEP_BY_STEP: bool = False  # True: 각 단계마다 파일 트리거 대기, False: 자동 진행
+    DEBUG_STEP_TRIGGER_FILE: str = "/tmp/next_step"  # 다음 단계 진행 트리거 파일 경로
+    DEBUG_STEP_WAIT_TIMEOUT: int = 300  # 최대 대기 시간 (초, 기본 5분)
+
     class Config:
         env_file = ".env"
         extra = "ignore"
