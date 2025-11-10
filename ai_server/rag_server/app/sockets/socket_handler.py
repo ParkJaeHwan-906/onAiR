@@ -64,6 +64,7 @@ def init_socketio():
     sio.on("clarify_input")(handle_clarify_input)  # 모바일에서 오는 Clarify 입력 수신 (Socket.IO를 통해)
     sio.on("control_raspi")(handle_control_raspi)  # 모바일에서 라즈베리파이 제어 명령
     sio.on("video_frame")(handle_video_frame)  
+    sio.on("ar-marker")(handle_ar_marker)
     
     print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
@@ -957,3 +958,18 @@ async def handle_control_raspi(sid, data):
     # 라즈베리파이로 브로드캐스트
     await broadcast_to("raspi", "control_raspi", data)
     print(f"✅ 라즈베리파이 제어 명령 전달 완료: command={command}")
+
+# ========================================
+# AR 마커 생성 이벤트
+# ========================================
+async def handle_ar_marker(sid, data):
+    """
+    웹페이지에서 AR 마커 생성을 요청하면 해당 좌표에 AR 오브젝트를 생성하고, 좌표 추적을 시작합니다.
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    marker_x = data.get("marker_x", None)
+    marker_y = data.get("marker_y", None)
+    print(f"AR 마커 생성 좌표 : {marker_x}, {marker_y}")
+    
+
