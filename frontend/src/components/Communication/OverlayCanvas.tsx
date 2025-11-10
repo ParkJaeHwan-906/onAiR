@@ -11,6 +11,7 @@ import {
 } from "react-konva";
 import type { DrawingLine } from "../../types/DrawingLine";
 import { useRoomContext } from "@livekit/components-react";
+import { useSocket } from "../../utils/socketContext";
 import { throttle } from "lodash";
 
 interface CanvasProps {
@@ -22,6 +23,7 @@ export const OverlayCanvas = ({
   penColor,
   tool = "pen",
 }: CanvasProps) => {
+  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
 
   const [lines, setLines] = useState<DrawingLine[]>([]);
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
@@ -66,7 +68,7 @@ export const OverlayCanvas = ({
       x: pos.x,
       y: pos.y
     })
-    } else if (["circle", "square", "triangle", "arrow"].includes(tool)) {
+    } else if (["circle", "square", "triangle"].includes(tool)) {
       startPos.current = pos;
       setCurrentShape({
         type: tool,
@@ -76,7 +78,12 @@ export const OverlayCanvas = ({
         endY: pos.y,
         color: penColor,
       });
+    } else if (["arrow"].includes(tool)){
+      startPos.current = pos;
+      console.log(`ar-marker created: ${pos.x}, ${pos.y}`);
+      socket.emit("ar-marker", {marker_x: pos.x, marker_y: pos.y});
     }
+
   };
 
   // ------------------------------- 마우스 이동 -------------------------------
