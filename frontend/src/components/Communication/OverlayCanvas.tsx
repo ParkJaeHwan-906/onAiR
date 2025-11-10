@@ -1,5 +1,5 @@
 import { type KonvaEventObject } from "konva/lib/Node";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Layer,
   Line,
@@ -49,6 +49,50 @@ export const OverlayCanvas = ({
       (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
     )
   
+  const [arMarkers, setArMarkers] = useState<Array<{
+    idx: number;
+    info: {
+      x: number;
+      y: number;
+      size: number;
+    };
+  }>>([
+    // 테스트용으로 초기 마커 생성
+    {
+      idx: 0,
+      info: {
+        x: 200,
+        y: 300,
+        size: 50
+      }
+    },
+    {
+      idx: 1,
+      info: {
+        x: 500,
+        y: 400,
+        size: 30
+      }
+    }
+  ]);
+
+  // ------------------------------- Listen Socket Event -------------------------------
+  useEffect(() => {
+      if(!socket) return;
+
+      // ar-info 이벤트 listen
+      socket.on('ar-info', (data) => {
+        console.log('receive ar info');
+        setArMarkers(data);
+      });
+
+      // cleanup
+      return () => {
+        socket.off('ar-info');
+      };
+  }, [socket])
+
+
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const pos = e.target.getStage()?.getPointerPosition();
@@ -249,6 +293,25 @@ export const OverlayCanvas = ({
 
           {/* 현재 드래그 중인 도형 (실시간 크기 변화) */}
           {currentShape && renderShape(currentShape, -1)}
+
+          {/* AR 마커 렌더링 */}
+          {arMarkers.map((marker) => (
+            <Circle
+              key={marker.idx}
+              x={marker.info.x}
+              y={marker.info.y}
+              radius={marker.info.size} 
+              fill="rgba(255, 0, 0, 0.3)" // 반투명 빨간색
+              stroke="#ff0000"
+              strokeWidth={2}
+              listening={tool === "eraser"} // eraser 선택 시 클릭 이벤트 활성화
+              onClick={() => {
+                console.log('AR 마커 클릭:', marker.idx);
+                // 마커 관련 동작
+                socket.emit("delete-marker", {idx: marker.idx});
+              }}
+            />
+          ))}
 
           {/* 지우개 커서 */}
           {tool === "eraser" && eraserPos && (
