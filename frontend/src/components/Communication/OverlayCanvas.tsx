@@ -82,8 +82,22 @@ export const OverlayCanvas = ({
 
       // ar-info 이벤트 listen
       socket.on('ar-info', (data) => {
-        console.log('receive ar info');
-        setArMarkers(data);
+        console.log('receive ar info', data);
+        console.log('data type:', typeof data, 'isArray:', Array.isArray(data));
+        console.log('data constructor:', data?.constructor?.name);
+        
+        // 배열인지 확인하고 안전하게 처리
+        if (Array.isArray(data)) {
+          setArMarkers(data);
+        } else if (data && typeof data === 'object') {
+          // 객체로 감싸져 있을 수 있음 (예: { markers: [...] })
+          console.warn('Data is not an array, trying to extract:', data);
+          // 빈 배열로 설정하여 에러 방지
+          setArMarkers([]);
+        } else {
+          console.error('Invalid ar-info data:', data);
+          setArMarkers([]);
+        }
       });
 
       // cleanup
@@ -295,7 +309,7 @@ export const OverlayCanvas = ({
           {currentShape && renderShape(currentShape, -1)}
 
           {/* AR 마커 렌더링 */}
-          {arMarkers.map((marker) => (
+          {Array.isArray(arMarkers) && arMarkers.length > 0 && arMarkers.map((marker) => (
             <Circle
               key={marker.idx}
               x={marker.info.x}
