@@ -11,8 +11,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Mobile">
+        <activity android:name=".communicate.presentation.ui.LoginActivity"
+            android:enabled="true"/>
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.Mobile.Starting"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -20,8 +23,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".communicate.CallActivity"/>
-        <activity android:name=".communicate.CommunicationActivity" />
+        <activity android:name=".communicate.presentation.ui.CallActivity"
+            android:screenOrientation="landscape"/>
+        <activity android:name=".communicate.presentation.ui.CommunicationActivity" />
     </application>
 
 </manifest>
