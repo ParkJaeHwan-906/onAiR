@@ -89,6 +89,13 @@ class MicStream:
             self.is_paused = False
             print("🔊 마이크 ON (활성 상태)")
 
+    def is_active(self):
+        """마이크 스트림이 활성 상태인지 확인"""
+        if self.stream is None:
+            return False
+        # sounddevice.InputStream은 active 속성을 사용 (is_active() 메서드 없음)
+        return self.stream.active and not self.is_paused
+
     def stop(self):
         """마이크 완전 종료"""
         if self.stream:

@@ -53,8 +53,8 @@ class MainActivitySttServer : AppCompatActivity() {
     private val TAG = "MainActivitySttServer"
     
     // 서버 URL 설정
-    // EC2에 배포된 FastAPI 서버 URL
-    private val FASTAPI_SERVER_URL = "http://k13a407.p.ssafy.io/ai"  // FastAPI 서버 URL (Socket.IO 경로: /ai/ws)
+    // EC2에 배포된 FastAPI 서버 URL (라즈베리파이와 동일한 URL 사용)
+    private val FASTAPI_SERVER_URL = "https://onair.ai.kr"  // FastAPI 서버 URL (Socket.IO 경로: /ws)
     private val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL (SSE 엔드포인트)
     // ACCESS_TOKEN은 TokenManager를 통해 동적으로 불러옵니다
 
@@ -571,7 +571,18 @@ class MainActivitySttServer : AppCompatActivity() {
         if (options != null && options.isNotEmpty()) {
             Log.i(TAG, "📋 Clarify 옵션: ${options.joinToString(", ")}")
         }
-        // TODO: UI에 Clarify 질문 표시
+        
+        // UI에 Clarify 질문 표시
+        runOnUiThread {
+            val clarifyMessage = if (options != null && options.isNotEmpty()) {
+                "$guidance\n옵션: ${options.joinToString(", ")}"
+            } else {
+                guidance
+            }
+            clarifyText.text = "Clarify: $clarifyMessage"
+            updateStatus("Clarify 질문 수신")
+            addLog("💬 Clarify 질문: $guidance")
+        }
     }
     
     /**

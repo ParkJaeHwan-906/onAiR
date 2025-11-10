@@ -83,8 +83,8 @@ def run_stt_loop():
             else:
                 # 스트리밍 방식: 실시간 인식 (분기처리 이후)
                 logger.info("🎤 스트리밍 모드 시작 (실시간 음성 인식)")
-                # 마이크 다시 활성화 (Intent 분류 중간에 OFF되었으므로)
-                if not mic.stream.is_active():
+                # 마이크 다시 활성화 (Intent 분류 중간에 OFF되었을 수 있음)
+                if not mic.is_active():
                     mic.resume()
                     logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
                 
@@ -100,7 +100,7 @@ def run_stt_loop():
         except Exception as e:
             logger.error(f"❌ STT 세션 오류: {e}")
             # 에러 발생 시에도 마이크는 켜둠 (다음 Wakeword 대기를 위해)
-            if not mic.stream.is_active():
+            if not mic.is_active():
                 mic.resume()
     
     # 이벤트 루프 생성
@@ -111,21 +111,36 @@ def run_stt_loop():
     # 주의: loop가 정의된 후에 등록해야 함
     def start_streaming_stt(session_id: str):
         """브리지 서버를 통해 받은 Streaming STT 시작 명령 처리"""
-        logger.info(f"📥 Streaming STT 시작 명령 수신: session_id={session_id}")
+        logger.info("=" * 60)
+        logger.info(f"📥 [단계 12-3] Python 3.10: Streaming STT 시작 명령 수신")
+        logger.info(f"   Session ID: {session_id}")
+        logger.info("=" * 60)
         
         # 마이크 활성화 (버퍼링 STT 후 OFF되었을 수 있음)
-        if not mic.stream.is_active():
+        if not mic.is_active():
+            logger.info("=" * 60)
+            logger.info("🔊 [단계 12-4] 마이크 활성화 시작")
+            logger.info("=" * 60)
             mic.resume()
-            logger.info("🔊 마이크 ON (Streaming STT 시작)")
+            logger.info("✅ [단계 12-4 완료] 마이크 ON (Streaming STT 시작)")
+        else:
+            logger.info("ℹ️ 마이크가 이미 활성화되어 있습니다.")
         
         # Streaming STT 세션 시작 (별도 태스크로 실행)
         async def run_streaming():
             try:
-                logger.info(f"🎤 Streaming STT 세션 시작: session_id={session_id}")
+                logger.info("=" * 60)
+                logger.info(f"🎤 [단계 12-5] 실시간 Streaming STT 세션 시작")
+                logger.info(f"   Session ID: {session_id}")
+                logger.info("=" * 60)
                 await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                logger.info("🟢 Streaming STT 세션 종료")
+                logger.info("=" * 60)
+                logger.info("🟢 [단계 12-5 완료] Streaming STT 세션 종료")
+                logger.info("=" * 60)
             except Exception as e:
-                logger.error(f"❌ Streaming STT 세션 오류: {e}")
+                logger.error("=" * 60)
+                logger.error(f"❌ [단계 12-5 실패] Streaming STT 세션 오류: {e}")
+                logger.error("=" * 60)
         
         # 이벤트 루프에서 실행
         loop.call_soon_threadsafe(lambda: asyncio.create_task(run_streaming()))
@@ -139,14 +154,29 @@ def run_stt_loop():
     try:
         while True:
             # ① 대기 상태 (마이크 ON, Wakeword 감지 중)
+            logger.info("=" * 60)
+            logger.info("⏳ [단계 1] Wakeword 감지 대기 중...")
+            logger.info("=" * 60)
+            
             # ② Wakeword 감지 대기
             if wait_for_wakeword():
-                logger.info("🚀 Wakeword 감지됨: STT 세션 시작")
+                logger.info("=" * 60)
+                logger.info("✅ [단계 2] Wakeword 감지 완료!")
+                logger.info("=" * 60)
+                import time
+                time.sleep(0.5)  # 0.5초 대기 (단계 구분)
+                
+                logger.info("=" * 60)
+                logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
+                logger.info("=" * 60)
                 
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
                 loop.run_until_complete(stt_session())
                 
-                logger.info("🟢 STT 세션 종료, 다시 대기 중... (마이크 ON, 다음 Wakeword 대기)")
+                logger.info("=" * 60)
+                logger.info("🟢 [단계 완료] STT 세션 종료, 다시 대기 중...")
+                logger.info("=" * 60)
+                time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
     except KeyboardInterrupt:
         logger.info("🛑 종료 중...")
         streaming_stt.stop()

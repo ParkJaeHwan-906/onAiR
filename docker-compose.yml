@@ -90,10 +90,6 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - REDIS_PREFIX=rag_chat
 
-# 볼륨 설정
-volumes:
-  elasticsearch-data:
-    driver: local
 
 # 도커 네트워크 설정 
 networks:
