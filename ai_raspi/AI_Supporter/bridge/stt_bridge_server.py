@@ -35,16 +35,26 @@ def disconnect(sid):
 def handle_start_streaming_stt(sid, data):
     """Python 3.13에서 Streaming STT 시작 명령 수신"""
     session_id = data.get("session_id")
-    logger.info(f"📥 Streaming STT 시작 명령 수신: session_id={session_id}")
+    logger.info("=" * 60)
+    logger.info(f"📥 [단계 12-2] 브리지 서버: Streaming STT 시작 명령 수신")
+    logger.info(f"   Session ID: {session_id}")
+    logger.info("=" * 60)
     
     if start_streaming_stt_callback:
         try:
             start_streaming_stt_callback(session_id)
-            logger.info(f"✅ Streaming STT 시작 명령 처리 완료: session_id={session_id}")
+            logger.info("=" * 60)
+            logger.info(f"✅ [단계 12-2 완료] 브리지 서버: Streaming STT 시작 명령 처리 완료")
+            logger.info(f"   Session ID: {session_id}")
+            logger.info("=" * 60)
         except Exception as e:
-            logger.error(f"❌ Streaming STT 시작 명령 처리 실패: {e}")
+            logger.error("=" * 60)
+            logger.error(f"❌ [단계 12-2 실패] Streaming STT 시작 명령 처리 실패: {e}")
+            logger.error("=" * 60)
     else:
+        logger.warning("=" * 60)
         logger.warning("⚠️ Streaming STT 시작 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
 
 # 3️⃣ 외부에서 호출될 함수 (STT 결과 emit)
 def send_stt_result(result: dict):
@@ -53,7 +63,11 @@ def send_stt_result(result: dict):
     Args:
         result: {"type": "final", "text": "...", "confidence": 0.95}
     """
-    logger.info(f"📤 STT 결과 전송: {result.get('type')} - {result.get('text', '')[:50]}... (연결된 클라이언트: {len(connected_clients)}개)")
+    logger.info("=" * 60)
+    logger.info(f"📤 [단계 4] 브리지 서버: STT 결과 수신 및 전송 시작")
+    logger.info(f"   타입: {result.get('type')}, 텍스트: {result.get('text', '')[:50]}...")
+    logger.info(f"   연결된 클라이언트: {len(connected_clients)}개")
+    logger.info("=" * 60)
     
     if not connected_clients:
         logger.warning("⚠️ 연결된 클라이언트가 없습니다. STT 결과를 전송할 수 없습니다.")
@@ -63,10 +77,14 @@ def send_stt_result(result: dict):
     for client_sid in list(connected_clients):  # 리스트로 복사하여 안전하게 순회
         try:
             sio.emit('stt_result', result, room=client_sid)
-            logger.debug(f"   → 클라이언트 {client_sid}에게 전송")
+            logger.info(f"✅ 클라이언트 {client_sid[:10]}...에게 전송 완료")
         except Exception as e:
             logger.error(f"❌ 클라이언트 {client_sid}에게 전송 실패: {e}")
             connected_clients.discard(client_sid)  # 실패한 클라이언트 제거
+    
+    logger.info("=" * 60)
+    logger.info("✅ [단계 4 완료] 브리지 서버: STT 결과 전송 완료")
+    logger.info("=" * 60)
 
 # 4️⃣ 서버 실행
 def run_server(host='127.0.0.1', port=5050):
