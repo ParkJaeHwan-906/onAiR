@@ -26,12 +26,12 @@ class MainActivity : AppCompatActivity() {
 //            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
 //            insets
 //        }
-        binding.nextButton.setOnClickListener {
-            val intent = Intent(this, CommunicationActivity::class.java).apply {
-
-            }
-            startActivity(intent)
-        }
+        // TODO: nextButton이 레이아웃에서 제거되어 주석 처리됨 (테스트 화면으로 변경)
+        // binding.nextButton.setOnClickListener {
+        //     val intent = Intent(this, CommunicationActivity::class.java).apply {
+        //     }
+        //     startActivity(intent)
+        // }
 
 
     }

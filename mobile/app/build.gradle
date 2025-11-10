@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace 'com.onair.mobile'
-    compileSdk 34
+    compileSdk 36  // 의존성 요구사항에 맞춰 36으로 업데이트 (일부는 35, 일부는 36 요구)
 
     defaultConfig {
         applicationId "com.onair.mobile"
         minSdk 30
-        targetSdk 34
+        targetSdk 34  // targetSdk는 34 유지 (런타임 동작 변경 없음)
         versionCode 1
         versionName "1.0"
 
@@ -44,23 +44,6 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = '17'
-    }
-
-    testOptions {
-        unitTests.includeAndroidResources = true
-        execution 'ANDROIDX_TEST_ORCHESTRATOR'
-        animationsDisabled = true
-    }
-
-    packaging {
-        resources {
-            excludes += "META-INF/INDEX.LIST"
-            excludes += "META-INF/*.SF"
-            excludes += "META-INF/*.DSA"
-            excludes += "META-INF/*.RSA"
-            excludes += "META-INF/DEPENDENCIES"
-        }
         jvmTarget = '17'
     }
 

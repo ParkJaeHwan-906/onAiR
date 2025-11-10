@@ -138,7 +138,7 @@ class TokenManager(private val context: Context) {
                 val response = httpClient.newCall(request).execute()
                 
                 if (!response.isSuccessful) {
-                    Log.e(TAG, "❌ 토큰 갱신 실패: HTTP ${response.code()}")
+                    Log.e(TAG, "❌ 토큰 갱신 실패: HTTP ${response.code}")
                     response.body?.let { body ->
                         Log.e(TAG, "응답: ${body.string()}")
                     }

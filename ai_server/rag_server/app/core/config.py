@@ -57,10 +57,10 @@ class Settings(BaseSettings):
     # 🌐 FastAPI Server URL
     # =======================================
     # FastAPI 서버 URL (모바일 앱에서 접근할 URL)
-    # EC2 배포: "https://k13a407.p.ssafy.io/ai"
+    # EC2 배포: "http://k13a407.p.ssafy.io/ai"
     # 로컬 개발: "http://localhost:8000"
     # 같은 네트워크: "http://192.168.0.100:8000"
-    FASTAPI_SERVER_URL: str = "https://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
+    FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
     FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
     FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
 
