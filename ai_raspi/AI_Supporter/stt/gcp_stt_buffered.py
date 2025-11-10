@@ -149,8 +149,10 @@ class GcpBufferedStt:
         
         audio = speech.RecognitionAudio(content=audio_data)
 
-        print("📤 GCP STT 요청 전송 중...")
+        print("=" * 60)
+        print("📤 [단계 3-1] GCP STT 요청 전송 중...")
         print(f"   오디오 크기: {len(audio_data)} bytes ({len(audio_data) / 2 / self.rate:.2f}초)")
+        print("=" * 60)
         
         # STT 요청 직후 마이크 종료 (더 이상 음성 수집 불필요)
         mic.pause()
@@ -169,7 +171,9 @@ class GcpBufferedStt:
             
             # 결과 처리
             if response.results:
-                print(f"📋 GCP STT 응답 - 결과 개수: {len(response.results)}")
+                print("=" * 60)
+                print(f"✅ [단계 3-2] GCP STT 응답 수신 - 결과 개수: {len(response.results)}")
+                print("=" * 60)
                 for idx, result in enumerate(response.results):
                     transcript = result.alternatives[0].transcript
                     confidence = result.alternatives[0].confidence
@@ -181,6 +185,11 @@ class GcpBufferedStt:
                         for alt_idx, alt in enumerate(result.alternatives[1:], 2):
                             print(f"      [{alt_idx}] {alt.transcript} (신뢰도: {alt.confidence:.2f})")
                     
+                    print("=" * 60)
+                    print("📤 [단계 4] 브리지 서버로 STT 결과 전송 시작")
+                    print(f"   텍스트: {transcript[:50]}...")
+                    print("=" * 60)
+                    
                     # Socket.IO로 결과 전송 (딕셔너리 형태로 전달)
                     stt_data = {
                         "type": "final",
@@ -188,6 +197,10 @@ class GcpBufferedStt:
                         "confidence": confidence
                     }
                     await broadcaster(stt_data)
+                    
+                    print("=" * 60)
+                    print("✅ [단계 4 완료] 브리지 서버로 STT 결과 전송 완료")
+                    print("=" * 60)
                     # 텍스트 전송 완료 → 마이크는 이미 OFF 상태 (Intent 분류 중간)
             else:
                 print("⚠️ STT 결과가 없습니다.")

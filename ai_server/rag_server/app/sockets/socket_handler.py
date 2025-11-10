@@ -82,30 +82,45 @@ async def broadcast_to(device_types, event: str, payload: dict):
     targets = list(device_map.items())
     sent_count = 0
     
+    # 디버깅: 현재 device_map 상태 출력
+    print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
         print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
+    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    
     for sid, dev in targets:
         if dev in device_types:
             try:
+                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:10]}...)")
+                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
                 print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                import traceback
+                traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
+                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
     if sent_count == 0:
         print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    else:
+        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -148,8 +163,12 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
     
-    print(f"🔗 Registered device: {device} ({sid})")
+    print("=" * 60)
+    print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
     print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
+    print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
+    print("=" * 60)
+    
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
 
@@ -178,27 +197,46 @@ async def handle_stt_result(sid, data):
     confidence = data.get("confidence")
     session_id = data.get("session_id")  # Clarify 세션 ID (있는 경우)
     
-    print(f"📝 STT 결과 수신 [raspi]: type={stt_type}, text={stt_text[:50]}...")
+    print("=" * 60)
+    print(f"📝 [단계 6] FastAPI 서버: STT 결과 수신 [raspi]")
+    print(f"   타입: {stt_type}, 텍스트: {stt_text[:50]}...")
+    print("=" * 60)
     
     # 버퍼링 STT (type="final"이고 session_id가 없음)
     if stt_type == "final" and not session_id:
         # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
         try:
+            print("=" * 60)
+            print("📡 [단계 6-1] 모바일로 SSE 연결 시작 요청 전송")
+            print("=" * 60)
             await broadcast_to("mobile", "start_sse_connection", {
                 "text": stt_text,
                 "timestamp": None  # 필요시 추가
             })
-            print(f"📡 모바일로 SSE 연결 시작 요청 전송: '{stt_text[:50]}...'")
+            print(f"✅ 모바일로 SSE 연결 시작 요청 전송 완료: '{stt_text[:50]}...'")
         except Exception as e:
             print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
         
         # 2. Gemini-Flash로 Intent 분류 및 모바일로 전송
         try:
+            print("=" * 60)
+            print("🤖 [단계 7] Gemini-Flash로 Intent 분류 시작")
+            print(f"   입력 텍스트: {stt_text[:50]}...")
+            print("=" * 60)
+            
             intent_result = classify_intent(stt_text)
             intent = intent_result.get("intent", "AI_SUPPORTER")
             
+            print("=" * 60)
+            print(f"✅ [단계 7 완료] Intent 분류 완료: {intent} (신뢰도: {intent_result.get('confidence', 0.5):.2f})")
+            print("=" * 60)
+            
             # 모바일로 Intent 결과 전송
-            print(f"📤 모바일로 intent_result 이벤트 전송 준비: intent={intent}, text='{stt_text[:50]}...'")
+            print("=" * 60)
+            print(f"📤 [단계 8] 모바일로 intent_result 이벤트 전송 시작")
+            print(f"   Intent: {intent}, Text: '{stt_text[:50]}...'")
+            print("=" * 60)
+            
             await broadcast_to("mobile", "intent_result", {
                 "text": stt_text,
                 "intent": intent,
@@ -207,27 +245,43 @@ async def handle_stt_result(sid, data):
                 "stt_confidence": confidence  # STT 신뢰도
             })
             
-            print(f"✅ 버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent} (신뢰도: {intent_result.get('confidence', 0.5):.2f})")
+            print("=" * 60)
+            print(f"✅ [단계 8 완료] 모바일로 intent_result 이벤트 전송 완료")
+            print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
+            print("=" * 60)
             
             # AI_SUPPORTER 분기인 경우 CV 모델 실행
             if intent == "AI_SUPPORTER":
                 try:
+                    print("=" * 60)
+                    print("🔍 [단계 9] CV 모델 실행 시작")
+                    print("=" * 60)
+                    
                     cv_result = await run_cv_model()
                     
                     if not cv_result.get("detected", False):
                         # CV 모델이 오류를 탐지하지 못한 경우
-                        print(f"⚠️ CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                        print("=" * 60)
+                        print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                        print("=" * 60)
                         
                         # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
-                        print(f"📤 모바일로 cv_detection_failed 이벤트 전송 준비")
+                        print("=" * 60)
+                        print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
+                        print("=" * 60)
                         await broadcast_to("mobile", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                         })
+                        print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
                         
-                        print(f"📤 라즈베리파이로 cv_detection_failed 이벤트 전송 준비")
+                        print("=" * 60)
+                        print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                        print("=" * 60)
                         await broadcast_to("raspi", "cv_detection_failed", {
                             "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
                         })
+                        print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                        print("=" * 60)
                         
                         # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
                         # (라즈베리파이에서 이 이벤트를 받아서 처리)
