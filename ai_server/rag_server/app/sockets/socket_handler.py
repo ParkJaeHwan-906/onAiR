@@ -10,6 +10,9 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 import socketio
 import cv2
 import numpy as np
+import asyncio
+import os
+import time
 from typing import Dict, Any, Optional
 from app.services.intent_service import classify_intent
 from app.services import memory
@@ -44,6 +47,84 @@ device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 
 # Clarify 세션 추적 (session_id → 현재 Clarify 턴 정보)
 clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, history, ... } }
+
+
+# ========================================
+# 🐛 단계별 수동 실행 모드 (디버깅용)
+# ========================================
+
+async def wait_for_next_step(step_name: str, step_number: str = ""):
+    """
+    단계별 수동 실행 모드: 다음 단계로 진행하기 전 대기
+    
+    Args:
+        step_name: 현재 단계 이름 (로그 출력용)
+        step_number: 단계 번호 (예: "6", "7", "12-1")
+    
+    사용법:
+        - DEBUG_STEP_BY_STEP=True일 때: /tmp/next_step 파일이 생성될 때까지 대기
+        - DEBUG_STEP_BY_STEP=False일 때: 바로 진행 (0.5초 딜레이만)
+    """
+    if not settings.DEBUG_STEP_BY_STEP:
+        # 자동 모드: 짧은 딜레이만
+        await asyncio.sleep(0.5)
+        return
+    
+    # 수동 모드: 파일 트리거 대기
+    trigger_file = settings.DEBUG_STEP_TRIGGER_FILE
+    timeout = settings.DEBUG_STEP_WAIT_TIMEOUT
+    
+    print("=" * 80)
+    print(f"⏸️  [단계 {step_number}] {step_name} 완료")
+    print(f"   다음 단계로 진행하려면 다음 명령을 실행하세요:")
+    print(f"   $ touch {trigger_file}")
+    print(f"   또는 자동으로 진행하려면: $ echo 'auto' > {trigger_file}")
+    print(f"   (최대 {timeout}초 대기)")
+    print("=" * 80)
+    
+    # 기존 트리거 파일 삭제 (이전 단계에서 남아있을 수 있음)
+    if os.path.exists(trigger_file):
+        try:
+            os.remove(trigger_file)
+        except:
+            pass
+    
+    # 파일이 생성될 때까지 대기
+    start_time = time.time()
+    check_interval = 0.5  # 0.5초마다 확인
+    
+    while True:
+        if os.path.exists(trigger_file):
+            # 파일 내용 확인 (auto 모드 체크)
+            try:
+                with open(trigger_file, 'r') as f:
+                    content = f.read().strip()
+                if content == "auto":
+                    # 자동 모드: 이후 단계도 자동 진행
+                    print(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
+                    os.remove(trigger_file)
+                    return
+            except:
+                pass
+            
+            # 수동 모드: 파일 삭제 후 진행
+            try:
+                os.remove(trigger_file)
+            except:
+                pass
+            print(f"✅ 다음 단계 진행: {step_name}")
+            print("=" * 80)
+            await asyncio.sleep(0.2)  # 파일 삭제 후 짧은 딜레이
+            return
+        
+        # 타임아웃 체크
+        elapsed = time.time() - start_time
+        if elapsed >= timeout:
+            print(f"⚠️ 타임아웃 ({timeout}초) - 자동으로 다음 단계 진행")
+            print("=" * 80)
+            return
+        
+        await asyncio.sleep(check_interval)
 
 
 def init_socketio():
@@ -203,6 +284,7 @@ async def handle_stt_result(sid, data):
     print(f"📝 [단계 6] FastAPI 서버: STT 결과 수신 [raspi]")
     print(f"   타입: {stt_type}, 텍스트: {stt_text[:50]}...")
     print("=" * 60)
+    await wait_for_next_step("STT 결과 수신 완료", "6")
     
     # 버퍼링 STT (type="final"이고 session_id가 없음)
     if stt_type == "final" and not session_id:
@@ -216,6 +298,7 @@ async def handle_stt_result(sid, data):
                 "timestamp": None  # 필요시 추가
             })
             print(f"✅ 모바일로 SSE 연결 시작 요청 전송 완료: '{stt_text[:50]}...'")
+            await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
         except Exception as e:
             print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
         
@@ -232,6 +315,7 @@ async def handle_stt_result(sid, data):
             print("=" * 60)
             print(f"✅ [단계 7 완료] Intent 분류 완료: {intent} (신뢰도: {intent_result.get('confidence', 0.5):.2f})")
             print("=" * 60)
+            await wait_for_next_step("Intent 분류 완료", "7")
             
             # 모바일로 Intent 결과 전송
             print("=" * 60)
@@ -247,10 +331,11 @@ async def handle_stt_result(sid, data):
                 "stt_confidence": confidence  # STT 신뢰도
             })
             
-            # print("=" * 60)
-            # print(f"✅ [단계 8 완료] 모바일로 intent_result 이벤트 전송 완료")
-            # print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
-            # print("=" * 60)
+            print("=" * 60)
+            print(f"✅ [단계 8 완료] 모바일로 intent_result 이벤트 전송 완료")
+            print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
+            print("=" * 60)
+            await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
             # AI_SUPPORTER 분기인 경우 CV 모델 실행
             if intent == "AI_SUPPORTER":
@@ -266,6 +351,7 @@ async def handle_stt_result(sid, data):
                         print("=" * 60)
                         print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
                         print("=" * 60)
+                        await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
                         
                         # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
                         print("=" * 60)
@@ -275,6 +361,7 @@ async def handle_stt_result(sid, data):
                             "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                         })
                         print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
+                        await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
                         
                         print("=" * 60)
                         print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
@@ -284,6 +371,7 @@ async def handle_stt_result(sid, data):
                         })
                         print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
                         print("=" * 60)
+                        await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
                         
                         # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
                         # (라즈베리파이에서 이 이벤트를 받아서 처리)
@@ -328,6 +416,12 @@ async def handle_stt_result(sid, data):
         
         # type="final"이면 Clarify 처리 시작 (새로운 방식: clarify_qa_turn)
         if stt_type == "final":
+            print("=" * 60)
+            print(f"📝 [단계 13] FastAPI 서버: Streaming STT 결과 수신 [raspi]")
+            print(f"   Session ID: {session_id}")
+            print(f"   타입: {stt_type}, 텍스트: {stt_text[:50]}...")
+            print("=" * 60)
+            await wait_for_next_step("Streaming STT 결과 수신 완료", "13")
             await process_clarify_qa_turn(session_id, stt_text)
         
         print(f"✅ Streaming STT 수신 [session={session_id}]: '{stt_text[:50]}...'")
@@ -560,9 +654,15 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
         normalized_query = normalize_query_style(effective_query)
         
         # 2. Hybrid Search + Rerank (RAG 기반)
+        print("=" * 60)
+        print(f"🔍 [단계 13-2] Hybrid Search + Rerank 시작")
+        print(f"   정규화된 쿼리: {normalized_query[:50]}...")
+        print("=" * 60)
         base_hits = hybrid_retrieve(normalized_query, top_k=8)
         hits = rerank(normalized_query, base_hits, top_k=6)
         used_hits = hits[:5]
+        print(f"✅ Hybrid Search + Rerank 완료: {len(hits)}개 문서 검색")
+        await wait_for_next_step("Hybrid Search + Rerank 완료", "13-2")
         
         if not hits:
             await broadcast_to("mobile", "clarify_qa_turn", {
@@ -578,8 +678,14 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             return
         
         # 3. RAG 기반 Evidence Check (RED/YELLOW/GREEN)
+        print("=" * 60)
+        print(f"🔍 [단계 13-3] Evidence Check 시작 (RED/YELLOW/GREEN 판단)")
+        print("=" * 60)
         need_clarify, evidence_stats = comprehensive_evidence_check(effective_query, used_hits)
         gate_decision = evidence_stats.get("gate_decision")
+        print(f"✅ Evidence Check 완료: gate_decision={gate_decision}, need_clarify={need_clarify}")
+        print("=" * 60)
+        await wait_for_next_step("Evidence Check 완료", "13-3")
         
         # 히스토리를 evidence_stats에 포함 (make_clarify_prompt에서 사용)
         evidence_stats["history"] = history
@@ -589,10 +695,18 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # RAG 기반 Clarify 질문 생성 (Gemini-Flash 사용)
             from app.services.answerability import make_clarify_prompt
             
+            print("=" * 60)
+            print(f"💬 [단계 13-4] Clarify 질문 생성 시작 (RED/YELLOW)")
+            print("=" * 60)
             clarified_result = make_clarify_prompt(effective_query, used_hits, evidence_stats)
             clarify_question = clarified_result.get("guide", "문제 상황을 구체적으로 말씀해주세요.")
+            print(f"✅ Clarify 질문 생성 완료: {clarify_question[:50]}...")
+            await wait_for_next_step("Clarify 질문 생성 완료", "13-4")
             
             # LLM 답변 생성 (Gemini-Flash 사용)
+            print("=" * 60)
+            print(f"🤖 [단계 13-5] LLM 답변 생성 시작 (Gemini-Flash)")
+            print("=" * 60)
             try:
                 if genai_available:
                     model_qa = genai.GenerativeModel("gemini-1.5-flash")
@@ -610,16 +724,24 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             except Exception as e:
                 print(f"⚠️ LLM 답변 생성 실패: {e}")
                 llm_answer = "문제 상황을 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
+            print(f"✅ LLM 답변 생성 완료: {llm_answer[:50]}...")
+            await wait_for_next_step("LLM 답변 생성 완료", "13-5")
             
             # TTS 변환
+            print("=" * 60)
+            print(f"🔊 [단계 13-6] TTS 변환 시작")
+            print(f"   LLM 답변: {llm_answer[:50]}...")
+            print("=" * 60)
             try:
                 tts_result = text_to_speech(llm_answer)
                 audio_content = tts_result.get("audio_content")
                 audio_encoding = tts_result.get("mime_type")
+                print(f"✅ TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
             except Exception as e:
                 print(f"⚠️ TTS 생성 실패: {e}")
                 audio_content = None
                 audio_encoding = None
+            await wait_for_next_step("TTS 변환 완료", "13-6")
             
             # Redis에 저장
             memory.append_event(session_id, {
@@ -634,6 +756,10 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             })
             
             # clarify_qa_turn 이벤트 전송
+            print("=" * 60)
+            print(f"📤 [단계 13-7] 모바일로 clarify_qa_turn 이벤트 전송 시작")
+            print(f"   Turn ID: {turn_id}, Need Clarify: True, Gate Decision: {gate_decision}")
+            print("=" * 60)
             await broadcast_to("mobile", "clarify_qa_turn", {
                 "session_id": session_id,
                 "turn_id": turn_id,
@@ -647,6 +773,10 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                 "evidence_trace": evidence_stats.get("evidence_trace", {}),
                 "missing_info": evidence_stats.get("missing_info", [])
             })
+            print("=" * 60)
+            print(f"✅ [단계 13-7 완료] 모바일로 clarify_qa_turn 이벤트 전송 완료")
+            print("=" * 60)
+            await wait_for_next_step("모바일로 clarify_qa_turn 이벤트 전송 완료", "13-7")
             
             # 세션 정보 업데이트
             clarify_sessions[session_id]["turns"].append({
@@ -662,24 +792,34 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
         else:
             # GREEN → 최종 답변 생성 (GPT-4o)
             # 이미 위에서 RAG 검색 및 Evidence Check 완료됨
+            print("=" * 60)
+            print(f"✅ [단계 13-8] 최종 답변 생성 시작 (GREEN, GPT-4o)")
+            print("=" * 60)
             
             # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
             snippets = [h["source"]["content"] for h in used_hits]
             answer_result = llm_generate_answer(effective_query, snippets, used_hits)
+            print(f"✅ 최종 답변 생성 완료: {answer_result.get('tts_text', '')[:50]}...")
+            await wait_for_next_step("최종 답변 생성 완료 (GPT-4o)", "13-8")
             
             # 구조화된 답변에서 TTS 텍스트 추출
             answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
             structured_answer = answer_result  # 전체 구조화된 답변
             
             # TTS 생성 (TTS 친화적 텍스트 사용)
+            print("=" * 60)
+            print(f"🔊 [단계 13-9] 최종 답변 TTS 변환 시작")
+            print("=" * 60)
             try:
                 tts_result = text_to_speech(answer_text)
                 audio_content = tts_result.get("audio_content")
                 audio_encoding = tts_result.get("mime_type")
+                print(f"✅ 최종 답변 TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
             except Exception as e:
                 print(f"⚠️ TTS 생성 실패: {e}")
                 audio_content = None
                 audio_encoding = None
+            await wait_for_next_step("최종 답변 TTS 변환 완료", "13-9")
             
             # Redis에 저장
             memory.append_event(session_id, {
@@ -703,6 +843,9 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             clarify_sessions.pop(session_id, None)
             
             # 최종 답변 전송 (구조화된 답변 포함)
+            print("=" * 60)
+            print(f"📤 [단계 13-10] 모바일로 final_answer 이벤트 전송 시작")
+            print("=" * 60)
             await broadcast_to("mobile", "final_answer", {
                 "session_id": session_id,
                 "turn_id": turn_id,
@@ -719,8 +862,11 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
                     for h in used_hits[:3]
                 ])
             })
-            
-            print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
+            print("=" * 60)
+            print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
+            print(f"   최종 답변 생성 완료 [session={session_id}]")
+            print("=" * 60)
+            await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
     except Exception as e:
         print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
@@ -881,11 +1027,7 @@ async def handle_clarify_response(sid, data):
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
     sender_device = device_map.get(sid, "unknown")
-
-    if sender_device == "unknown":
-        return
-
-    if not data:
+    if sender_device == "unknown" or not data:
         return
 
     np_data = np.frombuffer(data, np.uint8)
@@ -894,16 +1036,14 @@ async def handle_video_frame(sid, data):
         print("⚠️ Failed to decode frame")
         return
 
-    # === 1️⃣ 모션 계산 ===
+    # 1) 모션 계산
     result = await motion_core.process_frame(frame, sid=sid)
-    if result["status"] == "ok":
-        x, y, z = result["x"], result["y"], result["z"]
-        # print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-    # else:
-        # print(f"⚠️ Motion estimation status: {result['status']}")
+    # 로그는 필요시만
+    # if result["status"] == "ok":
+    #     x, y, z = result["x"], result["y"], result["z"]
 
-    # === 2️⃣ AR 마커 업데이트 ===
-    if len(ar_markers) > 0:
+    # 2) AR 마커 업데이트 (새 포맷: {idx, info:{x,y,size}})
+    if ar_markers:
         R, t = motion_core.get_pose()
         updated_markers = []
 
@@ -939,14 +1079,15 @@ async def handle_video_frame(sid, data):
 
             updated_markers.append({
                 "idx": m["idx"],
-                "info": {"x": round(u_pred, 2), "y": round(v_pred, 2), "size": round(proj_size, 3)}
+                "info": {"x": round(u_pred, 2), "y": round(v_pred, 2), "size": round(proj_size, 3), "tpl": info.get("tpl", None)}
             })
 
         if updated_markers:
-            await broadcast_to("pc", "ar-info", {"markers": updated_markers})
-            # print(f"🟢 Sent {len(updated_markers)} AR markers to PC")
+            # 프레임 기준으로 리스트 갱신
+            ar_markers[:] = updated_markers
+            await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # === 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용) ===
+    # 3) 프레임 브로드캐스트 (PC 디스플레이용)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
@@ -1007,15 +1148,14 @@ async def handle_control_raspi(sid, data):
 # ========================================
 # AR 마커 생성 이벤트
 # ========================================
-
 # 전역 관리 리스트
-ar_markers = []  # [{ "idx": int, "point": (x, y, z), "size": float }, ...]
+ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
 
 async def handle_ar_marker(sid, data):
     """
     웹페이지에서 AR 마커 생성을 요청하면,
-    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)와 상대 크기(size)를 계산하고
-    이를 저장 및 클라이언트로 전송합니다.
+    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)를 계산하고
+    상대 크기(size)를 추정해 저장 및 클라이언트로 전송합니다.
     """
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
@@ -1034,10 +1174,12 @@ async def handle_ar_marker(sid, data):
     if rel_size is None:
         rel_size = 1.0  # fallback 값
 
-    # === 2️⃣ 픽셀 → 월드 좌표 변환 ===
+    # === 2️⃣ 픽셀 → 월드 좌표 변환 (plane_z=0 기준)
     world_point = motion_core.pixel_to_world_on_plane(marker_x, marker_y, plane_z=0.0)
     if world_point is None:
-        world_point = (0.0, 0.0, 0.0)
+        wx, wy, wz = 0.0, 0.0, 0.0
+    else:
+        wx, wy, wz = world_point
 
     # === 🎯 클릭 시 패치 저장 ===
     patch = motion_core.extract_patch_from_current_gray(marker_x, marker_y, half_size=10)
@@ -1057,10 +1199,12 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker_info)
 
     # === 4️⃣ 콘솔 로그 출력 ===
-    wx, wy, wz = world_point
-    print(f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
-          f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}")
+    print(
+        f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
+        f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}"
+    )
 
-    # === 5️⃣ 클라이언트로 다시 전송 ===
-    await sio.emit("ar-info", marker_info, to=sid)
-    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}")
+    # === 5️⃣ 클라이언트로 전송 ===
+    await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
+    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, data={ar_markers}")
+
