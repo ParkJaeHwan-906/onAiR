@@ -47,11 +47,10 @@ last_parallax_med = 1.0   # 전역 기준용 (0 방지 위해 1.0 기본값)
 # ============================
 # 📦 외부 의존
 # ============================
-from feature_extractor import extract_features
-from feature_tracker import track_features
-from ransac_filter import ransac_filter
-from motion_estimator import estimate_motion
-
+from app.ar.feature_extractor import extract_features
+from app.ar.feature_tracker import track_features
+from app.ar.ransac_filter import ransac_filter
+from app.ar.motion_estimator import estimate_motion
 
 def get_pose():
     """현재 누적 포즈 반환 (R_total, t_total) 복사본"""
