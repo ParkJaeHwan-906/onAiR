@@ -44,9 +44,42 @@ def heuristic_gate(query: str, hits: List[Dict[str, Any]]) -> Tuple[bool, Dict[s
 
 # ====== V2 Clarify Gate (RED/YELLOW/GREEN) ======
 
+def adaptive_thresholds(hits: List[Dict[str, Any]], base_thresholds: Dict[str, float]) -> Dict[str, float]:
+    """
+    검색 결과 품질에 따라 threshold 동적 조정
+    """
+    if not hits:
+        return base_thresholds
+    
+    # 검색 결과 분포 분석
+    rerank_scores = [h.get("rerank_score", 0) for h in hits]
+    hybrid_scores = [h.get("hybrid_score", 0) for h in hits]
+    
+    avg_rerank = np.mean(rerank_scores) if rerank_scores else 0.5
+    std_rerank = np.std(rerank_scores) if rerank_scores else 0.1
+    avg_hybrid = np.mean(hybrid_scores) if hybrid_scores else 0.5
+    
+    # 분포가 낮으면 threshold 완화, 높으면 강화
+    adjusted = base_thresholds.copy()
+    
+    if avg_rerank < 0.5:
+        # 낮은 품질 → threshold 완화 (더 쉽게 GREEN)
+        adjusted["confidence"] = base_thresholds.get("confidence", 0.50) * 0.9
+        adjusted["retrieval_strength"] = base_thresholds.get("retrieval_strength", 0.50) * 0.9
+    elif avg_rerank > 0.7:
+        # 높은 품질 → threshold 강화 (더 엄격하게 GREEN)
+        adjusted["confidence"] = base_thresholds.get("confidence", 0.62) * 1.1
+        adjusted["retrieval_strength"] = base_thresholds.get("retrieval_strength", 0.58) * 1.1
+    
+    # 일관성 높으면 완화
+    if std_rerank < 0.1:  # 결과가 일관적
+        adjusted["consistency"] = base_thresholds.get("consistency", 0.60) * 0.95
+    
+    return adjusted
+
 def comprehensive_evidence_check(query: str, hits: List[Dict[str, Any]]) -> Tuple[bool, Dict[str, Any]]:
     """
-    Clarify 게이트 (RED/YELLOW/GREEN).
+    Clarify 게이트 (RED/YELLOW/GREEN) - Adaptive Thresholds 적용
     반환: (need_clarify, stats)
     - need_clarify 는 오직 RED일 때만 True
     - stats.gate_decision = "RED" | "YELLOW" | "GREEN"
@@ -85,20 +118,24 @@ def comprehensive_evidence_check(query: str, hits: List[Dict[str, Any]]) -> Tupl
     retrieval_strength = semantic_stats.get("retrieval_strength", 0.0)
     semantic_score = semantic_stats.get("semantic_score", 0.0)
 
-    # 3) thresholds
-    TH_RED = {
+    # 3) 기본 thresholds
+    TH_RED_BASE = {
         "hit_count": 2,
         "confidence": 0.50,
         "retrieval_strength": 0.50,
         "coverage": 2,
     }
-    TH_GREEN = {
+    TH_GREEN_BASE = {
         "confidence": 0.62,
         "retrieval_strength": 0.58,
         "coverage": 3,
         "consistency": 0.60,
         "hit_count": 3,
     }
+    
+    # 4) 동적 threshold 조정
+    TH_RED = adaptive_thresholds(hits, TH_RED_BASE)
+    TH_GREEN = adaptive_thresholds(hits, TH_GREEN_BASE)
 
     failed_clauses: List[str] = []
 
@@ -558,16 +595,40 @@ def make_clarify_prompt(
     conversation_context = ""
     if history:
         conv_lines = []
-        for event in history[-6:]:  # 최근 6개 이벤트만
+        for event in history[-10:]:  # 최근 10개 이벤트로 확장
             role = event.get("role", "")
             event_type = event.get("type", "")
             data = event.get("data", {})
-            if role == "user" and event_type == "query":
-                conv_lines.append(f"사용자: {data.get('query', '')}")
+            
+            # 사용자 질문 (스트리밍 STT)
+            if role == "user" and event_type == "streaming_stt":
+                text = data.get("text", "")
+                if text:
+                    conv_lines.append(f"사용자: {text}")
+            
+            # 사용자 질문 (일반 query)
+            elif role == "user" and event_type == "query":
+                query_text = data.get("query", "")
+                if query_text:
+                    conv_lines.append(f"사용자: {query_text}")
+            
+            # Clarify 질문/답변
+            elif role == "system" and event_type == "clarify":
+                clarify_guidance = data.get("clarify_guidance", "")
+                if clarify_guidance:
+                    conv_lines.append(f"시스템 질문: {clarify_guidance}")
+                # 이전에 누락된 정보도 포함
+                evidence_stats_in_history = data.get("evidence_stats", {})
+                prev_missing = evidence_stats_in_history.get("missing_info", [])
+                if prev_missing:
+                    conv_lines.append(f"  → 누락된 정보: {', '.join(prev_missing)}")
+            
+            # Evidence 체크 결과
             elif role == "system" and event_type == "evidence":
                 prev_missing = data.get("missing_info", [])
                 if prev_missing:
                     conv_lines.append(f"시스템: 누락된 정보 - {', '.join(prev_missing)}")
+        
         if conv_lines:
             conversation_context = f"""
 [이전 대화 맥락]
@@ -590,27 +651,37 @@ def make_clarify_prompt(
 검색 신뢰도가 0.62 이상이고, retrieval_strength가 0.58 이상이며, coverage가 3 이상이면 구체화 충분합니다.
 """
 
+    # Few-Shot Learning 예시 추가
+    few_shot_examples = """
+[예시 1: 모호한 질문]
+질문: "고장났어요"
+검색 품질: 신뢰도 0.45, 커버리지 1개 축
+→ 판단: RED (너무 모호함)
+→ 구체화 질문: "어떤 부품이 어떤 증상으로 고장났는지 알려주세요. 예를 들어, 송풍기 모터가 회전하지 않거나, 댐퍼가 열리지 않는 것처럼 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
+
+[예시 2: 부분적으로 구체화된 질문]
+질문: "송풍기가 안 돼요"
+검색 품질: 신뢰도 0.58, 커버리지 2개 축
+→ 판단: YELLOW (부족한 정보 있음)
+→ 구체화 질문: "송풍기가 전혀 작동하지 않나요, 아니면 소음이나 진동이 발생하나요? 그리고 전원 상태는 어떤가요? 차단기가 켜져 있고, 비상정지 스위치는 해제되어 있나요?"
+
+[예시 3: 충분히 구체화된 질문]
+질문: "송풍기 모터가 회전하지 않고, 전원은 ON 상태이며, 차단기는 정상입니다."
+검색 품질: 신뢰도 0.72, 커버리지 3개 축
+→ 판단: GREEN (충분히 구체적)
+→ 답변 생성 가능
+"""
+
     prompt = f"""
 너는 공조기 및 설비 유지보수 분야의 질문 분석 전문가야.
-아래는 사용자가 한 질문과, RAG로 검색된 문서 일부, 그리고 검색 품질 지표야.
+아래 예시를 참고하여 현재 질문을 분석하고, RED/YELLOW/GREEN 중 어디에 해당하는지 판단하세요.
+
+{few_shot_examples}
 
 {conversation_context}
 
-이 정보들을 참고해서 아래 항목을 JSON 형식으로 작성해줘:
-
-1️⃣ 왜 질문이 모호한지 (빠진 정보 기반)
-2️⃣ 어떤 방향으로 구체화해야 하는지 (부위, 현상, 상황)
-3️⃣ 문서 내용을 기반으로 구체화 예시 3개
-
-JSON 형식:
-{{
-  "reason": "...",
-  "guide": "...",
-  "examples": ["...", "...", "..."]
-}}
-
-[사용자 질문]
-{query}
+[현재 분석 대상]
+사용자 질문: {query}
 
 {evidence_summary}
 
@@ -619,6 +690,22 @@ JSON 형식:
 
 [문서 내용 일부]
 {context_snippets}
+
+위 예시를 참고하여, 현재 질문이 RED/YELLOW/GREEN 중 어디에 해당하는지 판단하고,
+RED 또는 YELLOW인 경우 구체화 질문을 생성하세요.
+
+⚠️ 중요: TTS로 재생될 질문이므로, 자연스럽고 이해하기 쉬운 문장으로 작성하세요.
+- 짧고 명확한 문장 사용
+- 숫자나 기호 대신 말로 표현 (예: "1단계" → "첫 번째 단계")
+- 예시는 구체적이고 실용적으로
+
+JSON 형식:
+{{
+  "gate_decision": "RED" | "YELLOW" | "GREEN",
+  "reason": "...",
+  "guide": "...",
+  "examples": ["...", "...", "..."]
+}}
 """
 
     try:

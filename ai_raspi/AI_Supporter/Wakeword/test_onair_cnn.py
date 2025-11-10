@@ -1,14 +1,9 @@
-# ============================================
-# 🎧 Wakeword ("onair") Detector - Test Script
-# Compatible with CNN / TFLite model
-# ============================================
-
 import os
 import tensorflow as tf
 import numpy as np
 import librosa
 
-MODEL_PATH = "wakeword_onair_cnn.keras"  # or wakeword_onair_cnn.tflite
+MODEL_PATH = "wakeword_onair_cnn.tflite"
 LABELS = ["onair", "negative"]
 SAMPLE_RATE = 16000
 DURATION = 1.0
@@ -31,7 +26,6 @@ def preprocess_audio(path):
     return mel_db
 
 
-# ===== Keras 모델 로드 =====
 if MODEL_PATH.endswith(".keras"):
     model = tf.keras.models.load_model(MODEL_PATH)
     def predict_audio(path):
@@ -40,7 +34,6 @@ if MODEL_PATH.endswith(".keras"):
         label = LABELS[np.argmax(pred)]
         print(f"🎧 {os.path.basename(path)} → {label} ({pred.max()*100:.2f}%)")
 
-# ===== TFLite 모델 로드 =====
 elif MODEL_PATH.endswith(".tflite"):
     interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
@@ -58,7 +51,6 @@ elif MODEL_PATH.endswith(".tflite"):
 else:
     raise ValueError("지원하지 않는 모델 형식입니다 (.keras or .tflite)")
 
-# ===== 테스트 실행 =====
 TEST_DIR = "onair_test"
 for f in os.listdir(TEST_DIR):
     if f.endswith(".wav"):
