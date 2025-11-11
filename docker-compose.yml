@@ -29,9 +29,11 @@ services:
       - SPRING_SECURITY_USER_NAME=${SPRING_SECURITY_USER_NAME:-admin}
       - SPRING_SECURITY_USER_PASSWORD=${SPRING_SECURITY_USER_PASSWORD}
       # Logging
-      - LOGGING_LEVEL_SSAFY_COM_ONAIR=debug
+      - LOGGING_LEVEL_SSAFY_COM_ONAIR=info
       - LOGGING_LEVEL_COM_ZAXXER_HIKARI=info
       - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+      # Async
+      - SPRING_MVC_ASYNC_REQUEST_TIMEOUT=0
 
   frontend:
     container_name: react
@@ -60,15 +62,15 @@ services:
       # data & embedding
       - JSONL_PATH=${JSONL_PATH}
       - FAISS_INDEX_PATH=${FAISS_INDEX_PATH}
-      - EMB_MODEL_NAME=${EMB_MODEL_NAME}
+      - EMB_MODEL_NAME=BAAI/bge-m3
       - FAISS_METRIC=cosine
       - EMB_ENCODING_MODE=query
       # Hybrid / Rerank options
-      - USE_ELASTIC=false
-      - ES_HOST=${ES_HOST}
-      - ES_INDEX=${ES_INDEX}
+      - USE_ELASTIC=True  # Elasticsearch 활성화 (Hybrid Search 사용)
+      - ES_HOST=http://elastic-search:9200
+      - ES_INDEX=samkos
       - USE_CROSS_ENCODER=true
-      - CE_MODEL_NAME=${CE_MODEL_NAME}
+      - CE_MODEL_NAME=BAAI/bge-reranker-large
       - CE_MAXLEN=256
       - HYBRID_ALPHA=0.82
       - RERANK_TOP_K=6
@@ -89,6 +91,11 @@ services:
       # Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_PREFIX=rag_chat
+      # Debug Mode (단계별 수동 실행)
+      # 🐛 디버그 모드 ON: 아래 주석 해제, OFF: 주석 처리
+      # - DEBUG_STEP_BY_STEP=true
+      - DEBUG_STEP_BY_STEP=false
+
 
 # 도커 네트워크 설정 
 networks:

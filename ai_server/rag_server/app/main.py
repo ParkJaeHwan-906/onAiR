@@ -5,57 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
 from app.routers import chat_router, tts_router, stt_router, clarify_router, ar_process
 from app.sockets.socket_handler import init_socketio, sio
-
-# Socket.IO 통합을 위해 ai_ar의 socket_manager 사용
-# try:
-#     import sys
-#     import os
-#     current_file_dir = os.path.dirname(os.path.abspath(__file__))
-#     # ai_server/rag_server/app/main.py -> ai_server/rag_server -> ai_server -> S13P31A407
-#     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir)))
-#     ai_ar_path = os.path.join(project_root, "ai_ar")
-    
-#     print(f"🔍 디버깅: current_file_dir = {current_file_dir}")
-#     print(f"🔍 디버깅: project_root = {project_root}")
-#     print(f"🔍 디버깅: ai_ar_path = {ai_ar_path}")
-#     print(f"🔍 디버깅: ai_ar_path 존재 여부 = {os.path.exists(ai_ar_path)}")
-    
-#     if os.path.exists(ai_ar_path):
-#         # ai_ar/app을 sys.path에 추가해야 app 모듈을 찾을 수 있음
-#         ai_ar_app_path = os.path.join(ai_ar_path, "app")
-#         if os.path.exists(ai_ar_app_path):
-#             # ai_ar/app을 sys.path에 추가 (이렇게 하면 from sockets.socket_manager로 import 가능)
-#             if ai_ar_app_path not in sys.path:
-#                 sys.path.insert(0, ai_ar_app_path)
-#                 print(f"✅ ai_ar_app_path를 sys.path에 추가했습니다: {ai_ar_app_path}")
-#         else:
-#             print(f"⚠️ ai_ar/app 경로를 찾을 수 없습니다: {ai_ar_app_path}")
-    
-#     import socketio
-#     print(f"✅ socketio 모듈 import 성공")
-    
-#     # ai_ar/app을 sys.path에 추가했으므로 sockets.socket_manager로 import
-#     # socket_manager를 import하면 모든 이벤트 핸들러(@sio.on)가 자동으로 등록됨
-#     import sockets.socket_manager as socket_manager_module
-#     from sockets.socket_manager import sio
-#     print(f"✅ socket_manager.sio import 성공")
-#     print(f"✅ Socket.IO 이벤트 핸들러 등록 완료")
-    
-#     USE_SOCKETIO = True
-#     print(f"✅ Socket.IO 통합 활성화됨")
-# except ImportError as e:
-#     print(f"⚠️ Socket.IO를 사용할 수 없습니다. HTTP 엔드포인트만 사용합니다.")
-#     print(f"   ImportError: {e}")
-#     import traceback
-#     traceback.print_exc()
-#     USE_SOCKETIO = False
-#     sio = None
-# except Exception as e:
-#     print(f"⚠️ Socket.IO 통합 중 오류 발생: {e}")
-#     import traceback
-#     traceback.print_exc()
-#     USE_SOCKETIO = False
-#     sio = None
+from app.core.config import settings
 
 USE_SOCKETIO = True
 
@@ -73,9 +23,6 @@ app.add_middleware(
 
 # Socket.IO 초기화 (app 생성 후 바로)
 if USE_SOCKETIO:
-    print(f"🔍 [DEBUG] USE_SOCKETIO = {USE_SOCKETIO}")
-    print(f"🔍 [DEBUG] sio 인스턴스: {sio}")
-    print(f"🔍 [DEBUG] init_socketio 함수: {init_socketio}")
     init_socketio()  # 이벤트 핸들러 등록
     print("✅ Socket.IO 초기화 완료")
 
@@ -106,6 +53,9 @@ app.include_router(ar_process.router)
 def root():
     return {
         "message": "RAG Server is running 🚀",
+        "server_url": settings.FASTAPI_SERVER_URL,
+        "host": settings.FASTAPI_SERVER_HOST,
+        "port": settings.FASTAPI_SERVER_PORT,
         "endpoints": {
             "rag_chat": "/rag/chat",
             "tts": "/api/tts",
@@ -117,7 +67,8 @@ def root():
         },
         "socketio": {
             "enabled": USE_SOCKETIO,
-            "note": "Socket.IO 서버는 ai_ar 프로젝트의 socket_manager.py를 사용합니다." if USE_SOCKETIO else "Socket.IO를 사용할 수 없습니다.",
+            "path": "/ws",
+            "note": "Socket.IO 서버는 FastAPI 서버에 통합되어 있습니다." if USE_SOCKETIO else "Socket.IO를 사용할 수 없습니다.",
             "fastapi_endpoints": [
                 "/api/stt/buffered (버퍼링 STT 수신)",
                 "/api/stt/streaming (Streaming STT 수신)",
@@ -129,18 +80,27 @@ def root():
 
 # Socket.IO 통합 (ai_ar의 socket_manager 사용)
 if USE_SOCKETIO:
-    print(f"🔍 [DEBUG] ASGIApp 생성 전 - sio: {sio}")
-    print(f"🔍 [DEBUG] ASGIApp 생성 전 - app: {app}")
     asgi_app = socketio.ASGIApp(
         sio,
         other_asgi_app=app,
         socketio_path="/ws"
     )
-    print(f"🔍 [DEBUG] ASGIApp 생성 완료: {asgi_app}")
     print(f"✅ Socket.IO ASGIApp 설정 완료 (path=/ws)")
 else:
     # Socket.IO 없이 FastAPI만 사용
     asgi_app = app
     print("⚠️ Socket.IO 없이 FastAPI만 사용")
 
-# uvicorn 실행 시: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000
+# 서버 실행 방법:
+# 1. uvicorn 사용 (권장):
+#    uvicorn app.main:asgi_app --host {settings.FASTAPI_SERVER_HOST} --port {settings.FASTAPI_SERVER_PORT} --reload
+#
+# 2. Python으로 직접 실행:
+#    import uvicorn
+#    from app.core.config import settings
+#    uvicorn.run("app.main:asgi_app", host=settings.FASTAPI_SERVER_HOST, port=settings.FASTAPI_SERVER_PORT, reload=True)
+#
+# 설정 파일: app/core/config.py
+# - FASTAPI_SERVER_URL: 모바일 앱에서 접근할 URL (예: "http://192.168.0.100:8000")
+# - FASTAPI_SERVER_HOST: 서버 바인딩 호스트 (기본값: "0.0.0.0")
+# - FASTAPI_SERVER_PORT: 서버 포트 (기본값: 8000)

@@ -5,6 +5,8 @@ Socket.IO 클라이언트
 import asyncio
 import logging
 import socketio
+import ssl
+import aiohttp
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,29 @@ class SocketIOClient:
         """
         # FastAPI 서버 URL 사용 (Socket.IO 서버도 여기에 통합되어 있음)
         self.server_url = settings.FASTAPI_SERVER_URL
+        
+        # URL에서 호스트명과 포트 추출
+        from urllib.parse import urlparse
+        parsed_url = urlparse(self.server_url)
+        self.hostname = parsed_url.hostname
+        
+        # HTTP인 경우 포트를 명시적으로 80으로 설정 (HTTPS 리다이렉트 방지)
+        if parsed_url.scheme == 'http':
+            # 포트가 명시되지 않았으면 80으로 설정
+            if parsed_url.port is None:
+                # URL에 포트를 명시적으로 추가하여 HTTP 강제
+                if not self.server_url.endswith('/'):
+                    self.server_url = f"{self.server_url}:80"
+                else:
+                    self.server_url = f"{self.server_url.rstrip('/')}:80/"
+                parsed_url = urlparse(self.server_url)
+            self.port = parsed_url.port or 80
+        else:
+            self.port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
+        
         # 자동 재연결 설정
+        # SSL 검증은 기본값 사용 (인증서 검증 활성화)
+        # 실제 인증서 문제는 서버 측에서 해결해야 함
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
             reconnection_attempts=5,  # 최대 5회 재시도
@@ -90,46 +114,45 @@ class SocketIOClient:
         async def handle_cv_detection_failed(data):
             """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
             message = data.get("message", "")
-            logger.info(f"⚠️ CV 모델 오류 탐지 실패: {message}")
+            logger.info("=" * 60)
+            logger.info(f"📩 [단계 11] 라즈베리파이(Python 3.13): cv_detection_failed 이벤트 수신")
+            logger.info(f"   메시지: {message}")
+            logger.info("=" * 60)
             
             # 라즈베리파이: 마이크 ON + Streaming STT 즉시 시작
+            # 주의: Streaming STT는 Python 3.10 프로세스에서 실행되어야 함
+            # Python 3.13에서는 인스턴스만 등록하고, 실제 실행은 Python 3.10에서 처리
             if self.manager:
                 # STT 모드를 streaming으로 전환
                 self.manager.set_stt_mode("streaming")
                 
-                # 마이크 활성화 (버퍼링 STT 후 OFF되었으므로)
-                mic = self.manager.get_mic_stream()
-                if mic and not mic.stream.is_active():
-                    mic.resume()
-                    logger.info("🔊 마이크 ON (CV 실패 → Streaming STT 시작)")
+                # 세션 ID 생성 (Clarify 세션용)
+                import uuid
+                session_id = str(uuid.uuid4())
                 
-                # Streaming STT 인스턴스 가져오기
-                streaming_stt = self.manager.streaming_stt_instance
-                if streaming_stt:
-                    # Socket.IO 클라이언트 설정
-                    streaming_stt.socketio_client = self
-                    
-                    # 세션 ID 생성 (Clarify 세션용)
-                    import uuid
-                    session_id = str(uuid.uuid4())
-                    logger.info(f"📤 Streaming STT 세션 즉시 시작 (session_id={session_id})")
-                    
-                    # 브로드캐스트 함수 (manager를 통해)
-                    async def broadcaster(msg):
-                        await self.manager.broadcast(msg)
-                    
-                    # Streaming STT 세션 시작 (별도 태스크로 실행)
-                    try:
-                        # 현재 이벤트 루프에서 실행
-                        import asyncio
-                        asyncio.create_task(
-                            streaming_stt.run(mic, broadcaster=broadcaster, session_id=session_id)
-                        )
-                        logger.info("✅ Streaming STT 세션 시작 완료")
-                    except Exception as e:
-                        logger.error(f"❌ Streaming STT 세션 시작 실패: {e}")
+                logger.info("=" * 60)
+                logger.info(f"📤 [단계 12-1] 브리지 서버로 Streaming STT 시작 명령 전송 준비")
+                logger.info(f"   Session ID: {session_id}")
+                logger.info("=" * 60)
+                
+                # 브리지 클라이언트를 통해 Python 3.10에 Streaming STT 시작 명령 전송
+                # 브리지 클라이언트는 manager를 통해 접근 가능
+                if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                    success = self.manager.bridge_client.emit_start_streaming_stt(session_id)
+                    if success:
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [단계 12-1 완료] 브리지 서버로 Streaming STT 시작 명령 전송 완료")
+                        logger.info(f"   Session ID: {session_id}")
+                        logger.info("=" * 60)
+                    else:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [단계 12-1 실패] 브리지 서버로 Streaming STT 시작 명령 전송 실패")
+                        logger.error(f"   Session ID: {session_id}")
+                        logger.error("=" * 60)
                 else:
-                    logger.error("❌ Streaming STT 인스턴스가 등록되지 않았습니다")
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. Streaming STT 시작 명령을 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
         
         @self.sio.on("control_raspi")
         async def handle_control_raspi(data):
@@ -145,9 +168,36 @@ class SocketIOClient:
                     self.manager.set_stt_mode("streaming")
                     # 마이크 활성화
                     mic = self.manager.get_mic_stream()
-                    if mic and not mic.stream.is_active():
+                    if mic and not mic.is_active():
                         mic.resume()
                         logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
+                    
+                    # Streaming STT 인스턴스 가져오기
+                    streaming_stt = self.manager.streaming_stt_instance
+                    if streaming_stt:
+                        # Socket.IO 클라이언트 설정
+                        streaming_stt.socketio_client = self
+                        
+                        # 세션 ID 생성 (Clarify 세션용)
+                        import uuid
+                        session_id = str(uuid.uuid4())
+                        logger.info(f"📤 Streaming STT 세션 즉시 시작 (session_id={session_id})")
+                        
+                        # 브로드캐스트 함수 (manager를 통해)
+                        async def broadcaster(msg):
+                            await self.manager.broadcast(msg)
+                        
+                        # Streaming STT 세션 시작 (별도 태스크로 실행)
+                        try:
+                            import asyncio
+                            asyncio.create_task(
+                                streaming_stt.run(mic, broadcaster=broadcaster, session_id=session_id)
+                            )
+                            logger.info("✅ Streaming STT 세션 시작 완료")
+                        except Exception as e:
+                            logger.error(f"❌ Streaming STT 세션 시작 실패: {e}")
+                    else:
+                        logger.error("❌ Streaming STT 인스턴스가 등록되지 않았습니다")
             
             elif command == "set_stt_mode":
                 # STT 모드 설정 명령
@@ -158,7 +208,7 @@ class SocketIOClient:
                     # 스트리밍 모드로 전환 시 마이크 활성화
                     if mode == "streaming":
                         mic = self.manager.get_mic_stream()
-                        if mic and not mic.stream.is_active():
+                        if mic and not mic.is_active():
                             mic.resume()
                             logger.info("🔊 마이크 ON (스트리밍 모드 전환)")
             
@@ -185,6 +235,32 @@ class SocketIOClient:
             """서버로부터 pong 응답 수신"""
             logger.debug(f"🏓 Pong 수신: {data}")
     
+    def _check_server_certificate(self):
+        """
+        서버의 SSL 인증서 정보를 확인합니다.
+        호스트명 불일치 문제 진단에 사용됩니다.
+        """
+        try:
+            import socket
+            context = ssl.create_default_context()
+            with socket.create_connection((self.hostname, self.port), timeout=5) as sock:
+                with context.wrap_socket(sock, server_hostname=self.hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    logger.info(f"📜 서버 인증서 정보:")
+                    logger.info(f"   주체: {cert.get('subject', 'N/A')}")
+                    logger.info(f"   발급자: {cert.get('issuer', 'N/A')}")
+                    if 'subjectAltName' in cert:
+                        logger.info(f"   대체 이름: {cert['subjectAltName']}")
+                    return cert
+        except ssl.SSLCertVerificationError as e:
+            logger.warning(f"⚠️ SSL 인증서 검증 실패: {e}")
+            logger.warning(f"   서버의 인증서가 '{self.hostname}'에 대해 유효하지 않을 수 있습니다.")
+            logger.warning(f"   서버 측에서 인증서를 올바르게 설정해야 합니다.")
+            return None
+        except Exception as e:
+            logger.debug(f"인증서 확인 중 오류: {e}")
+            return None
+    
     async def connect(self):
         """
         Socket.IO 서버에 연결합니다.
@@ -196,12 +272,28 @@ class SocketIOClient:
             logger.warning("⚠️ 이미 Socket.IO 서버에 연결되어 있습니다.")
             return True
         
+        # HTTPS인 경우 인증서 정보 확인 (디버깅용)
+        if self.server_url.startswith('https://'):
+            cert_info = self._check_server_certificate()
+            if cert_info is None:
+                logger.warning("⚠️ 서버 인증서 확인 실패. 연결을 시도하지만 실패할 수 있습니다.")
+        
         try:
             logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url} (경로: /ws)")
             # Socket.IO 경로는 /ws로 설정 (FastAPI 서버에 통합된 Socket.IO 서버)
             await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
+        except ssl.SSLCertVerificationError as e:
+            logger.error(f"❌ SSL 인증서 검증 실패: {e}")
+            logger.error(f"   서버 URL: {self.server_url}")
+            logger.error(f"   호스트명: {self.hostname}")
+            logger.error(f"   해결 방법:")
+            logger.error(f"   1. 서버 측에서 인증서가 '{self.hostname}'에 대해 올바르게 설정되었는지 확인")
+            logger.error(f"   2. 서버의 인증서가 만료되지 않았는지 확인")
+            logger.error(f"   3. 서버의 인증서 체인이 올바른지 확인")
+            self.connected = False
+            return False
         except Exception as e:
             logger.error(f"❌ Socket.IO 서버 연결 실패: {e}")
             self.connected = False

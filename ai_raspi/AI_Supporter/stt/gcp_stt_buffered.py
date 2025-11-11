@@ -5,8 +5,88 @@ GCP STT 버퍼링 방식
 import time
 import asyncio
 import struct
+import os
 from google.cloud import speech
 from config import settings
+import numpy as np
+
+
+# ========================================
+# 🐛 단계별 수동 실행 모드 (디버깅용) - 비동기 버전
+# ========================================
+
+async def wait_for_next_step_async(step_name: str, step_number: str = ""):
+    """
+    단계별 수동 실행 모드: 다음 단계로 진행하기 전 대기 (비동기 버전)
+    
+    Args:
+        step_name: 현재 단계 이름 (로그 출력용)
+        step_number: 단계 번호 (예: "3-1", "3-2")
+    
+    사용법:
+        - DEBUG_STEP_BY_STEP=True일 때: /tmp/next_step_raspi 파일이 생성될 때까지 대기
+        - DEBUG_STEP_BY_STEP=False일 때: 바로 진행 (0.5초 딜레이만)
+    """
+    if not settings.DEBUG_STEP_BY_STEP:
+        # 자동 모드: 짧은 딜레이만
+        await asyncio.sleep(0.5)
+        return
+    
+    # 수동 모드: 파일 트리거 대기
+    trigger_file = settings.DEBUG_STEP_TRIGGER_FILE
+    timeout = settings.DEBUG_STEP_WAIT_TIMEOUT
+    
+    print("=" * 80)
+    print(f"⏸️  [단계 {step_number}] {step_name} 완료")
+    print(f"   다음 단계로 진행하려면 다음 명령을 실행하세요:")
+    print(f"   $ touch {trigger_file}")
+    print(f"   또는 자동으로 진행하려면: $ echo 'auto' > {trigger_file}")
+    print(f"   (최대 {timeout}초 대기)")
+    print("=" * 80)
+    
+    # 기존 트리거 파일 삭제 (이전 단계에서 남아있을 수 있음)
+    if os.path.exists(trigger_file):
+        try:
+            os.remove(trigger_file)
+        except:
+            pass
+    
+    # 파일이 생성될 때까지 대기
+    start_time = time.time()
+    check_interval = 0.5  # 0.5초마다 확인
+    
+    while True:
+        if os.path.exists(trigger_file):
+            # 파일 내용 확인 (auto 모드 체크)
+            try:
+                with open(trigger_file, 'r') as f:
+                    content = f.read().strip()
+                if content == "auto":
+                    # 자동 모드: 이후 단계도 자동 진행
+                    print(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
+                    os.remove(trigger_file)
+                    return
+            except:
+                pass
+            
+            # 수동 모드: 파일 삭제 후 진행
+            try:
+                os.remove(trigger_file)
+            except:
+                pass
+            print(f"✅ 다음 단계 진행: {step_name}")
+            print("=" * 80)
+            await asyncio.sleep(0.2)  # 파일 삭제 후 짧은 딜레이
+            return
+        
+        # 타임아웃 체크
+        elapsed = time.time() - start_time
+        if elapsed >= timeout:
+            print(f"⚠️ 타임아웃 ({timeout}초) - 자동으로 다음 단계 진행")
+            print("=" * 80)
+            return
+        
+        await asyncio.sleep(check_interval)
 
 class GcpBufferedStt:
     def __init__(self):
@@ -90,13 +170,16 @@ class GcpBufferedStt:
         # 마이크 안정화 대기 (0.1초)
         await asyncio.sleep(0.1)
         
+        print("=" * 60)
+        print(f"🎤 [단계 3-1] 음성 수집 시작")
+        print(f"   수집 시간: {self.buffer_duration}초")
+        print(f"   음성 소스: {type(mic).__name__}")
+        print("=" * 60)
+        
         # 3~5초 동안 음성 수집
         buffer = []
         start_time = time.time()
         target_duration = self.buffer_duration
-        
-        print(f"🎤 음성 수집 시작 ({target_duration}초)...")
-        print(f"   음성 소스: {type(mic).__name__}")
         
         chunk_count = 0
         while time.time() - start_time < target_duration:
@@ -104,7 +187,11 @@ class GcpBufferedStt:
             if chunk is None:
                 print(f"   ⚠️ 음성 데이터 읽기 중단 (chunk={chunk_count})")
                 break
-            buffer.append(chunk)
+            if isinstance(chunk, np.ndarray):
+                buffer.append(chunk.tobytes())
+            else:
+                buffer.append(chunk)
+
             chunk_count += 1
             # 진행 상황 표시
             elapsed = time.time() - start_time
@@ -144,8 +231,11 @@ class GcpBufferedStt:
         
         audio = speech.RecognitionAudio(content=audio_data)
 
-        print("📤 GCP STT 요청 전송 중...")
+        print("=" * 60)
+        print("📤 [단계 3-1] GCP STT 요청 전송 중...")
         print(f"   오디오 크기: {len(audio_data)} bytes ({len(audio_data) / 2 / self.rate:.2f}초)")
+        print("=" * 60)
+        await wait_for_next_step_async("GCP STT 요청 전송 준비 완료", "3-1")
         
         # STT 요청 직후 마이크 종료 (더 이상 음성 수집 불필요)
         mic.pause()
@@ -164,7 +254,11 @@ class GcpBufferedStt:
             
             # 결과 처리
             if response.results:
-                print(f"📋 GCP STT 응답 - 결과 개수: {len(response.results)}")
+                print("=" * 60)
+                print(f"✅ [단계 3-2] GCP STT 응답 수신 - 결과 개수: {len(response.results)}")
+                print("=" * 60)
+                await wait_for_next_step_async("GCP STT 응답 수신 완료", "3-2")
+                
                 for idx, result in enumerate(response.results):
                     transcript = result.alternatives[0].transcript
                     confidence = result.alternatives[0].confidence
@@ -176,6 +270,12 @@ class GcpBufferedStt:
                         for alt_idx, alt in enumerate(result.alternatives[1:], 2):
                             print(f"      [{alt_idx}] {alt.transcript} (신뢰도: {alt.confidence:.2f})")
                     
+                    print("=" * 60)
+                    print("📤 [단계 4] 브리지 서버로 STT 결과 전송 시작")
+                    print(f"   텍스트: {transcript[:50]}...")
+                    print("=" * 60)
+                    await wait_for_next_step_async("브리지 서버로 STT 결과 전송 준비", "4")
+                    
                     # Socket.IO로 결과 전송 (딕셔너리 형태로 전달)
                     stt_data = {
                         "type": "final",
@@ -183,6 +283,11 @@ class GcpBufferedStt:
                         "confidence": confidence
                     }
                     await broadcaster(stt_data)
+                    
+                    print("=" * 60)
+                    print("✅ [단계 4 완료] 브리지 서버로 STT 결과 전송 완료")
+                    print("=" * 60)
+                    await wait_for_next_step_async("브리지 서버로 STT 결과 전송 완료", "4-완료")
                     # 텍스트 전송 완료 → 마이크는 이미 OFF 상태 (Intent 분류 중간)
             else:
                 print("⚠️ STT 결과가 없습니다.")

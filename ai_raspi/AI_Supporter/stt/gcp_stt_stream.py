@@ -8,6 +8,7 @@ import asyncio
 import uuid
 from google.cloud import speech
 from config import settings
+import numpy as np
 
 class GcpStreamingStt:
     def __init__(self, socketio_client=None):
@@ -35,14 +36,16 @@ class GcpStreamingStt:
         
         Args:
             mic: MicStream 인스턴스
-            broadcaster: 결과를 전송할 함수 (사용하지 않음, 호환성을 위해 유지)
+            broadcaster: 결과를 전송할 함수 (Python 3.10에서 브리지 서버로 전송용)
             session_id: Clarify 세션 ID (선택사항, 있으면 Streaming STT로 처리됨)
         """
-        if not self.socketio_client:
-            print("❌ Socket.IO 클라이언트가 설정되지 않았습니다.")
+        # socketio_client 또는 broadcaster 중 하나는 있어야 함
+        if not self.socketio_client and not broadcaster:
+            print("❌ Socket.IO 클라이언트 또는 broadcaster가 설정되지 않았습니다.")
             return
         
-        if not self.socketio_client.is_connected():
+        # socketio_client가 있으면 연결 상태 확인
+        if self.socketio_client and not self.socketio_client.is_connected():
             print("❌ Socket.IO 서버에 연결되어 있지 않습니다.")
             return
         
@@ -79,14 +82,12 @@ class GcpStreamingStt:
 
             def gen():
                 """오디오 청크 생성기"""
-                nonlocal last_voice_ts
                 while not self._stop:
                     chunk = mic.read()
                     if chunk is None:
                         break
-                    # 음성이 감지되면 타임스탬프 업데이트
-                    if len(chunk) > 0:
-                        last_voice_ts = time.time()
+                    if isinstance(chunk, np.ndarray):
+                        chunk = chunk.tobytes()  # numpy → bytes 변환
                     yield speech.StreamingRecognizeRequest(audio_content=chunk)
 
             def blocking_stream():
@@ -163,20 +164,32 @@ class GcpStreamingStt:
                 confidence = msg.get("confidence")
                 
                 if msg_type in ("final", "interim"):
-                    # 최종 결과만 Socket.IO로 전송
+                    # 최종 결과만 전송
                     if msg_type == "final":
                         print(f"📝 STT 최종 결과: {txt}")
                         self.force_final_sent = True  # final 수신 시 플래그 설정
                         
-                        # Socket.IO로 전송 (session_id 포함)
-                        success = await self.socketio_client.emit_streaming_stt(
-                            text=txt,
-                            msg_type="final",
-                            confidence=confidence,
-                            session_id=self.session_id
-                        )
-                        if not success:
-                            print("⚠️ Socket.IO 전송 실패")
+                        # 전송 방식 선택: socketio_client 우선, 없으면 broadcaster 사용
+                        if self.socketio_client:
+                            # Socket.IO 클라이언트로 직접 전송 (Python 3.13에서 사용)
+                            success = await self.socketio_client.emit_streaming_stt(
+                                text=txt,
+                                msg_type="final",
+                                confidence=confidence,
+                                session_id=self.session_id
+                            )
+                            if not success:
+                                print("⚠️ Socket.IO 전송 실패")
+                        elif broadcaster:
+                            # Broadcaster를 통해 브리지 서버로 전송 (Python 3.10에서 사용)
+                            stt_result = {
+                                "type": "final",
+                                "text": txt,
+                                "confidence": confidence,
+                                "session_id": self.session_id
+                            }
+                            await broadcaster(stt_result)
+                            print(f"✅ 브리지 서버로 STT 결과 전송: {txt[:50]}...")
                         break  # final 수신 시 루프 종료
                     
                     # 로그 출력 (interim 결과도 표시)
@@ -194,15 +207,30 @@ class GcpStreamingStt:
                     print(f"   사용할 텍스트: '{final_text}'")
                     self.force_final_sent = True
                     
-                    # Socket.IO로 전송 (session_id 포함)
-                    success = await self.socketio_client.emit_streaming_stt(
-                        text=final_text,
-                        msg_type="final",
-                        confidence=confidence,
-                        session_id=self.session_id
-                    )
+                    # 전송 방식 선택: socketio_client 우선, 없으면 broadcaster 사용
+                    success = False
+                    if self.socketio_client:
+                        # Socket.IO 클라이언트로 직접 전송 (Python 3.13에서 사용)
+                        success = await self.socketio_client.emit_streaming_stt(
+                            text=final_text,
+                            msg_type="final",
+                            confidence=confidence,
+                            session_id=self.session_id
+                        )
+                    elif broadcaster:
+                        # Broadcaster를 통해 브리지 서버로 전송 (Python 3.10에서 사용)
+                        stt_result = {
+                            "type": "final",
+                            "text": final_text,
+                            "confidence": confidence,
+                            "session_id": self.session_id
+                        }
+                        await broadcaster(stt_result)
+                        print(f"✅ 브리지 서버로 STT 결과 전송 (침묵 타임아웃): {final_text[:50]}...")
+                        success = True
+                    
                     if not success:
-                        print("⚠️ Socket.IO 전송 실패")
+                        print("⚠️ STT 결과 전송 실패")
                     break  # 강제 final 수신 시 루프 종료
 
         finally:

@@ -14,6 +14,7 @@ type WorkListProps = {
   solution?: string | null; // 완료/취소 내용
   isAdmin?: boolean; // 관리자 여부
   onTaskUpdated?: () => void; // 작업 완료/취소 후 콜백
+  onSelect?: (taskId: number) => void; // 작업 선택 시 콜백
 };
 
 const backColors = ["#F4C0C0", "#F9E9B5", "#B5BFE0", "#B6E7C8"];
@@ -30,6 +31,7 @@ function WorkList({
   solution,
   isAdmin = false,
   onTaskUpdated,
+  onSelect,
 }: WorkListProps) {
   const { myInfo } = useUserStore();
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
@@ -54,7 +56,7 @@ function WorkList({
 
   return (
     <>
-      <div className="work-row">
+      <div className="work-row" onClick={() => onSelect && onSelect(taskId)}>
         <div className="col-worker">{userName}</div>
         <div className="col-content">{request}</div>
         <div className="col-status">
@@ -67,20 +69,39 @@ function WorkList({
         </div>
         <div className="col-time">{lastUpdateTime}</div>
         {isAdmin ? (
-          <div className="col-solution">{solution || "-"}</div>
+          <>
+            <div className="col-solution">{solution || "-"}</div>
+            <div className="col-view">
+              <button
+                className="view-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect && onSelect(taskId);
+                }}
+              >
+                보기
+              </button>
+            </div>
+          </>
         ) : (
           <div className="col-actions">
             {showActionButtons ? (
               <>
                 <button
                   className="action-button complete-button"
-                  onClick={() => setIsCompleteModalOpen(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCompleteModalOpen(true);
+                  }}
                 >
                   완료
                 </button>
                 <button
                   className="action-button cancel-button"
-                  onClick={() => setIsCancelModalOpen(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCancelModalOpen(true);
+                  }}
                 >
                   취소
                 </button>
