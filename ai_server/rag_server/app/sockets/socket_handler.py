@@ -140,6 +140,8 @@ def init_socketio():
     sio.on("disconnect")(handle_disconnect)
     sio.on("register_device")(handle_register_device)
     sio.on("stt_result")(handle_stt_result)
+    sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
+    sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
@@ -257,6 +259,70 @@ async def handle_register_device(sid, data):
 
 
 # ========================================
+# Wakeword 이벤트 핸들러
+# ========================================
+
+async def handle_wakeword_detected(sid, data):
+    """
+    라즈베리파이로부터 Wakeword 감지 이벤트 수신
+    모바일로 이벤트를 전송하여 음성 파일 재생 시작
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    print("=" * 60)
+    print(f"📝 [단계 2-1] FastAPI 서버: Wakeword 감지 이벤트 수신 [raspi]")
+    print("=" * 60)
+    await wait_for_next_step("Wakeword 감지 이벤트 수신 완료", "2-1")
+    
+    # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
+    print("=" * 60)
+    print("📡 [단계 2-1-1] 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)")
+    print("=" * 60)
+    await broadcast_to("mobile", "wakeword_detected", {
+        "timestamp": None  # 필요시 추가
+    })
+    print("=" * 60)
+    print("✅ [단계 2-1-1 완료] 모바일로 Wakeword 감지 이벤트 전송 완료")
+    print("=" * 60)
+    await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
+
+
+async def handle_wakeword_audio_completed(sid, data):
+    """
+    모바일로부터 음성 파일 재생 완료 이벤트 수신
+    라즈베리파이로 이벤트를 전송하여 버퍼링 STT 세션 시작
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    print("=" * 60)
+    print(f"📝 [단계 2-2] FastAPI 서버: 모바일 음성 파일 재생 완료 이벤트 수신 [mobile]")
+    print("=" * 60)
+    await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
+    
+    # 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)
+    print("=" * 60)
+    print("📡 [단계 2-2-1] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)")
+    print("=" * 60)
+    await broadcast_to("raspi", "wakeword_audio_completed", {
+        "timestamp": None  # 필요시 추가
+    })
+    print("=" * 60)
+    print("✅ [단계 2-2-1 완료] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료")
+    print("=" * 60)
+    await wait_for_next_step("라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료", "2-2-1")
+
+
+# ========================================
 # STT 이벤트 핸들러 (버퍼링 + Streaming)
 # ========================================
 
@@ -337,49 +403,67 @@ async def handle_stt_result(sid, data):
             print("=" * 60)
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
-            # AI_SUPPORTER 분기인 경우 CV 모델 실행
+            # AI_SUPPORTER 분기인 경우 모바일에서 음성 파일 재생 완료 대기 후 CV 모델 실행
             if intent == "AI_SUPPORTER":
+                # 모바일에서 음성 파일 재생 완료 대기 (최대 10초)
+                # 주의: 모바일에서 음성 파일 재생 완료 이벤트를 별도로 전송하지 않으므로,
+                # 음성 파일 길이를 고려하여 대기 시간 설정
+                print("=" * 60)
+                print("⏳ [단계 8-1] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 중...")
+                print("   💡 모바일에서 'AI_Supporter 기능을 시작합니다. 오류 탐지.' 재생 중...")
+                print("=" * 60)
+                await asyncio.sleep(5)  # 음성 파일 재생 시간 대기 (약 5초)
+                print("=" * 60)
+                print("✅ [단계 8-1 완료] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 종료")
+                print("=" * 60)
+                await wait_for_next_step("모바일 AI_SUPPORTER 음성 파일 재생 완료 대기", "8-1")
+                
+                # CV 모델 실행 (현재는 비워둠, 추후 구현 예정)
                 try:
                     print("=" * 60)
                     print("🔍 [단계 9] CV 모델 실행 시작")
                     print("=" * 60)
+                    print("⚠️ CV 모델 연결은 아직 구현되지 않았습니다. 비워둡니다.")
+                    print("=" * 60)
+                    await wait_for_next_step("CV 모델 실행 (비워둠)", "9")
                     
-                    cv_result = await run_cv_model()
+                    # TODO: CV 모델 연결 구현 예정
+                    # cv_result = await run_cv_model()
+                    # 
+                    # if not cv_result.get("detected", False):
+                    #     # CV 모델이 오류를 탐지하지 못한 경우
+                    #     print("=" * 60)
+                    #     print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                    #     print("=" * 60)
+                    #     await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
+                    #     
+                    #     # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                    #     print("=" * 60)
+                    #     print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
+                    #     print("=" * 60)
+                    #     await broadcast_to("mobile", "cv_detection_failed", {
+                    #         "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                    #     })
+                    #     print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
+                    #     await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
+                    #     
+                    #     print("=" * 60)
+                    #     print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                    #     print("=" * 60)
+                    #     await broadcast_to("raspi", "cv_detection_failed", {
+                    #         "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                    #     })
+                    #     print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                    #     print("=" * 60)
+                    #     await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
+                    #     
+                    #     # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
+                    #     # (라즈베리파이에서 이 이벤트를 받아서 처리)
+                    # else:
+                    #     # CV 모델이 오류를 탐지한 경우
+                    #     print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
+                    #     # TODO: 오류 탐지 성공 시 처리 로직 추가
                     
-                    if not cv_result.get("detected", False):
-                        # CV 모델이 오류를 탐지하지 못한 경우
-                        print("=" * 60)
-                        print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
-                        print("=" * 60)
-                        await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
-                        
-                        # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
-                        print("=" * 60)
-                        print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("mobile", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
-                        })
-                        print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
-                        await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
-                        
-                        print("=" * 60)
-                        print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("raspi", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-                        })
-                        print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
-                        print("=" * 60)
-                        await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
-                        
-                        # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
-                        # (라즈베리파이에서 이 이벤트를 받아서 처리)
-                    else:
-                        # CV 모델이 오류를 탐지한 경우
-                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
-                        # TODO: 오류 탐지 성공 시 처리 로직 추가
-                        
                 except Exception as e:
                     print(f"❌ CV 모델 실행 오류: {e}")
                     # CV 모델 오류 시에도 탐지 실패로 처리
