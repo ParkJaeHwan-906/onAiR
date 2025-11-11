@@ -55,16 +55,67 @@ class MicStream:
 
     def start(self):
         """마이크 스트림 시작 (마이크는 실제 샘플레이트로 열기)"""
-        self.stream = sd.InputStream(
-            samplerate=self.mic_rate,  # 마이크 실제 샘플레이트 사용
-            channels=self.channels,
-            dtype='int16',
-            callback=self._callback,
-            blocksize=self.chunk,
-            device=self.device_index
-        )
-        self.stream.start()
-        print(f"🔊 마이크 ON (활성 상태) - 샘플레이트: {self.mic_rate}Hz")
+        # 마이크 장치 선택
+        device = self.device_index
+        if device is None:
+            # 기본 입력 장치 자동 선택
+            try:
+                devices = sd.query_devices()
+                # 기본 입력 장치 인덱스 가져오기
+                try:
+                    default_input_idx = sd.default.device[0]  # (input, output) 튜플
+                    if default_input_idx is not None and default_input_idx >= 0:
+                        device = default_input_idx
+                        default_input = sd.query_devices(device)
+                        print(f"🔍 기본 입력 장치 자동 선택: {default_input['name']} (인덱스: {device})")
+                    else:
+                        raise ValueError("기본 입력 장치가 설정되지 않음")
+                except (AttributeError, ValueError, IndexError):
+                    # 기본 장치를 찾을 수 없으면 입력 가능한 첫 번째 장치 선택
+                    for idx, dev in enumerate(devices):
+                        if dev['max_input_channels'] > 0:
+                            device = idx
+                            print(f"🔍 입력 가능한 장치 선택: {dev['name']} (인덱스: {device})")
+                            break
+                    else:
+                        raise RuntimeError("입력 가능한 마이크 장치를 찾을 수 없습니다.")
+            except Exception as e:
+                print(f"⚠️ 마이크 장치 자동 선택 실패: {e}")
+                print("   사용 가능한 장치 목록:")
+                try:
+                    devices = sd.query_devices()
+                    for idx, dev in enumerate(devices):
+                        if dev['max_input_channels'] > 0:
+                            print(f"      [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']})")
+                except:
+                    pass
+                raise RuntimeError(f"마이크 장치를 찾을 수 없습니다. config/settings.py에서 DEVICE_INDEX를 설정하세요.")
+        
+        try:
+            self.stream = sd.InputStream(
+                samplerate=self.mic_rate,  # 마이크 실제 샘플레이트 사용
+                channels=self.channels,
+                dtype='int16',
+                callback=self._callback,
+                blocksize=self.chunk,
+                device=device
+            )
+            self.stream.start()
+            device_info = sd.query_devices(device) if device is not None else None
+            device_name = device_info['name'] if device_info else "기본 장치"
+            print(f"🔊 마이크 ON (활성 상태) - 샘플레이트: {self.mic_rate}Hz, 장치: {device_name}")
+        except Exception as e:
+            print(f"❌ 마이크 스트림 시작 실패: {e}")
+            print(f"   device_index: {device}")
+            print("   사용 가능한 입력 장치 목록:")
+            try:
+                devices = sd.query_devices()
+                for idx, dev in enumerate(devices):
+                    if dev['max_input_channels'] > 0:
+                        print(f"      [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+            except:
+                pass
+            raise
 
     def read(self):
         """큐에서 오디오 버퍼 읽기 (16000Hz로 리샘플링)"""
