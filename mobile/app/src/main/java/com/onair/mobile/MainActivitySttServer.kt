@@ -67,7 +67,7 @@ class MainActivitySttServer : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)  // 기본 레이아웃 사용
+        setContentView(R.layout.activity_test)  // 기본 레이아웃 사용
         
         // UI 참조 초기화
         statusText = findViewById(R.id.status_text)

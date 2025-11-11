@@ -21,12 +21,10 @@
             android:theme="@style/Theme.Mobile.Starting"
             android:exported="true">
             <!-- 테스트 기간 동안 launcher 비활성화 -->
-            <!--
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            -->
         </activity>
         <activity android:name=".communicate.presentation.ui.CallActivity"
             android:screenOrientation="landscape"/>
@@ -41,10 +39,10 @@
             android:exported="true"
             android:label="STT WebSocket Server"
             android:theme="@style/Theme.Mobile">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN" />-->
+<!--                <category android:name="android.intent.category.LAUNCHER" />-->
+<!--            </intent-filter>-->
         </activity>
     </application>
 
