@@ -1049,37 +1049,37 @@ async def handle_video_frame(sid, data):
 
         for m in ar_markers:
             info = m.get("info", {})
-            if "x" not in info or "y" not in info:
-                continue
-
-            # 월드 평면(z=0) 좌표 → 3D 컬럼벡터
-            wx, wy = float(info["x"]), float(info["y"])
+            wx, wy = float(info.get("x", 0.0)), float(info.get("y", 0.0))
             wz = 0.0
             world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
 
             base_size = float(info.get("size", 1.0))
 
-            # 카메라 좌표계로 변환: P_cam = R * (P_world - t)
             cam_point = R @ (world_point - t)
             if cam_point[2, 0] <= 0:
-                # 카메라 뒤쪽이면 스킵
                 continue
 
-            # 2D 투영 (픽셀 좌표)
             uv = motion_core.K @ cam_point
-            u = float(uv[0, 0] / uv[2, 0])
-            v = float(uv[1, 0] / uv[2, 0])
-
-            # 깊이에 따른 크기 조정 (반비례)
+            u_pred = float(uv[0, 0] / uv[2, 0])
+            v_pred = float(uv[1, 0] / uv[2, 0])
             proj_size = base_size / cam_point[2, 0]
+
+            # === 🎯 패치 매칭 기반 보정 ===
+            tpl = info.get("tpl", None)
+            if tpl is not None and tpl.size > 0:
+                gray_now = motion_core.get_latest_gray()
+                if gray_now is not None:
+                    u_ref, v_ref, score = motion_core.refine_patch_position(
+                        gray_now, u_pred, v_pred, tpl, search_r=14
+                    )
+                    if score >= 0.75:  # 신뢰도 기준
+                        u_pred, v_pred = u_ref, v_ref
+                        info["tpl"] = cv2.addWeighted(tpl, 0.9,
+                            motion_core.extract_patch_from_current_gray(u_pred, v_pred, 10), 0.1, 0)
 
             updated_markers.append({
                 "idx": m["idx"],
-                "info": {
-                    "x": round(u, 2),      # 화면 좌표 x
-                    "y": round(v, 2),      # 화면 좌표 y
-                    "size": round(proj_size, 3)
-                }
+                "info": {"x": round(u_pred, 2), "y": round(v_pred, 2), "size": round(proj_size, 3), "tpl": info.get("tpl", None)}
             })
 
         if updated_markers:
@@ -1181,15 +1181,20 @@ async def handle_ar_marker(sid, data):
     else:
         wx, wy, wz = world_point
 
-    # === 3️⃣ 전역 리스트에 저장 (info 필드 구조)
+    # === 🎯 클릭 시 패치 저장 ===
+    patch = motion_core.extract_patch_from_current_gray(marker_x, marker_y, half_size=10)
+    if patch is None:
+        print("⚠️ Patch extraction failed.")
+    else:
+        print(f"🎯 Patch saved: shape={patch.shape}")
+
+    # === 3️⃣ 전역 리스트에 저장 ===
     marker_idx = len(ar_markers) + 1
     marker_info = {
         "idx": marker_idx,
-        "info": {
-            "x": round(wx, 3),
-            "y": round(wy, 3),
-            "size": round(rel_size, 3)
-        }
+        "point": world_point,
+        "size": round(rel_size, 3),
+        "tpl": patch 
     }
     ar_markers.append(marker_info)
 
