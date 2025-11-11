@@ -1,19 +1,9 @@
 import json
 from app.core.config import settings
+from app.services.gms_client import call_gemini_via_gms
 
-try:
-    import google.generativeai as genai
-    genai_available = True
-except Exception:
-    genai = None
-    genai_available = False
-
-# ✅ Gemini 설정 (config.py의 GMS_API_KEY 사용)
-if genai_available and settings.GMS_API_KEY:
-    genai.configure(api_key=settings.GMS_API_KEY)
-    model_clarify = genai.GenerativeModel("gemini-1.5-flash")
-else:
-    model_clarify = None
+# ✅ GMS API 키 확인
+gms_api_key = settings.GMS_API_KEY if settings.GMS_API_KEY else None
 
 
 def clarify_query(query: str) -> dict:
@@ -21,8 +11,8 @@ def clarify_query(query: str) -> dict:
     Gemini 1.5 Flash에게 Clarify 여부를 묻는 함수.
     질문이 포괄적이면 answerable=False와 함께 구체화 프롬프트를 반환.
     """
-    if not genai_available or not model_clarify:
-        # Gemini가 없으면 기본적으로 통과
+    if not gms_api_key:
+        # GMS API 키가 없으면 기본적으로 통과
         return {
             "answerable": True,
             "clarify": "질문이 구체적입니다."
@@ -43,8 +33,12 @@ def clarify_query(query: str) -> dict:
 
     try:
         print(f"🔵 [Clarify] Gemini-Flash API 호출 시작: '{query[:50]}...'")
-        response = model_clarify.generate_content(prompt)
-        text = response.text.strip()
+        # GMS API를 통해 Gemini 호출
+        text = call_gemini_via_gms(
+            model="gemini-1.5-flash",
+            prompt=prompt,
+            api_key=gms_api_key
+        ).strip()
         print(f"✅ [Clarify] Gemini-Flash API 호출 성공 (응답 길이: {len(text)} bytes)")
 
         # ```json ``` 블록 형식 대응
