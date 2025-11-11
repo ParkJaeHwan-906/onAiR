@@ -80,9 +80,8 @@ public class AuthServiceImpl implements AuthService{
     public LoginResponseDto login(LoginRequestDto request) {
         ValidUserAccountDto validUser = userAccountsRepository.selectUserByEmail(request.getEmail())
                         .orElseThrow(() -> new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요."));
-        System.out.println(validUser);
         if(!securityConfig.passwordEncoder().matches(request.getPassword(), validUser.getPassword())) throw new IllegalArgumentException("아이디 또는 패스워드를 확인해주세요.");
-
+        refreshTokenRepository.deleteRefreshTokenByUserAccountId(validUser.getId());
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(validUser.getId()))
                 .refreshToken(jwtTokenProvider.generateRefreshToken(validUser.getId()))
@@ -93,8 +92,8 @@ public class AuthServiceImpl implements AuthService{
     @Override
     public LoginResponseDto regenerateRefreshToken(RegenerateRefreshTokenRequestDto request) {
         Long userAccountId = jwtTokenProvider.getUserAccountId(request.getRefreshToken());
-        if(!refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId)
-                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다.")).equals(request.getRefreshToken())) throw new IllegalArgumentException("유효하지 않은 토큰입니다.");
+        refreshTokenRepository.selectRefreshTokenByUserAccountId(userAccountId, request.getRefreshToken())
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다."));
         refreshTokenRepository.deleteRefreshTokenByUserAccountId(userAccountId);
         return LoginResponseDto.builder()
                 .accessToken(jwtTokenProvider.generateAccessToken(userAccountId))

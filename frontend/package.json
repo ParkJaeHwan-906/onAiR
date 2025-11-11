@@ -13,6 +13,8 @@
     "@livekit/components-react": "^2.9.15",
     "@livekit/components-styles": "^1.1.6",
     "@nivo/pie": "^0.99.0",
+    "axios": "^1.13.1",
+    "event-source-polyfill": "^1.0.31",
     "konva": "^10.0.8",
     "livekit-client": "^2.15.14",
     "lodash": "^4.17.21",
@@ -21,7 +23,11 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.2.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "socket.io-client": "^4.8.1",
+    "three": "^0.181.1",
+    "three-stdlib": "^2.36.0",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
@@ -29,6 +35,7 @@
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
+    "@types/three": "^0.181.0",
     "@vitejs/plugin-react": "^5.0.4",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",

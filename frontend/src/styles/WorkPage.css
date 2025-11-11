@@ -10,9 +10,23 @@
   padding: 24px 32px;
 }
 
-.work-page-left {
+.work-page-wrapper > .work-big {
+  flex-shrink: 0;
+}
+
+.work-page-right {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: 24px;
+}
+
+.work-page-left {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 34px;
 }

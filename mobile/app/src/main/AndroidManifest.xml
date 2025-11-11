@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 네트워크 권한 (WebSocket 서버용) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -17,17 +20,32 @@
             android:name=".MainActivity"
             android:theme="@style/Theme.Mobile.Starting"
             android:exported="true">
+            <!-- 테스트 기간 동안 launcher 비활성화 -->
+            <!--
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            -->
         </activity>
         <activity android:name=".communicate.presentation.ui.CallActivity"
             android:screenOrientation="landscape"/>
         <activity android:name=".communicate.presentation.ui.CommunicationActivity" />
         <activity android:name=".communicate.presentation.ui.WorkingActivity"
             android:screenOrientation="landscape"/>
+
+        <!-- 🌐 WebSocket 서버 Activity (라즈베리파이에서 STT 텍스트 수신) -->
+        <!-- 테스트용: MainActivitySttServer를 launcher로 설정 -->
+        <activity
+            android:name=".MainActivitySttServer"
+            android:exported="true"
+            android:label="STT WebSocket Server"
+            android:theme="@style/Theme.Mobile">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

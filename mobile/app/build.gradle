@@ -2,23 +2,29 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.kotlin.serialization)
 //    id("com.google.devtools.ksp")
 //    id("com.google.dagger.hilt.android")
 }
 
 android {
     namespace 'com.onair.mobile'
-    compileSdk 36
+    compileSdk 36  // 의존성 요구사항에 맞춰 36으로 업데이트 (일부는 35, 일부는 36 요구)
 
     defaultConfig {
         applicationId "com.onair.mobile"
         minSdk 30
-        targetSdk 36
+        targetSdk 34  // targetSdk는 34 유지 (런타임 동작 변경 없음)
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // ✅ Orchestrator와의 연결 설정
+        testInstrumentationRunnerArguments clearPackageData: 'true'
+
+        // BuildConfig 필드 (환경 변수에서 읽거나 기본값 사용)
+        // 주의: 프로덕션에서는 빈 문자열로 설정하고, 로그인 API를 통해 토큰을 받아야 합니다
+        buildConfigField "String", "DEFAULT_ACCESS_TOKEN", "\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMyIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNzYyNDc3NjI1LCJleHAiOjE3NjI5MDk2MjV9.CHd-R8t2-HORjihxrRIEASjTg09nrZksOQ3rxG2o43E\""
     }
 
     buildTypes {
@@ -30,6 +36,7 @@ android {
     buildFeatures {
         compose true
         viewBinding true
+        buildConfig = true  // BuildConfig 생성 활성화
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -83,14 +90,12 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
-    implementation libs.androidx.fragment.ktx
 
     // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
     implementation libs.java.websocket
     // JSON 처리
     implementation libs.json
-    // ONNX Runtime
-    implementation libs.onnxruntime.android
+
 
     testImplementation libs.junit
 

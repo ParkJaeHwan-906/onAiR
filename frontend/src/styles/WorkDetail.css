@@ -1,0 +1,93 @@
+.work-detail-wrapper {
+  width: 572px;
+  height: 961px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.work-detail-header {
+  font-family: "NotoSansKR";
+  font-size: 20px;
+  font-weight: 800;
+  color: #3b4a6b;
+  margin-bottom: 24px;
+}
+
+.work-detail-empty {
+  font-family: "NotoSansKR";
+  font-size: 16px;
+  color: #9ca3af;
+  text-align: center;
+  margin-top: 100px;
+}
+
+.work-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+}
+
+.work-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.work-detail-item dt {
+  font-family: "NotoSansKR";
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.work-detail-item dd {
+  font-family: "NotoSansKR";
+  font-size: 16px;
+  font-weight: 400;
+  color: #1f2937;
+  margin: 0;
+  word-break: break-word;
+}
+
+.work-detail-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.work-detail-connect-button {
+  width: 100%;
+  height: 48px;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-family: "NotoSansKR";
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: auto;
+  transition: background-color 0.2s;
+}
+
+.work-detail-connect-button:hover {
+  background-color: #2563eb;
+}
+
+.work-detail-connect-button:active {
+  background-color: #1d4ed8;
+}
+
+
