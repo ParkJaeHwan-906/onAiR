@@ -15,7 +15,9 @@ import ssafy.com.onair.webrtc.dto.SenderInfoDto;
 import ssafy.com.onair.webrtc.dto.SseResponseDto;
 import ssafy.com.onair.webrtc.dto.WebRtcRequestDto;
 import ssafy.com.onair.webrtc.dto.WebRtcResponseDto;
+import ssafy.com.onair.webrtc.manager.WebRtcManager;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -24,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebRtcService {
 
     private final LiveKitProperties liveKitProperties;
+    private final WebRtcManager webRtcManager;
     private final SseManager sseManager;
 
     public void requestConnection(WebRtcRequestDto webRtcRequestDto, CustomUserDetails senderDetails){
@@ -45,7 +48,9 @@ public class WebRtcService {
 
         log.debug("webrtc senderInfo : {}", senderInfo);
 
-
+        StringBuilder roomName = new StringBuilder();
+        roomName.append(senderInfoDto.senderAccountId()).append(' ').append(webRtcRequestDto.receiverAccountId());
+        webRtcManager.getWaitingRoomList().put(roomName.toString(), LocalDateTime.now().plusMinutes(5));
         // 사용자가 요청한거면 sender : 사용자, receiver : 관리자
         if(senderRole.equals("사용자")){
             // 작업자 -> 관리자
