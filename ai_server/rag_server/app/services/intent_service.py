@@ -1,28 +1,16 @@
 import json
 from app.core.config import settings
+from app.services.gms_client import call_gemini_via_gms
 
-try:
-    import google.generativeai as genai
-    genai_available = True
-except Exception:
-    genai = None
-    genai_available = False
-
-# ✅ Gemini 설정 (config.py의 GMS_API_KEY 사용)
-if genai_available:
-    if settings.GMS_API_KEY:
-        # API 키가 설정되어 있는지 확인
-        api_key_preview = settings.GMS_API_KEY[:10] + "..." if len(settings.GMS_API_KEY) > 10 else settings.GMS_API_KEY
-        print(f"✅ [Intent Service] GMS_API_KEY 로드됨: {api_key_preview} (길이: {len(settings.GMS_API_KEY)})")
-        genai.configure(api_key=settings.GMS_API_KEY)
-        model_intent = genai.GenerativeModel("gemini-1.5-flash")
-    else:
-        print("⚠️ [Intent Service] GMS_API_KEY가 설정되지 않았습니다. (None 또는 빈 문자열)")
-        print("   환경 변수 GMS_API_KEY를 확인하세요.")
-        model_intent = None
+# ✅ GMS API 키 확인
+if settings.GMS_API_KEY:
+    api_key_preview = settings.GMS_API_KEY[:10] + "..." if len(settings.GMS_API_KEY) > 10 else settings.GMS_API_KEY
+    print(f"✅ [Intent Service] GMS_API_KEY 로드됨: {api_key_preview} (길이: {len(settings.GMS_API_KEY)})")
+    gms_api_key = settings.GMS_API_KEY
 else:
-    print("⚠️ [Intent Service] google.generativeai 모듈을 사용할 수 없습니다.")
-    model_intent = None
+    print("⚠️ [Intent Service] GMS_API_KEY가 설정되지 않았습니다. (None 또는 빈 문자열)")
+    print("   환경 변수 GMS_API_KEY를 확인하세요.")
+    gms_api_key = None
 
 
 # clarify_query는 llm_service.py에 있으므로 여기서는 제거
@@ -45,12 +33,12 @@ def classify_intent(text: str) -> dict:
             "reasoning": "판단 근거"
         }
     """
-    if not genai_available or not model_intent:
-        # Gemini가 없으면 기본적으로 AI_SUPPORTER로 분류
+    if not gms_api_key:
+        # GMS API 키가 없으면 기본적으로 AI_SUPPORTER로 분류
         return {
             "intent": "AI_SUPPORTER",
             "confidence": 0.5,
-            "reasoning": "Gemini 모델을 사용할 수 없어 기본값으로 분류했습니다."
+            "reasoning": "GMS API 키가 설정되지 않아 기본값으로 분류했습니다."
         }
     
     prompt = f"""당신은 사용자 의도를 분류하는 시스템입니다.
@@ -92,8 +80,12 @@ def classify_intent(text: str) -> dict:
 
     try:
         print(f"🔵 [Intent 분류] Gemini-Flash API 호출 시작: '{text[:50]}...'")
-        response = model_intent.generate_content(prompt)
-        text_response = response.text.strip()
+        # GMS API를 통해 Gemini 호출
+        text_response = call_gemini_via_gms(
+            model="gemini-1.5-flash",
+            prompt=prompt,
+            api_key=gms_api_key
+        ).strip()
         print(f"✅ [Intent 분류] Gemini-Flash API 호출 성공 (응답 길이: {len(text_response)} bytes)")
 
         # ```json ``` 블록 형식 대응
@@ -113,14 +105,9 @@ def classify_intent(text: str) -> dict:
         print(f"✅ [Intent 분류] Intent 분류 결과: {result.get('intent')} (신뢰도: {result.get('confidence', 0.5):.2f})")
         return result
         
-    except (AttributeError, TypeError) as e:
-        # model_intent가 None이거나 generate_content가 없는 경우
-        print(f"❌ [Intent 분류] 모델 호출 오류: {e}")
-        return _fallback_classify_intent(text, f"모델 호출 오류: {e}")
-        
     except json.JSONDecodeError as e:
         # JSON 파싱 실패 시 텍스트에서 직접 추출 시도
-        text_response = response.text.strip().upper()
+        text_response = text_response.strip().upper()
         if "OPERATOR" in text_response:
             return {
                 "intent": "OPERATOR",
