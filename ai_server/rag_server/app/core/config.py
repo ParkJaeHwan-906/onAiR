@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # ✅ 단일 GMS 키로 Gemini + GPT-4o 모두 사용
     LLM_PROVIDER: str = "gms"
     GMS_API_KEY: str | None = None
-    GMS_MODEL_GATE: str = "gemini-1.5-flash"
+    GMS_MODEL_GATE: str = "gemini-2.0-flash"  # GMS에서 지원하는 모델명
     GMS_MODEL_GENERATOR: str = "gpt-4o"
 
     # =======================================
