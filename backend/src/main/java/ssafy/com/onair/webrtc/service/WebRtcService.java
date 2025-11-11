@@ -49,12 +49,12 @@ public class WebRtcService {
         // 사용자가 요청한거면 sender : 사용자, receiver : 관리자
         if(senderRole.equals("사용자")){
             // 작업자 -> 관리자
-            sseManager.sendRequestWorkerToAdmin(senderInfo.getCompanyId(), senderInfoDto);
+            sseManager.sendRequestWorkerToAdmin(senderInfo.getCompanyId(), senderInfoDto, "callRequest");
         }
         // 관리자가 요청한거면 sender : 관리자, receiver : 사용자
         else if(senderRole.equals("관리자")){
             // 관리자 -> 작업자
-            sseManager.sendRequestAdminToWorker(webRtcRequestDto.receiverAccountId(), senderInfoDto);
+            sseManager.sendRequestAdminToWorker(webRtcRequestDto.receiverAccountId(), senderInfoDto, "callRequest");
         }
     }
 
@@ -68,11 +68,11 @@ public class WebRtcService {
 
         if(receiverInfo.getRole().equals("사용자")){
             // 작업자 -> 관리자
-            sseManager.sendRequestWorkerToAdmin(receiverInfo.getCompanyId(), responseDto);
+            sseManager.sendRequestWorkerToAdmin(receiverInfo.getCompanyId(), responseDto, "callResponse");
         }
         else if(receiverInfo.getRole().equals("관리자")){
             // 관리자 -> 작업자
-            sseManager.sendRequestAdminToWorker(webRtcResponseDto.senderAccountId(), responseDto);
+            sseManager.sendRequestAdminToWorker(webRtcResponseDto.senderAccountId(), responseDto, "callResponse");
         }
     }
 
