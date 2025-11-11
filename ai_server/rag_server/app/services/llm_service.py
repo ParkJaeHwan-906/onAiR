@@ -42,15 +42,19 @@ def clarify_query(query: str) -> dict:
 """
 
     try:
+        print(f"🔵 [Clarify] Gemini-Flash API 호출 시작: '{query[:50]}...'")
         response = model_clarify.generate_content(prompt)
         text = response.text.strip()
+        print(f"✅ [Clarify] Gemini-Flash API 호출 성공 (응답 길이: {len(text)} bytes)")
 
         # ```json ``` 블록 형식 대응
         if "```" in text:
             text = text.split("```")[1].replace("json", "").strip()
 
         result = json.loads(text)
+        print(f"✅ [Clarify] Clarify 판정 결과: answerable={result.get('answerable')}")
     except Exception as e:
+        print(f"❌ [Clarify] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         result = {
             "answerable": True,
             "clarify": f"Clarify 판정 중 오류 발생: {e}"

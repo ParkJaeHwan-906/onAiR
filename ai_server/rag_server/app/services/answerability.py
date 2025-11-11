@@ -7,7 +7,12 @@ from app.core.config import settings
 from app.core.model_loader import embed_texts, KNOWN_SUBJECTS
 import google.generativeai as genai
 
-genai.configure(api_key=settings.GMS_API_KEY)
+# API 키 설정 (None 체크)
+if settings.GMS_API_KEY:
+    genai.configure(api_key=settings.GMS_API_KEY)
+    print(f"✅ [Answerability] GMS_API_KEY 설정 완료: {settings.GMS_API_KEY[:10]}...")
+else:
+    print("⚠️ [Answerability] GMS_API_KEY가 설정되지 않았습니다.")
 
 
 def _tokenize(q: str) -> List[str]:
@@ -709,9 +714,11 @@ JSON 형식:
 """
 
     try:
+        print(f"🔵 [Answerability] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
         model = genai.GenerativeModel(settings.GMS_MODEL_GATE)
         resp = model.generate_content(prompt)
         text = resp.text or ""
+        print(f"✅ [Answerability] Gemini-Flash API 호출 성공 (응답 길이: {len(text)} bytes)")
         
         # JSON 블록 제거
         if "```" in text:
@@ -734,7 +741,7 @@ JSON 형식:
         
         return result
     except Exception as e:
-        print("[Clarify Generation Error]", e)
+        print(f"❌ [Answerability] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         # Fallback: Evidence Trace 기반 기본 응답
         return {
             "need_clarify": True,

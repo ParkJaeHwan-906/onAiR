@@ -7,7 +7,13 @@ import json
 
 # ✅ GMS 통합키 하나로 gemini & gpt-4o 둘 다 사용
 import google.generativeai as genai
-genai.configure(api_key=settings.GMS_API_KEY)
+
+# API 키 설정 (None 체크)
+if settings.GMS_API_KEY:
+    genai.configure(api_key=settings.GMS_API_KEY)
+    print(f"✅ [Generator] GMS_API_KEY 설정 완료: {settings.GMS_API_KEY[:10]}...")
+else:
+    print("⚠️ [Generator] GMS_API_KEY가 설정되지 않았습니다.")
 
 
 # ==============================
@@ -25,12 +31,15 @@ def llm_self_check(query: str, snippets: List[str]) -> bool:
     )
 
     try:
+        print(f"🔵 [Self-Check] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
         model = genai.GenerativeModel(settings.GMS_MODEL_GATE)  # gemini-1.5-flash
         resp = model.generate_content(prompt)
         text = (resp.text or "").strip().upper()
-        return text.startswith("Y")
+        result = text.startswith("Y")
+        print(f"✅ [Self-Check] Gemini-Flash API 호출 성공: {result} (응답: {text[:50]})")
+        return result
     except Exception as e:
-        print("[Gemini Flash Self-Check Error]", e)
+        print(f"❌ [Self-Check] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         return True
 
 
@@ -143,15 +152,18 @@ def llm_generate_answer(query: str, snippets: List[str], hits: List[Dict[str, An
 """
 
     try:
+        print(f"🔵 [Generator] GPT-4o API 호출 시작 (모델: {settings.GMS_MODEL_GENERATOR})")
         model = genai.GenerativeModel(settings.GMS_MODEL_GENERATOR)  # gpt-4o
         resp = model.generate_content(prompt)
         text = resp.text or ""
+        print(f"✅ [Generator] GPT-4o API 호출 성공 (응답 길이: {len(text)} bytes)")
         
         # JSON 블록 제거
         if "```" in text:
             text = text.split("```")[1].replace("json", "").strip()
         
         result = json.loads(text)
+        print(f"✅ [Generator] 답변 생성 완료: summary={result.get('summary', '')[:50]}...")
         
         # TTS 친화적 텍스트 생성
         tts_text_parts = []
@@ -219,7 +231,7 @@ def llm_generate_answer(query: str, snippets: List[str], hits: List[Dict[str, An
         
         return result
     except Exception as e:
-        print("[GPT-4o Structured Answer Error]", e)
+        print(f"❌ [Generator] GPT-4o API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         # Fallback: 기존 방식
         fallback_answer = synthesize_answer(query, hits or [{"source": {"content": s}} for s in snippets])["answer"]
         tts_text = format_for_tts(fallback_answer)
@@ -310,9 +322,12 @@ def llm_self_score(query: str, answer: str, snippets: List[str]) -> Dict[str, An
 }}
 """
     try:
+        print(f"🔵 [Self-Score] GPT-4o API 호출 시작 (모델: {settings.GMS_MODEL_GENERATOR})")
         model = genai.GenerativeModel(settings.GMS_MODEL_GENERATOR)
         resp = model.generate_content(prompt)
-        return json.loads(resp.text)
+        result = json.loads(resp.text)
+        print(f"✅ [Self-Score] GPT-4o API 호출 성공: score={result.get('score', 0.0):.2f}")
+        return result
     except Exception as e:
-        print("[Self-Score Error]", e)
+        print(f"❌ [Self-Score] GPT-4o API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         return {"score": 0.0, "reason": f"평가 중 오류 발생: {e}"}
