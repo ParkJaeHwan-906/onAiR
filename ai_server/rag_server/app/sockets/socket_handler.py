@@ -1190,12 +1190,21 @@ async def handle_ar_marker(sid, data):
 
     # === 3️⃣ 전역 리스트에 저장 ===
     marker_idx = len(ar_markers) + 1
+    # marker_info = {
+    #     "idx": marker_idx,
+    #     "info": {
+    #         "x": round(wx, 3),
+    #         "y": round(wy, 3),
+    #         "size": round(rel_size, 3),
+    #         "tpl": patch
+    #     }
+    # }
     marker_info = {
         "idx": marker_idx,
         "info": {
-            "x": round(wx, 3),
-            "y": round(wy, 3),
-            "size": round(rel_size, 3),
+            "x": marker_x,
+            "y": marker_y,
+            "size": 30.0,
             "tpl": patch
         }
     }
