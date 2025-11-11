@@ -1084,7 +1084,7 @@ async def handle_video_frame(sid, data):
 
         if updated_markers:
             # 프레임 기준으로 리스트 갱신
-            ar_markers[:] = updated_markers
+            # ar_markers[:] = updated_markers
             await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # 3) 프레임 브로드캐스트 (PC 디스플레이용)
