@@ -22,12 +22,14 @@ interface WorkerHeaderProps {
   partnerInfo?: PartnerInfo | null;
 }
 
+const profileImage = "/images/default-profile.png";
+
 const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
   const { myInfo } = useUserStore();
   const [status, setStatus] = useState<"대기중" | "통신중">("통신중");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   // const [waitingList, setWaitingList] = useState<UserData[]>([]);
-  const [waitingList, ] = useState<UserData[]>([]);
+  const [waitingList] = useState<UserData[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 상대방 정보가 있으면 통신중 상태로 설정
@@ -63,14 +65,16 @@ const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
       <div className="worker-card default">
         <div className="worker-info">
           <div className="worker-profile">
-            <div className="profile-icon" />
+            <img src={profileImage} alt="profile" className="profile-icon" />
             <div className="worker-texts">
               <div className="top-row">
                 <span className="worker-name">
                   {partnerInfo ? partnerInfo.name : myInfo?.name || "사용자"}
                 </span>
                 <span className="worker-position">
-                  {partnerInfo ? (partnerInfo.equipmentName || "설비 미지정") : (myInfo?.part || "부서")}
+                  {partnerInfo
+                    ? partnerInfo.equipmentName || "설비 미지정"
+                    : myInfo?.part || "부서"}
                 </span>
               </div>
               <div className="bottom-row">
@@ -90,7 +94,7 @@ const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
             className={`dropdown-icon ${isDropdownOpen ? "open" : ""}`}
             onClick={toggleDropdown}
           >
-            <TextAlignJustify size={25} />
+            <TextAlignJustify size={22} />
           </button>
         </div>
       </div>

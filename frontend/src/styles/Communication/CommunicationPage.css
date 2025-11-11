@@ -1,11 +1,110 @@
 .communication-container {
   box-sizing: border-box;
-  width: 1664px;
-  height: 1011px;
-  background-color: #f5f6f8;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-surface-subtle);
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 24px 32px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: clamp(10px, 1vw, 14px);
+  padding: clamp(0px, 1vw, 2px);
+  overflow-y: auto;
+  min-width: 0;
+}
+
+/* LiveKitRoom을 감싸는 첫 번째 자식에 flex: 6 적용 (empty 상태 제외) */
+.communication-container:not(.empty) > *:first-child {
+  flex: 6 1 0;
+  min-width: 400px;
+  max-width: 100%;
+  height: 100%;
+  display: flex;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+/* empty 상태: 화면 고정 + 중앙 정렬 */
+.communication-container.empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+  background-color: var(--color-surface-subtle);
+  transform: translateY(-6%);
+}
+
+/* 카드 */
+.communication-empty-card {
+  width: clamp(280px, 32vw, 360px);
+  max-height: 80vh; /* 카드가 화면을 넘지 않도록 제한 */
+  padding: clamp(24px, 3vw, 32px) clamp(22px, 2.6vw, 28px);
+  border-radius: clamp(12px, 1vw, 16px);
+  background-color: var(--color-surface-base);
+  box-shadow: 0 12px 28px rgba(25, 33, 61, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 1.5vw, 18px);
+  text-align: center;
+  color: var(--color-text-primary);
+  overflow-y: auto; /* 내용이 많을 경우 내부 스크롤 */
+}
+
+.communication-empty-title {
+  font-size: var(--font-size-heading-md);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.communication-empty-sub {
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  margin: 0;
+  max-width: clamp(240px, 32vw, 340px);
+}
+
+.communication-empty-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.communication-empty-button,
+.communication-empty-secondary {
+  width: clamp(200px, 85%, 280px);
+  height: clamp(30px, 2.8vw, 34px);
+  border-radius: 10px;
+  border: none;
+  font-size: var(--font-size-body-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.communication-empty-button {
+  background-color: #3b4a6b;
+  color: #ffffff;
+}
+
+.communication-empty-button:hover {
+  background-color: #2f3b5a;
+}
+
+.communication-empty-secondary {
+  border: 1px solid #d0d4df;
+  background: #f8f9fc;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.communication-empty-secondary:hover {
+  border-color: #3b4a6b;
+  background: #eef1f9;
 }

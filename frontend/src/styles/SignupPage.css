@@ -4,40 +4,40 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f5f6f8;
+  background-color: var(--color-surface-subtle);
   font-family: "NotoSansKR";
 }
 
 .signup-form {
   width: 100%;
-  max-width: 420px;
-  background-color: #ffffff;
-  border-radius: 20px;
-  padding: 40px 48px;
+  max-width: 340px;
+  background-color: var(--color-surface-base);
+  border-radius: 16px;
+  padding: 20px 26px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .signup-logo {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .signup-logo img {
-  width: 200px;
+  width: 130px;
   height: auto;
 }
 
 .signup-label {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 14px;
+  gap: 5px;
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
-  color: #3b4a6b;
+  color: var(--color-text-primary);
 }
 
 /* 이메일 + 버튼 한 줄 배치 */
@@ -59,74 +59,76 @@
 
 .signup-input {
   width: 100%;
-  height: 48px;
-  border-radius: 12px;
+  height: 36px;
+  border-radius: 10px;
   border: 1px solid #d1d5db;
-  padding: 0 16px;
-  font-size: 16px;
+  padding: 0 12px;
+  font-size: var(--font-size-body-sm);
   color: #111827;
   box-sizing: border-box;
-  padding: 0 80px 0 16px;
+}
+
+.signup-email-wrap .signup-input {
+  padding: 0 75px 0 12px;
 }
 
 .signup-input:focus {
   outline: 2px solid #3b4a6b;
-  border-color: #eef4ff;
-}
-
-.signup-input:not(:placeholder-shown) {
-  background-color: #e8f0fe;
+  border-color: transparent;
 }
 
 .signup-submit-redundancy {
   position: absolute;
   top: 50%;
-  right: 8px;
+  right: 6px;
   transform: translateY(-50%);
-  height: 36px;
+  height: 26px;
   padding: 0 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background-color: #3b4a6b;
-  color: #ffffff;
-  font-size: 13px;
+  color: var(--color-surface-base);
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: box-shadow 0.15s ease;
+  white-space: nowrap;
 }
 
 .signup-submit-redundancy:hover {
-  box-shadow: 0 6px 12px rgba(59, 74, 107, 0.25);
+  box-shadow: 0 2px 6px rgba(59, 74, 107, 0.15);
 }
 
 /* 회원가입 버튼 */
 .signup-submit {
-  height: 48px;
+  height: 36px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background-color: #3b4a6b;
-  color: #ffffff;
-  font-size: 16px;
+  color: var(--color-surface-base);
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  margin-top: 2px;
 }
 
 .signup-submit:hover {
-  box-shadow: 0 10px 24px rgba(59, 74, 107, 0.25);
+  /* box-shadow: 0 6px 12px rgba(59, 74, 107, 0.25); */
+  box-shadow: 0 2px 6px rgba(59, 74, 107, 0.15);
 }
 
 /* 에러 / 성공 메시지 */
 .signup-error {
   color: #dc2626;
-  font-size: 13px;
+  font-size: 10px;
   text-align: left;
   margin: 0;
 }
 
 .signup-success {
   color: #16a34a;
-  font-size: 13px;
+  font-size: 10px;
   text-align: left;
   margin: 0;
 }

@@ -140,6 +140,8 @@ def init_socketio():
     sio.on("disconnect")(handle_disconnect)
     sio.on("register_device")(handle_register_device)
     sio.on("stt_result")(handle_stt_result)
+    sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
+    sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
@@ -257,6 +259,70 @@ async def handle_register_device(sid, data):
 
 
 # ========================================
+# Wakeword 이벤트 핸들러
+# ========================================
+
+async def handle_wakeword_detected(sid, data):
+    """
+    라즈베리파이로부터 Wakeword 감지 이벤트 수신
+    모바일로 이벤트를 전송하여 음성 파일 재생 시작
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    print("=" * 60)
+    print(f"📝 [단계 2-1] FastAPI 서버: Wakeword 감지 이벤트 수신 [raspi]")
+    print("=" * 60)
+    await wait_for_next_step("Wakeword 감지 이벤트 수신 완료", "2-1")
+    
+    # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
+    print("=" * 60)
+    print("📡 [단계 2-1-1] 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)")
+    print("=" * 60)
+    await broadcast_to("mobile", "wakeword_detected", {
+        "timestamp": None  # 필요시 추가
+    })
+    print("=" * 60)
+    print("✅ [단계 2-1-1 완료] 모바일로 Wakeword 감지 이벤트 전송 완료")
+    print("=" * 60)
+    await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
+
+
+async def handle_wakeword_audio_completed(sid, data):
+    """
+    모바일로부터 음성 파일 재생 완료 이벤트 수신
+    라즈베리파이로 이벤트를 전송하여 버퍼링 STT 세션 시작
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    print("=" * 60)
+    print(f"📝 [단계 2-2] FastAPI 서버: 모바일 음성 파일 재생 완료 이벤트 수신 [mobile]")
+    print("=" * 60)
+    await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
+    
+    # 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)
+    print("=" * 60)
+    print("📡 [단계 2-2-1] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)")
+    print("=" * 60)
+    await broadcast_to("raspi", "wakeword_audio_completed", {
+        "timestamp": None  # 필요시 추가
+    })
+    print("=" * 60)
+    print("✅ [단계 2-2-1 완료] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료")
+    print("=" * 60)
+    await wait_for_next_step("라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료", "2-2-1")
+
+
+# ========================================
 # STT 이벤트 핸들러 (버퍼링 + Streaming)
 # ========================================
 
@@ -337,49 +403,67 @@ async def handle_stt_result(sid, data):
             print("=" * 60)
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
-            # AI_SUPPORTER 분기인 경우 CV 모델 실행
+            # AI_SUPPORTER 분기인 경우 모바일에서 음성 파일 재생 완료 대기 후 CV 모델 실행
             if intent == "AI_SUPPORTER":
+                # 모바일에서 음성 파일 재생 완료 대기 (최대 10초)
+                # 주의: 모바일에서 음성 파일 재생 완료 이벤트를 별도로 전송하지 않으므로,
+                # 음성 파일 길이를 고려하여 대기 시간 설정
+                print("=" * 60)
+                print("⏳ [단계 8-1] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 중...")
+                print("   💡 모바일에서 'AI_Supporter 기능을 시작합니다. 오류 탐지.' 재생 중...")
+                print("=" * 60)
+                await asyncio.sleep(5)  # 음성 파일 재생 시간 대기 (약 5초)
+                print("=" * 60)
+                print("✅ [단계 8-1 완료] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 종료")
+                print("=" * 60)
+                await wait_for_next_step("모바일 AI_SUPPORTER 음성 파일 재생 완료 대기", "8-1")
+                
+                # CV 모델 실행 (현재는 비워둠, 추후 구현 예정)
                 try:
                     print("=" * 60)
                     print("🔍 [단계 9] CV 모델 실행 시작")
                     print("=" * 60)
+                    print("⚠️ CV 모델 연결은 아직 구현되지 않았습니다. 비워둡니다.")
+                    print("=" * 60)
+                    await wait_for_next_step("CV 모델 실행 (비워둠)", "9")
                     
-                    cv_result = await run_cv_model()
+                    # TODO: CV 모델 연결 구현 예정
+                    # cv_result = await run_cv_model()
+                    # 
+                    # if not cv_result.get("detected", False):
+                    #     # CV 모델이 오류를 탐지하지 못한 경우
+                    #     print("=" * 60)
+                    #     print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                    #     print("=" * 60)
+                    #     await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
+                    #     
+                    #     # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                    #     print("=" * 60)
+                    #     print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
+                    #     print("=" * 60)
+                    #     await broadcast_to("mobile", "cv_detection_failed", {
+                    #         "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                    #     })
+                    #     print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
+                    #     await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
+                    #     
+                    #     print("=" * 60)
+                    #     print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                    #     print("=" * 60)
+                    #     await broadcast_to("raspi", "cv_detection_failed", {
+                    #         "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                    #     })
+                    #     print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                    #     print("=" * 60)
+                    #     await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
+                    #     
+                    #     # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
+                    #     # (라즈베리파이에서 이 이벤트를 받아서 처리)
+                    # else:
+                    #     # CV 모델이 오류를 탐지한 경우
+                    #     print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
+                    #     # TODO: 오류 탐지 성공 시 처리 로직 추가
                     
-                    if not cv_result.get("detected", False):
-                        # CV 모델이 오류를 탐지하지 못한 경우
-                        print("=" * 60)
-                        print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
-                        print("=" * 60)
-                        await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
-                        
-                        # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
-                        print("=" * 60)
-                        print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("mobile", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
-                        })
-                        print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
-                        await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
-                        
-                        print("=" * 60)
-                        print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("raspi", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-                        })
-                        print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
-                        print("=" * 60)
-                        await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
-                        
-                        # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
-                        # (라즈베리파이에서 이 이벤트를 받아서 처리)
-                    else:
-                        # CV 모델이 오류를 탐지한 경우
-                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
-                        # TODO: 오류 탐지 성공 시 처리 로직 추가
-                        
                 except Exception as e:
                     print(f"❌ CV 모델 실행 오류: {e}")
                     # CV 모델 오류 시에도 탐지 실패로 처리
@@ -868,6 +952,18 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
+            # 서비스 완료: 라즈베리파이로 서비스 종료 이벤트 전송 (wakeword 재활성화 신호)
+            print("=" * 60)
+            print(f"📤 [단계 13-11] 라즈베리파이로 서비스 완료 이벤트 전송 시작")
+            print("=" * 60)
+            await broadcast_to("raspi", "service_completed", {
+                "session_id": session_id,
+                "status": "completed"
+            })
+            print("=" * 60)
+            print(f"✅ [단계 13-11 완료] 라즈베리파이로 서비스 완료 이벤트 전송 완료")
+            print("=" * 60)
+            
     except Exception as e:
         print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
         import traceback
@@ -1022,7 +1118,6 @@ async def handle_clarify_response(sid, data):
 # ========================================
 # Raspberry Pi 비디오 프레임 처리
 # ========================================
-
 @sio.on("video_frame")
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
@@ -1036,60 +1131,67 @@ async def handle_video_frame(sid, data):
         print("⚠️ Failed to decode frame")
         return
 
-    # 1) 모션 계산
+    # 1️⃣ 모션 계산 (Optical Flow + Essential)
     result = await motion_core.process_frame(frame, sid=sid)
-    # 로그는 필요시만
-    # if result["status"] == "ok":
-    #     x, y, z = result["x"], result["y"], result["z"]
+    if result["status"] not in ("ok", "init"):
+        # 모션 추정 불가한 경우 스킵
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        return
 
-    # 2) AR 마커 업데이트 (새 포맷: {idx, info:{x,y,size}})
+    # 2️⃣ AR 마커 업데이트 (Affine + Depth 기반)
     if ar_markers:
-        R, t = motion_core.get_pose()
         updated_markers = []
 
         for m in ar_markers:
             info = m.get("info", {})
-            wx, wy = float(info.get("x", 0.0)), float(info.get("y", 0.0))
-            wz = 0.0
-            world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
+            u = float(info.get("x", 0.0))
+            v = float(info.get("y", 0.0))
 
-            base_size = float(info.get("size", 1.0))
+            # === 📍 Optical Flow + Essential 기반 위치/깊이 보정 ===
+            u_new, v_new, z_new = motion_core.update_marker_position(u, v)
 
-            cam_point = R @ (world_point - t)
-            if cam_point[2, 0] <= 0:
-                continue
+            # === 📏 깊이에 따른 크기 계산 (z 클수록 가까움 → 커짐) ===
+            base_size = 30.0
+            scale_factor = 20.0
+            size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
 
-            uv = motion_core.K @ cam_point
-            u_pred = float(uv[0, 0] / uv[2, 0])
-            v_pred = float(uv[1, 0] / uv[2, 0])
-            proj_size = base_size / cam_point[2, 0]
-
-            # === 🎯 패치 매칭 기반 보정 ===
+            # === 🎯 패치 매칭 기반 보정 (선택) ===
             tpl = info.get("tpl", None)
             if tpl is not None and tpl.size > 0:
                 gray_now = motion_core.get_latest_gray()
                 if gray_now is not None:
                     u_ref, v_ref, score = motion_core.refine_patch_position(
-                        gray_now, u_pred, v_pred, tpl, search_r=14
+                        gray_now, u_new, v_new, tpl, search_r=14
                     )
-                    if score >= 0.75:  # 신뢰도 기준
-                        u_pred, v_pred = u_ref, v_ref
-                        info["tpl"] = cv2.addWeighted(tpl, 0.9,
-                            motion_core.extract_patch_from_current_gray(u_pred, v_pred, 10), 0.1, 0)
+                    if score >= 0.75:
+                        u_new, v_new = u_ref, v_ref
+                        # 템플릿 최신화
+                        new_patch = motion_core.extract_patch_from_current_gray(u_new, v_new, 10)
+                        if new_patch is not None:
+                            info["tpl"] = cv2.addWeighted(tpl, 0.9, new_patch, 0.1, 0)
 
             updated_markers.append({
                 "idx": m["idx"],
-                "info": {"x": round(u_pred, 2), "y": round(v_pred, 2), "size": round(proj_size, 3), "tpl": info.get("tpl", None)}
+                "info": {
+                    "x": round(u_new, 2),
+                    "y": round(v_new, 2),
+                    "z": round(z_new, 3),
+                    "size": round(size_px, 3),
+                    "tpl": info.get("tpl", None)
+                }
             })
 
-        if updated_markers:
-            # 프레임 기준으로 리스트 갱신
-            ar_markers[:] = updated_markers
-            await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+        # === ✅ 전역 마커 리스트 갱신 ===
+        ar_markers[:] = updated_markers
 
-    # 3) 프레임 브로드캐스트 (PC 디스플레이용)
+        # === 🛰️ 클라이언트로 전송 ===
+        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+
+    # 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+
 
 # ========================================
 # Clarify 입력 수신 (모바일 → FastAPI)
@@ -1165,49 +1267,26 @@ async def handle_ar_marker(sid, data):
     marker_x = data.get("marker_x")
     marker_y = data.get("marker_y")
 
-    if marker_x is None or marker_y is None:
-        print("⚠️ Invalid marker data")
-        return
+    # === 1️⃣ Optical Flow + Essential 기반 좌표/깊이 업데이트 ===
+    u_new, v_new, z_new = motion_core.update_marker_position(marker_x, marker_y)
 
-    # === 1️⃣ 상대 size 계산 ===
-    rel_size = motion_core.relative_size_at(marker_x, marker_y)
-    if rel_size is None:
-        rel_size = 1.0  # fallback 값
+    # === 2️⃣ 크기 계산 (z 클수록 커짐)
+    base_size = 30.0
+    scale_factor = 10.0
+    size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
 
-    # === 2️⃣ 픽셀 → 월드 좌표 변환 (plane_z=0 기준)
-    world_point = motion_core.pixel_to_world_on_plane(marker_x, marker_y, plane_z=0.0)
-    if world_point is None:
-        wx, wy, wz = 0.0, 0.0, 0.0
-    else:
-        wx, wy, wz = world_point
-
-    # === 🎯 클릭 시 패치 저장 ===
-    patch = motion_core.extract_patch_from_current_gray(marker_x, marker_y, half_size=10)
-    if patch is None:
-        print("⚠️ Patch extraction failed.")
-    else:
-        print(f"🎯 Patch saved: shape={patch.shape}")
-
-    # === 3️⃣ 전역 리스트에 저장 ===
-    marker_idx = len(ar_markers) + 1
+    # === 3️⃣ 마커 저장 ===
     marker_info = {
-        "idx": marker_idx,
+        "idx": len(ar_markers) + 1,
         "info": {
-            "x": round(wx, 3),
-            "y": round(wy, 3),
-            "size": round(rel_size, 3),
-            "tpl": patch
+            "x": u_new,
+            "y": v_new,
+            "z": z_new,
+            "size": round(size_px, 2),
         }
     }
     ar_markers.append(marker_info)
 
-    # === 4️⃣ 콘솔 로그 출력 ===
-    print(
-        f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
-        f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}"
-    )
-
-    # === 5️⃣ 클라이언트로 전송 ===
+    # === 4️⃣ 로그 및 전송 ===
+    print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, data={ar_markers}")
-

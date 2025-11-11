@@ -1,11 +1,11 @@
 .employee-row {
   display: flex;
   align-items: center;
-  width: 1048px;
-  height: 69px;
+  width: 100%;
+  height: clamp(44px, 3.6vw, 52px);
   border-bottom: 1px solid #e5e7eb;
-  font-size: 16px;
-  color: #111827;
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-primary);
   transition: background-color 0.2s ease;
 }
 
@@ -16,7 +16,7 @@
 .employee-row > div {
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: clamp(10px, 1vw, 14px);
   box-sizing: border-box;
 }
 
@@ -49,9 +49,9 @@
 .col-status span {
   display: inline-block;
   border-radius: 9999px;
-  padding: 8px 8px;
-  font-size: 14px;
-  /* font-weight: 600; */
+  padding: clamp(6px, 0.7vw, 8px) clamp(10px, 0.9vw, 12px);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -78,8 +78,8 @@
   color: #fff;
   border: none;
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: clamp(4px, 0.5vw, 6px) clamp(10px, 0.8vw, 12px);
+  font-size: var(--font-size-body-sm);
   cursor: pointer;
   transition: background-color 0.2s ease;
 }

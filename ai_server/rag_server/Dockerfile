@@ -38,6 +38,7 @@ WORKDIR /app
 # 런타임에 필요한 시스템 패키지만 설치 (curl은 헬스체크용)
 RUN apt-get update && apt-get install -y \
     curl \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # 빌드 스테이지에서 설치된 Python 패키지 복사

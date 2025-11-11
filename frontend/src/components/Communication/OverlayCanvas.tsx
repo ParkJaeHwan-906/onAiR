@@ -19,6 +19,53 @@ interface CanvasProps {
   tool?: string;
 }
 
+// AR 마커 타입 정의
+type ArMarker = {
+  idx: number;
+  info: {
+    x: number;
+    y: number;
+    size: number;
+  };
+};
+
+// stage size
+const STAGE_WIDTH = 968;
+const STAGE_HEIGHT = 857;
+// 카메라 화면 size
+const CAMERA_WIDTH = 640;
+const CAMERA_HEIGHT = 480;
+// convert에 사용될 변수
+const scale = STAGE_HEIGHT / CAMERA_HEIGHT;
+const scaledCameraWidth = CAMERA_WIDTH * scale;
+
+// convert stage -> camera
+const convertStageToCamera = (stageX: number, stageY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
+
+  // Stage 좌표를 카메라 좌표로 변환
+  const cameraX = ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
+  const cameraY = (stageY / STAGE_HEIGHT) * CAMERA_HEIGHT;
+
+  return {
+    x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
+    y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY)))
+  };
+};
+
+// convert camera -> stage
+const convertCameraToStage = (cameraX: number, cameraY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
+  
+  const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
+  const stageY = (cameraY / CAMERA_HEIGHT) * STAGE_HEIGHT;
+  
+  return {
+    x: Math.round(stageX),
+    y: Math.round(stageY)
+  };
+};
+
 export const OverlayCanvas = ({
   penColor,
   tool = "pen",
@@ -33,73 +80,80 @@ export const OverlayCanvas = ({
   );
   const isDrawing = useRef(false);
   const startPos = useRef<{ x: number; y: number } | null>(null);
-  const room = useRoomContext()
-  const sendDrawingData = (data: object) => {
-      if (!room) return
-  
-      const jsonString = JSON.stringify(data)
-      const byteArray = new TextEncoder().encode(jsonString)
-      console.log(">>> [Web] SENDING DATA:", jsonString);
-      room.localParticipant.publishData(byteArray, {
-        reliable: false,
-      })
-    }
-  
-    const throttledSendDrawMove = throttle(
-      (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
-    )
-  
-  const [arMarkers, setArMarkers] = useState<Array<{
-    idx: number;
-    info: {
-      x: number;
-      y: number;
-      size: number;
+  const room = useRoomContext();
+
+  // overlay canvas 크기를 컨테이너에 맞게 동적으로 설정
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState({ width: 968, height: 857 });
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        setStageSize({ width, height });
+      }
     };
-  }>>([
-    // 테스트용으로 초기 마커 생성
-    {
-      idx: 0,
-      info: {
-        x: 200,
-        y: 300,
-        size: 50
-      }
-    },
-    {
-      idx: 1,
-      info: {
-        x: 500,
-        y: 400,
-        size: 30
-      }
-    }
-  ]);
+
+    if (!containerRef.current) return;
+
+    // 초기 크기 설정
+    updateSize();
+
+    // ResizeObserver로 크기 변화 감지
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const sendDrawingData = (data: object) => {
+    if (!room) return;
+
+    const jsonString = JSON.stringify(data);
+    const byteArray = new TextEncoder().encode(jsonString);
+    console.log(">>> [Web] SENDING DATA:", jsonString);
+    room.localParticipant.publishData(byteArray, {
+      reliable: false,
+    });
+  };
+
+  const throttledSendDrawMove = throttle(
+    (x: number, y: number) => sendDrawingData({ event: "draw-move", x, y }),
+    30
+  );
+
+  const [arMarkers, setArMarkers] = useState<ArMarker[]>([]);
 
   // ------------------------------- Listen Socket Event -------------------------------
   useEffect(() => {
-      if(!socket) return;
+    if (!socket) return;
 
       // ar-info 이벤트 listen
       socket.on('ar-info', (data) => {
         console.log('receive ar info', data);
-        console.log('data type:', typeof data, 'isArray:', Array.isArray(data));
-        console.log('data constructor:', data?.constructor?.name);
         
-        // 배열인지 확인하고 안전하게 처리
-        if (Array.isArray(data)) {
-          setArMarkers(data);
-        } else if (data && typeof data === 'object' && 'markers' in data) {
-          // 객체로 감싸져 있는 경우 (예: { markers: [...] })
-          const markersData = data as { markers: unknown };
-          if (Array.isArray(markersData.markers)) {
-            setArMarkers(markersData.markers);
-          } else {
-            console.warn('data.markers is not an array:', markersData.markers);
-            setArMarkers([]);
-          }
+        // { markers: [...] } 형태의 데이터 처리
+        const markersData = data as unknown as { markers: ArMarker[] };
+        if (Array.isArray(markersData.markers)) {
+          // 카메라 좌표를 Stage 좌표로 변환
+          const convertedMarkers = markersData.markers.map((marker: ArMarker) => {
+            const stagePos = convertCameraToStage(marker.info.x, marker.info.y);
+            return {
+              ...marker,
+              info: {
+                ...marker.info,
+                x: stagePos.x,
+                y: stagePos.y,
+                size: marker.info.size * scale // size도 스케일 적용
+              }
+            };
+          });
+          setArMarkers(convertedMarkers);
+          console.log('converted AR Markers : ', convertedMarkers);
         } else {
-          console.error('Invalid ar-info data:', data);
+          console.warn('data.markers is not an array:', markersData.markers);
           setArMarkers([]);
         }
       });
@@ -108,8 +162,7 @@ export const OverlayCanvas = ({
       return () => {
         socket.off('ar-info');
       };
-  }, [socket])
-
+  }, [socket]);
 
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -126,10 +179,10 @@ export const OverlayCanvas = ({
         { tool, color: penColor, points: [pos.x, pos.y] },
       ]);
       sendDrawingData({
-      event: 'draw-start',
-      x: pos.x,
-      y: pos.y
-    })
+        event: "draw-start",
+        x: pos.x,
+        y: pos.y,
+      });
     } else if (["circle", "square", "triangle"].includes(tool)) {
       startPos.current = pos;
       setCurrentShape({
@@ -140,12 +193,15 @@ export const OverlayCanvas = ({
         endY: pos.y,
         color: penColor,
       });
-    } else if (["arrow"].includes(tool)){
+    } else if (["arrow"].includes(tool)) {
       startPos.current = pos;
-      console.log(`ar-marker created: ${pos.x}, ${pos.y}`);
-      socket.emit("ar-marker", {marker_x: pos.x, marker_y: pos.y});
-    }
 
+      // stage 좌표를 카메라 좌표로 변환
+      const cameraPos = convertStageToCamera(pos.x, pos.y);
+
+      console.log(`ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`);
+      socket.emit("ar-marker", {marker_x: cameraPos.x, marker_y: cameraPos.y});
+    }
   };
 
   // ------------------------------- 마우스 이동 -------------------------------
@@ -167,7 +223,7 @@ export const OverlayCanvas = ({
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
-      throttledSendDrawMove(pos.x, pos.y)
+      throttledSendDrawMove(pos.x, pos.y);
     } else if (startPos.current && currentShape) {
       setCurrentShape({
         ...currentShape,
@@ -186,7 +242,7 @@ export const OverlayCanvas = ({
     }
     isDrawing.current = false;
     startPos.current = null;
-    sendDrawingData({event: 'draw-end'})
+    sendDrawingData({ event: "draw-end" });
   };
 
   // ------------------------------- 삭제 -------------------------------
@@ -278,10 +334,10 @@ export const OverlayCanvas = ({
   };
 
   return (
-    <>
+    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
       <Stage
-        width={968}
-        height={857}
+        width={stageSize.width}
+        height={stageSize.height}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -318,15 +374,15 @@ export const OverlayCanvas = ({
               key={marker.idx}
               x={marker.info.x}
               y={marker.info.y}
-              radius={marker.info.size} 
+              radius={marker.info.size}
               fill="rgba(255, 0, 0, 0.3)" // 반투명 빨간색
               stroke="#ff0000"
               strokeWidth={2}
               listening={tool === "eraser"} // eraser 선택 시 클릭 이벤트 활성화
               onClick={() => {
-                console.log('AR 마커 클릭:', marker.idx);
+                console.log("AR 마커 클릭:", marker.idx);
                 // 마커 관련 동작
-                socket.emit("delete-marker", {idx: marker.idx});
+                socket.emit("delete-marker", { idx: marker.idx });
               }}
             />
           ))}
@@ -345,6 +401,6 @@ export const OverlayCanvas = ({
           )}
         </Layer>
       </Stage>
-    </>
+    </div>
   );
 };
