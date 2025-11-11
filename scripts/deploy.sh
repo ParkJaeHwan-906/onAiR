@@ -26,4 +26,9 @@ sleep 5
 # 현재 실행 중인 컨테이너 상태 출력
 docker compose ps
 
+# 사용하지 않는 이미지 정리 (dangling 이미지 및 사용하지 않는 이미지)
+echo "🧹 Cleaning up unused Docker images..."
+docker image prune -f
+docker builder prune -af --filter "until=24h"
+
 echo "✅ Deployment complete: $SERVICES"

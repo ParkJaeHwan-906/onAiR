@@ -1,5 +1,5 @@
 import { type KonvaEventObject } from "konva/lib/Node";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Layer,
   Line,
@@ -11,6 +11,7 @@ import {
 } from "react-konva";
 import type { DrawingLine } from "../../types/DrawingLine";
 import { useRoomContext } from "@livekit/components-react";
+import { useSocket } from "../../utils/socketContext";
 import { throttle } from "lodash";
 
 interface CanvasProps {
@@ -22,6 +23,7 @@ export const OverlayCanvas = ({
   penColor,
   tool = "pen",
 }: CanvasProps) => {
+  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
 
   const [lines, setLines] = useState<DrawingLine[]>([]);
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
@@ -47,6 +49,68 @@ export const OverlayCanvas = ({
       (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
     )
   
+  const [arMarkers, setArMarkers] = useState<Array<{
+    idx: number;
+    info: {
+      x: number;
+      y: number;
+      size: number;
+    };
+  }>>([
+    // 테스트용으로 초기 마커 생성
+    {
+      idx: 0,
+      info: {
+        x: 200,
+        y: 300,
+        size: 50
+      }
+    },
+    {
+      idx: 1,
+      info: {
+        x: 500,
+        y: 400,
+        size: 30
+      }
+    }
+  ]);
+
+  // ------------------------------- Listen Socket Event -------------------------------
+  useEffect(() => {
+      if(!socket) return;
+
+      // ar-info 이벤트 listen
+      socket.on('ar-info', (data) => {
+        console.log('receive ar info', data);
+        console.log('data type:', typeof data, 'isArray:', Array.isArray(data));
+        console.log('data constructor:', data?.constructor?.name);
+        
+        // 배열인지 확인하고 안전하게 처리
+        if (Array.isArray(data)) {
+          setArMarkers(data);
+        } else if (data && typeof data === 'object' && 'markers' in data) {
+          // 객체로 감싸져 있는 경우 (예: { markers: [...] })
+          const markersData = data as { markers: unknown };
+          if (Array.isArray(markersData.markers)) {
+            setArMarkers(markersData.markers);
+          } else {
+            console.warn('data.markers is not an array:', markersData.markers);
+            setArMarkers([]);
+          }
+        } else {
+          console.error('Invalid ar-info data:', data);
+          setArMarkers([]);
+        }
+      });
+
+      // cleanup
+      return () => {
+        socket.off('ar-info');
+      };
+  }, [socket])
+
+
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const pos = e.target.getStage()?.getPointerPosition();
@@ -66,7 +130,7 @@ export const OverlayCanvas = ({
       x: pos.x,
       y: pos.y
     })
-    } else if (["circle", "square", "triangle", "arrow"].includes(tool)) {
+    } else if (["circle", "square", "triangle"].includes(tool)) {
       startPos.current = pos;
       setCurrentShape({
         type: tool,
@@ -76,7 +140,12 @@ export const OverlayCanvas = ({
         endY: pos.y,
         color: penColor,
       });
+    } else if (["arrow"].includes(tool)){
+      startPos.current = pos;
+      console.log(`ar-marker created: ${pos.x}, ${pos.y}`);
+      socket.emit("ar-marker", {marker_x: pos.x, marker_y: pos.y});
     }
+
   };
 
   // ------------------------------- 마우스 이동 -------------------------------
@@ -211,7 +280,7 @@ export const OverlayCanvas = ({
   return (
     <>
       <Stage
-        width={940}
+        width={968}
         height={857}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -242,6 +311,25 @@ export const OverlayCanvas = ({
 
           {/* 현재 드래그 중인 도형 (실시간 크기 변화) */}
           {currentShape && renderShape(currentShape, -1)}
+
+          {/* AR 마커 렌더링 */}
+          {Array.isArray(arMarkers) && arMarkers.length > 0 && arMarkers.map((marker) => (
+            <Circle
+              key={marker.idx}
+              x={marker.info.x}
+              y={marker.info.y}
+              radius={marker.info.size} 
+              fill="rgba(255, 0, 0, 0.3)" // 반투명 빨간색
+              stroke="#ff0000"
+              strokeWidth={2}
+              listening={tool === "eraser"} // eraser 선택 시 클릭 이벤트 활성화
+              onClick={() => {
+                console.log('AR 마커 클릭:', marker.idx);
+                // 마커 관련 동작
+                socket.emit("delete-marker", {idx: marker.idx});
+              }}
+            />
+          ))}
 
           {/* 지우개 커서 */}
           {tool === "eraser" && eraserPos && (

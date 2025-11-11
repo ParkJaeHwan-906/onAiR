@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun initView() {
+
         binding.bottomNavigationBar.setOnItemSelectedListener { item ->
             when(item.itemId) {
                 R.id.task_list_item -> {
@@ -78,4 +79,3 @@ class MainActivity : AppCompatActivity() {
     }
 
 }
-
