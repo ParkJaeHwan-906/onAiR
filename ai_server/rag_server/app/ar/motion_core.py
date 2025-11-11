@@ -139,6 +139,7 @@ async def process_frame(frame_bgr, sid=None):
     global last_inlier_prev, last_inlier_next, last_parallax, last_parallax_med
 
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    _latest_gray = gray.copy()  # 최신 프레임 갱신
 
     # 초기 프레임: 특징점 초기화
     if prev_gray is None:
@@ -171,6 +172,46 @@ async def process_frame(frame_bgr, sid=None):
         lk_max_level=4,
         frame=None
     )
+
+    prev_valid_refined = []
+    next_valid_refined = []
+    match_scores = []    
+    patch_hw = 8  # 17x17 템플릿
+    search_r = 12 # 25x25 검색
+    for (x0, y0), (x1, y1) in zip(prev_valid.reshape(-1,2), next_valid.reshape(-1,2)):
+        y0a, y1a = max(0, int(y0 - patch_hw)), min(prev_gray.shape[0], int(y0 + patch_hw + 1))
+        x0a, x1a = max(0, int(x0 - patch_hw)), min(prev_gray.shape[1], int(x0 + patch_hw + 1))
+        tpl = prev_gray[int(y0-patch_hw):int(y0+patch_hw+1),
+                        int(x0-patch_hw):int(x0+patch_hw+1)]
+        if tpl.shape[0] != 2*patch_hw+1 or tpl.shape[1] != 2*patch_hw+1:
+            continue
+        xs0, ys0 = int(x1-search_r), int(y1-search_r)
+        xs1, ys1 = int(x1+search_r+1), int(y1+search_r+1)
+        roi = gray[max(0,ys0):min(gray.shape[0],ys1),
+                max(0,xs0):min(gray.shape[1],xs1)]
+        if roi.shape[0] < tpl.shape[0] or roi.shape[1] < tpl.shape[1]:
+            continue
+        res = cv2.matchTemplate(roi, tpl, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        match_scores.append(max_val)
+        if max_val >= 0.80:  # 임계값
+            dx, dy = max_loc
+            nx = (max(0,xs0) + dx) + patch_hw
+            ny = (max(0,ys0) + dy) + patch_hw
+            prev_valid_refined.append([x0, y0])
+            next_valid_refined.append([nx, ny])
+
+    if len(prev_valid_refined) < 8:
+        print(f"⚠️ Too few refined ({len(prev_valid_refined)}), fallback to OF result")
+    else:
+        if match_scores: 
+            mean_score = np.mean(match_scores)
+        else:
+            mean_score = 0.0
+        print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
+
+    prev_valid = np.array(prev_valid_refined, dtype=np.float32).reshape(-1,1,2)
+    next_valid = np.array(next_valid_refined, dtype=np.float32).reshape(-1,1,2)
 
     # 점 풀 유지/보강
     _maintain_feature_pool(gray, prev_valid, next_valid)
@@ -233,31 +274,57 @@ async def process_frame(frame_bgr, sid=None):
 # ============================
 def pixel_to_world_on_plane(u, v, plane_z=0.0):
     """
-    현재 포즈(R_total,t_total)와 K를 사용해, 이미지 픽셀(u,v)의 광선을
+    현재 포즈(R_total, t_total)와 K를 사용해 이미지 픽셀(u,v)의 광선을
     월드 z=plane_z 평면과 교차시켜 3D 좌표를 구함.
-    반환: (x,y,z) or None
+    반환: (x, y, z) or None
+
+    개선 사항:
+    - 초기 포즈 미설정 시 None 반환
+    - z=0 평면과 평행한 경우 plane_z 자동 보정
+    - 디버그 로그 및 안전한 fallback
     """
+    global R_total, t_total, K
+
+    # --- ① 포즈 유효성 검사 ---
+    if np.allclose(t_total, 0, atol=1e-6):
+        print("⚠️ [pixel_to_world_on_plane] Pose not initialized (t_total≈0). Returning None.")
+        return None
+
+    # --- ② 내참수 추출 ---
     fx, fy = K[0, 0], K[1, 1]
     cx, cy = K[0, 2], K[1, 2]
 
+    # --- ③ 픽셀 → 카메라좌표계 방향벡터 ---
     x_cam = (u - cx) / fx
     y_cam = (v - cy) / fy
     dir_cam = np.array([x_cam, y_cam, 1.0], dtype=np.float32).reshape(3, 1)
 
-    # world 방향
+    # --- ④ 카메라→월드 방향 변환 ---
     dir_world = R_total @ dir_cam
     dir_world = dir_world.reshape(3)
 
     C = t_total.reshape(3)
     denom = dir_world[2]
+
+    # --- ⑤ z=0 평면과 평행한 경우 자동 보정 ---
     if abs(denom) < 1e-8:
-        return None
+        print("⚠️ [pixel_to_world_on_plane] Ray nearly parallel to plane_z, adjusting plane_z→-1.0")
+        plane_z = -1.0
+        denom = dir_world[2] if abs(dir_world[2]) > 1e-8 else 1e-8
+
+    # --- ⑥ 평면 교차점 계산 ---
     t = (plane_z - C[2]) / denom
     if t <= 0:
+        print(f"⚠️ [pixel_to_world_on_plane] Intersection behind camera (t={t:.4f}) → returning None.")
         return None
-    P = C + t * dir_world
-    return (float(P[0]), float(P[1]), float(P[2]))
 
+    P = C + t * dir_world
+    wx, wy, wz = float(P[0]), float(P[1]), float(P[2])
+
+    # --- ⑦ 디버그 로그 ---
+    # print(f"📍 [pixel_to_world_on_plane] pixel=({u:.1f},{v:.1f}) → world=({wx:.3f},{wy:.3f},{wz:.3f}) | t={t:.3f}")
+
+    return wx, wy, wz
 
 # ============================
 # 🧩 상대적 size 헬퍼
@@ -291,7 +358,7 @@ def relative_size_at(u, v, k=5):
     local = _knn_local_parallax(u, v, k=k)
     if local is None or local <= 1e-9:
         return None
-    return float(last_parallax_med / (local + 1e-6))
+    return float((local + 1e-6) / last_parallax_med)
 
 
 def relative_size_in_bbox(x0, y0, x1, y1):
@@ -316,3 +383,51 @@ def relative_size_in_bbox(x0, y0, x1, y1):
     if local_med <= 1e-9:
         return None
     return float(last_parallax_med / (local_med + 1e-6))
+
+_latest_gray = None  # 전역 캐시
+
+def get_latest_gray():
+    """가장 최근 프레임의 gray 이미지를 반환"""
+    global _latest_gray
+    return _latest_gray
+
+def extract_patch_from_current_gray(u, v, half_size=10):
+    """현재 gray 프레임에서 (u,v) 근처 패치를 잘라 반환"""
+    global _latest_gray
+    if _latest_gray is None:
+        return None
+    h, w = _latest_gray.shape
+    u, v = int(u), int(v)
+    x0, y0 = max(0, u - half_size), max(0, v - half_size)
+    x1, y1 = min(w, u + half_size + 1), min(h, v + half_size + 1)
+    patch = _latest_gray[y0:y1, x0:x1]
+    if patch.shape[0] < 2 * half_size or patch.shape[1] < 2 * half_size:
+        return None
+    return patch.copy()
+
+def refine_patch_position(gray_now, u_pred, v_pred, tpl, search_r=14):
+    """
+    현재 프레임(gray_now)에서 예측좌표(u_pred,v_pred) 근방을 탐색하여
+    템플릿(tpl)과 가장 유사한 위치를 반환.
+    """
+    h, w = gray_now.shape[:2]
+    half_t = tpl.shape[0] // 2
+    x0, y0 = int(u_pred - search_r), int(v_pred - search_r)
+    x1, y1 = int(u_pred + search_r + 1), int(v_pred + search_r + 1)
+
+    x0c, y0c = max(0, x0), max(0, y0)
+    x1c, y1c = min(w, x1), min(h, y1)
+    roi = gray_now[y0c:y1c, x0c:x1c]
+
+    if roi.shape[0] < tpl.shape[0] or roi.shape[1] < tpl.shape[1]:
+        return (u_pred, v_pred, 0.0)
+
+    res = cv2.matchTemplate(roi, tpl, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(res)
+    if max_val < 0.7:
+        return (u_pred, v_pred, max_val)
+
+    dx, dy = max_loc
+    u_ref = (x0c + dx) + half_t
+    v_ref = (y0c + dy) + half_t
+    return (float(u_ref), float(v_ref), float(max_val))

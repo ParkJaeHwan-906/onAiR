@@ -12,6 +12,7 @@ import ssafy.com.onair.sse.dto.TaskStatusChangeDto;
 import ssafy.com.onair.user.dto.UserInfoDto;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -139,7 +140,7 @@ public class SseManager {
         this.emitters.forEach((accountId, emitter) -> {
             sendSseMessage(emitter, SseMessageDto.builder()
                     .eventName("heart beat")
-                    .data("SSE 연결을 유지하기 위한 이벤트입니다.")
+                    .data("SSE 연결을 유지하기 위한 이벤트입니다. time stamp : " + LocalDateTime.now().toString())
                     .build());
             log.debug("send heartbeat to {}", accountId);
         });
