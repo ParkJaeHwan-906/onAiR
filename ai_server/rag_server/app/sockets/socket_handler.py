@@ -418,7 +418,7 @@ async def handle_stt_result(sid, data):
                 print("=" * 60)
                 await wait_for_next_step("모바일 AI_SUPPORTER 음성 파일 재생 완료 대기", "8-1")
                 
-                # CV 모델 실행 (현재는 비워둠, 추후 구현 예정)
+                # CV 모델 실행
                 try:
                     print("=" * 60)
                     print("🔍 [단계 9] CV 모델 실행 시작")
@@ -427,43 +427,43 @@ async def handle_stt_result(sid, data):
                     print("=" * 60)
                     await wait_for_next_step("CV 모델 실행 (비워둠)", "9")
                     
-                    # TODO: CV 모델 연결 구현 예정
-                    # cv_result = await run_cv_model()
-                    # 
-                    # if not cv_result.get("detected", False):
-                    #     # CV 모델이 오류를 탐지하지 못한 경우
-                    #     print("=" * 60)
-                    #     print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
-                    #     print("=" * 60)
-                    #     await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
-                    #     
-                    #     # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
-                    #     print("=" * 60)
-                    #     print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
-                    #     print("=" * 60)
-                    #     await broadcast_to("mobile", "cv_detection_failed", {
-                    #         "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
-                    #     })
-                    #     print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
-                    #     await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
-                    #     
-                    #     print("=" * 60)
-                    #     print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
-                    #     print("=" * 60)
-                    #     await broadcast_to("raspi", "cv_detection_failed", {
-                    #         "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-                    #     })
-                    #     print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
-                    #     print("=" * 60)
-                    #     await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
-                    #     
-                    #     # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
-                    #     # (라즈베리파이에서 이 이벤트를 받아서 처리)
-                    # else:
-                    #     # CV 모델이 오류를 탐지한 경우
-                    #     print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
-                    #     # TODO: 오류 탐지 성공 시 처리 로직 추가
+                    cv_result = await run_cv_model()
                     
+                    if not cv_result.get("detected", False):
+                        # CV 모델이 오류를 탐지하지 못한 경우
+                        print("=" * 60)
+                        print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                        print("=" * 60)
+                        await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
+                        
+                        # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                        print("=" * 60)
+                        print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
+                        print("=" * 60)
+                        await broadcast_to("mobile", "cv_detection_failed", {
+                            "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                        })
+                        print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
+                        await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
+                        
+                        print("=" * 60)
+                        print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                        print("=" * 60)
+                        await broadcast_to("raspi", "cv_detection_failed", {
+                            "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                        })
+                        print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                        print("=" * 60)
+                        await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
+                        
+                        # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
+                        # (라즈베리파이에서 이 이벤트를 받아서 처리)
+                    else:
+                        # CV 모델이 오류를 탐지한 경우
+                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
+                        print("=" * 60)
+                        await broadcast_to("mobile", "cv_detection_success", cv_result.get('message', ''))
+                        await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
                 except Exception as e:
                     print(f"❌ CV 모델 실행 오류: {e}")
                     # CV 모델 오류 시에도 탐지 실패로 처리
