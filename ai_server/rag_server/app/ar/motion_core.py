@@ -175,6 +175,7 @@ async def process_frame(frame_bgr, sid=None):
 
     prev_valid_refined = []
     next_valid_refined = []
+    match_scores = []    
     patch_hw = 8  # 17x17 템플릿
     search_r = 12 # 25x25 검색
     for (x0, y0), (x1, y1) in zip(prev_valid.reshape(-1,2), next_valid.reshape(-1,2)):
@@ -202,7 +203,11 @@ async def process_frame(frame_bgr, sid=None):
     if len(prev_valid_refined) < 8:
         print(f"⚠️ Too few refined ({len(prev_valid_refined)}), fallback to OF result")
     else:
-        print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={np.mean(match_scores):.3f}")
+        if match_scores: 
+            mean_score = np.mean(match_scores)
+        else:
+            mean_score = 0.0
+        print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
 
     prev_valid = np.array(prev_valid_refined, dtype=np.float32).reshape(-1,1,2)
     next_valid = np.array(next_valid_refined, dtype=np.float32).reshape(-1,1,2)
