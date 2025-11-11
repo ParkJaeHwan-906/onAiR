@@ -4,37 +4,46 @@ import android.content.Context
 import android.content.Intent
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.onair.mobile.communicate.data.api.dto.TaskResponse
 import com.onair.mobile.databinding.ItemTaskBinding
 
 class TaskListAdapter(
-    private val items: List<TaskResponse>,
-    private val context: Context
-) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private val onItemClick: (TaskResponse) -> Unit
+) : ListAdapter<TaskResponse, TaskListAdapter.TaskListViewHolder>(TaskDiffCallback()) {
 
     inner class TaskListViewHolder(val binding: ItemTaskBinding) : RecyclerView.ViewHolder(binding.root)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TaskListViewHolder {
         return TaskListViewHolder(ItemTaskBinding.inflate(LayoutInflater.from(parent.context), parent, false))
     }
 
-    override fun getItemCount(): Int {
-        return items.size
-    }
+    override fun onBindViewHolder(
+        holder: TaskListViewHolder,
+        position: Int
+    ) {
+        val task = getItem(position)
+        if (task == null) return
 
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val binding = (holder as TaskListViewHolder).binding
-        val task = items[position]
-
-        val layoutParams = binding.root.layoutParams as ViewGroup.MarginLayoutParams
+        val binding = holder.binding
 
         binding.taskName.text = task.request
         binding.equipmentName.text = task.equipmentName
         binding.root.setOnClickListener {
-            val intent = Intent(context, WorkingActivity::class.java)
-            intent.putExtra("taskId", task.id)
-            context.startActivity(intent)
+            onItemClick(task)
         }
+    }
+}
+class TaskDiffCallback : DiffUtil.ItemCallback<TaskResponse>() {
+    override fun areItemsTheSame(oldItem: TaskResponse, newItem: TaskResponse): Boolean {
+        // 고유 ID로 같은 아이템인지 비교
+        return oldItem.id == newItem.id
+    }
+
+    override fun areContentsTheSame(oldItem: TaskResponse, newItem: TaskResponse): Boolean {
+        // 데이터 클래스 자체를 비교 (내용이 같은지)
+        return oldItem == newItem
     }
 }

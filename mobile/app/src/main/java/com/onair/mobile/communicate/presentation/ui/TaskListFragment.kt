@@ -22,7 +22,7 @@ class TaskListFragment: Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
+        binding.topAppBar.title = "작업 목록"
         val tabTitleArray = arrayOf("미완료", "완료")
         binding.viewPager.adapter = TaskPagerAdapter(requireActivity())
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->

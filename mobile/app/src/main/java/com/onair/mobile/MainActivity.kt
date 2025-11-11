@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModelByFactory {
-        val apiService = ApiClient().getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
         val repository = AuthRepository(apiService, PreferenceUtil(applicationContext))
 
         MainViewModel(repository)
@@ -33,8 +33,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-
-
 
         splashScreen.setKeepOnScreenCondition {
             viewModel.isLoading.value
