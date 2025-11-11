@@ -1026,7 +1026,6 @@ async def handle_clarify_response(sid, data):
 @sio.on("video_frame")
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
-    print("dsada")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown" or not data:
         return
