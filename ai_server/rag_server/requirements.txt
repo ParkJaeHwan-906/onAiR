@@ -83,3 +83,12 @@ bidict==0.23.1
 tzdata==2025.2
 pytz==2025.2
 python-multipart>=0.0.9
+
+
+ultralytics==8.2.73
+numba==0.60.0
+pytesseract==0.3.10
+scikit-image==0.24.0
+imutils==0.5.4
+tqdm==4.67.1
+pillow==10.4.0

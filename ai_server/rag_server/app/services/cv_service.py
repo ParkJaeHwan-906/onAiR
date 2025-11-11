@@ -1,30 +1,68 @@
 """
-CV 모델 서비스 (보류 상태)
-CV 모델이 통합되면 여기에 구현할 예정
+CV 모델 서비스 - 모듈 → 이상 순으로 실행 (기기 정보는 device_monitor에서 참조)
 """
+
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Dict, Any, List
+import torch
 
-async def run_cv_model() -> Dict[str, Any]:
-    """
-    CV 모델 실행 (보류 상태)
-    
-    Returns:
-        {
-            "detected": bool,  # 오류 탐지 여부
-            "error_type": Optional[str],  # 오류 타입 (탐지된 경우)
-            "confidence": float,  # 탐지 신뢰도
-            "message": str  # 메시지
+from app.services.cv.device_monitor import current_device_type
+from app.services.cv.module_detector import detect_modules_from_recent_frames
+from app.services.cv.anomaly_detector import run_anomaly_detection
+
+# PyTorch CPU 스레드 제한 (서버 안정화용)
+torch.set_num_threads(2)
+torch.set_num_interop_threads(2)
+
+
+async def run_cv_model(frames: List) -> Dict[str, Any]:
+    """Wakeword 감지 이후 실행되는 CV 파이프라인"""
+    if not frames:
+        return {"detected": False, "message": "입력 프레임이 없습니다."}
+
+    try:
+        # ------------------------------------------
+        # ① 기기 정보 참조 (이미 background에서 갱신 중)
+        # ------------------------------------------
+        device_type = current_device_type or "unknown"
+
+        # ------------------------------------------
+        # ② 모듈 탐지
+        # ------------------------------------------
+        recent_frames = frames[-5:] if len(frames) >= 5 else frames
+        modules = await detect_modules_from_recent_frames(recent_frames)
+
+        if not modules:
+            return {
+                "detected": False,
+                "device_type": device_type,
+                "modules": [],
+                "anomalies": [],
+                "message": f"{device_type} 내부 모듈 탐지 실패"
+            }
+
+        # ------------------------------------------
+        # ③ 이상 탐지
+        # ------------------------------------------
+        anomaly_frames = frames[-3:] if len(frames) >= 3 else frames
+        anomalies = await run_anomaly_detection(anomaly_frames, modules)
+
+        has_anomaly = bool(anomalies and len(anomalies) > 0)
+        message = "이상이 감지되었습니다." if has_anomaly else "탐지된 이상이 없습니다."
+
+        return {
+            "detected": has_anomaly,
+            "device_type": device_type,
+            "modules": modules,
+            "anomalies": anomalies,
+            "message": message,
         }
-    """
-    # TODO: CV 모델 통합 후 구현
-    # 현재는 항상 탐지 실패로 반환 (테스트용)
-    await asyncio.sleep(0.1)  # 비동기 처리 시뮬레이션
-    
-    return {
-        "detected": False,
-        "error_type": None,
-        "confidence": 0.0,
-        "message": "CV 모델이 통합되지 않아 오류를 탐지하지 못했습니다."
-    }
 
+    except Exception as e:
+        return {
+            "detected": False,
+            "device_type": current_device_type or "unknown",
+            "modules": [],
+            "anomalies": [],
+            "message": f"CV 파이프라인 오류: {e}",
+        }
