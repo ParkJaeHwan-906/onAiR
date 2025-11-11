@@ -1,5 +1,5 @@
 import { type KonvaEventObject } from "konva/lib/Node";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   Layer,
   Line,
@@ -29,42 +29,9 @@ type ArMarker = {
   };
 };
 
-// stage size
-const STAGE_WIDTH = 968;
-const STAGE_HEIGHT = 857;
-// 카메라 화면 size
+// 카메라 화면 size (고정값)
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 480;
-// convert에 사용될 변수
-const scale = STAGE_HEIGHT / CAMERA_HEIGHT;
-const scaledCameraWidth = CAMERA_WIDTH * scale;
-
-// convert stage -> camera
-const convertStageToCamera = (stageX: number, stageY: number) => {
-  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
-
-  // Stage 좌표를 카메라 좌표로 변환
-  const cameraX = ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
-  const cameraY = (stageY / STAGE_HEIGHT) * CAMERA_HEIGHT;
-
-  return {
-    x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
-    y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY)))
-  };
-};
-
-// convert camera -> stage
-const convertCameraToStage = (cameraX: number, cameraY: number) => {
-  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
-  
-  const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
-  const stageY = (cameraY / CAMERA_HEIGHT) * STAGE_HEIGHT;
-  
-  return {
-    x: Math.round(stageX),
-    y: Math.round(stageY)
-  };
-};
 
 export const OverlayCanvas = ({
   penColor,
@@ -85,6 +52,38 @@ export const OverlayCanvas = ({
   // overlay canvas 크기를 컨테이너에 맞게 동적으로 설정
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 968, height: 857 });
+
+  // 동적 scale 계산 (stageSize 변경 시에만 재계산)
+  const scale = useMemo(() => stageSize.height / CAMERA_HEIGHT, [stageSize.height]);
+  const scaledCameraWidth = useMemo(() => CAMERA_WIDTH * scale, [scale]);
+
+  // convert stage -> camera (동적 값 사용)
+  const convertStageToCamera = useMemo(() => {
+    return (stageX: number, stageY: number) => {
+      const horizontalCrop = (scaledCameraWidth - stageSize.width) / 2;
+      const cameraX = ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
+      const cameraY = (stageY / stageSize.height) * CAMERA_HEIGHT;
+
+      return {
+        x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
+        y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY)))
+      };
+    };
+  }, [stageSize, scaledCameraWidth]);
+
+  // convert camera -> stage (동적 값 사용)
+  const convertCameraToStage = useMemo(() => {
+    return (cameraX: number, cameraY: number) => {
+      const horizontalCrop = (scaledCameraWidth - stageSize.width) / 2;
+      const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
+      const stageY = (cameraY / CAMERA_HEIGHT) * stageSize.height;
+
+      return {
+        x: Math.round(stageX),
+        y: Math.round(stageY)
+      };
+    };
+  }, [stageSize, scaledCameraWidth]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -162,7 +161,7 @@ export const OverlayCanvas = ({
       return () => {
         socket.off('ar-info');
       };
-  }, [socket]);
+  }, [socket, convertCameraToStage, scale]);
 
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
