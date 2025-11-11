@@ -2,8 +2,15 @@
     <!-- Base application theme. -->
     <style name="Base.Theme.Mobile" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+         <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="fontFamily">@font/pretendard</item>
     </style>
 
     <style name="Theme.Mobile" parent="Base.Theme.Mobile" />
+    <style name="Theme.Mobile.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/onair_logo_light</item>
+        <item name="postSplashScreenTheme">@style/Base.Theme.Mobile</item>
+    </style>
 </resources>
