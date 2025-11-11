@@ -308,12 +308,15 @@ def run_stt_loop():
                     logger.warning("⚠️ 서비스 완료 신호를 받지 못했습니다. 타임아웃으로 wakeword 재활성화")
                     logger.warning("=" * 60)
                 
-                # 서비스 완료 후 wakeword 콜백 재활성화 (다음 wakeword 대기)
-                if wakeword_detector and wakeword_detector.interpreter is not None:
-                    logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
-                    mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-                    # 서비스 완료 플래그 리셋
-                    service_completed_flag["completed"] = False
+                # 서비스 완료 후 wakeword 콜백 재활성화 (옵션)
+                if settings.REENABLE_WAKEWORD_AFTER_SERVICE:
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                        # 서비스 완료 플래그 리셋
+                        service_completed_flag["completed"] = False
+                else:
+                    logger.info("⏸️ 설정에 따라 wakeword 감지기 재활성화를 건너뜁니다 (REENABLE_WAKEWORD_AFTER_SERVICE=False)")
                 
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
     except KeyboardInterrupt:
