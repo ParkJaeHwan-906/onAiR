@@ -19,11 +19,8 @@ interface CanvasProps {
   tool?: string;
 }
 
-export const OverlayCanvas = ({
-  penColor,
-  tool = "pen",
-}: CanvasProps) => {
-  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
+export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
+  const socket = useSocket(); // 연결되어있는 소켓 객체를 가져옴
 
   const [lines, setLines] = useState<DrawingLine[]>([]);
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
@@ -33,65 +30,94 @@ export const OverlayCanvas = ({
   );
   const isDrawing = useRef(false);
   const startPos = useRef<{ x: number; y: number } | null>(null);
-  const room = useRoomContext()
-  const sendDrawingData = (data: object) => {
-      if (!room) return
-  
-      const jsonString = JSON.stringify(data)
-      const byteArray = new TextEncoder().encode(jsonString)
-      console.log(">>> [Web] SENDING DATA:", jsonString);
-      room.localParticipant.publishData(byteArray, {
-        reliable: false,
-      })
-    }
-  
-    const throttledSendDrawMove = throttle(
-      (x: number, y:number) => sendDrawingData({event: 'draw-move', x, y}), 30
-    )
-  
-  const [arMarkers, setArMarkers] = useState<Array<{
-    idx: number;
-    info: {
-      x: number;
-      y: number;
-      size: number;
+  const room = useRoomContext();
+
+  // overlay canvas 크기를 컨테이너에 맞게 동적으로 설정
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState({ width: 968, height: 857 });
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        setStageSize({ width, height });
+      }
     };
-  }>>([
+
+    if (!containerRef.current) return;
+
+    // 초기 크기 설정
+    updateSize();
+
+    // ResizeObserver로 크기 변화 감지
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const sendDrawingData = (data: object) => {
+    if (!room) return;
+
+    const jsonString = JSON.stringify(data);
+    const byteArray = new TextEncoder().encode(jsonString);
+    console.log(">>> [Web] SENDING DATA:", jsonString);
+    room.localParticipant.publishData(byteArray, {
+      reliable: false,
+    });
+  };
+
+  const throttledSendDrawMove = throttle(
+    (x: number, y: number) => sendDrawingData({ event: "draw-move", x, y }),
+    30
+  );
+
+  const [arMarkers, setArMarkers] = useState<
+    Array<{
+      idx: number;
+      info: {
+        x: number;
+        y: number;
+        size: number;
+      };
+    }>
+  >([
     // 테스트용으로 초기 마커 생성
     {
       idx: 0,
       info: {
         x: 200,
         y: 300,
-        size: 50
-      }
+        size: 50,
+      },
     },
     {
       idx: 1,
       info: {
         x: 500,
         y: 400,
-        size: 30
-      }
-    }
+        size: 30,
+      },
+    },
   ]);
 
   // ------------------------------- Listen Socket Event -------------------------------
   useEffect(() => {
-      if(!socket) return;
+    if (!socket) return;
 
-      // ar-info 이벤트 listen
-      socket.on('ar-info', (data) => {
-        console.log('receive ar info');
-        setArMarkers(data);
-      });
+    // ar-info 이벤트 listen
+    socket.on("ar-info", (data) => {
+      console.log("receive ar info");
+      setArMarkers(data);
+    });
 
-      // cleanup
-      return () => {
-        socket.off('ar-info');
-      };
-  }, [socket])
-
+    // cleanup
+    return () => {
+      socket.off("ar-info");
+    };
+  }, [socket]);
 
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -108,10 +134,10 @@ export const OverlayCanvas = ({
         { tool, color: penColor, points: [pos.x, pos.y] },
       ]);
       sendDrawingData({
-      event: 'draw-start',
-      x: pos.x,
-      y: pos.y
-    })
+        event: "draw-start",
+        x: pos.x,
+        y: pos.y,
+      });
     } else if (["circle", "square", "triangle"].includes(tool)) {
       startPos.current = pos;
       setCurrentShape({
@@ -122,12 +148,11 @@ export const OverlayCanvas = ({
         endY: pos.y,
         color: penColor,
       });
-    } else if (["arrow"].includes(tool)){
+    } else if (["arrow"].includes(tool)) {
       startPos.current = pos;
       console.log(`ar-marker created: ${pos.x}, ${pos.y}`);
-      socket.emit("ar-marker", {marker_x: pos.x, marker_y: pos.y});
+      socket.emit("ar-marker", { marker_x: pos.x, marker_y: pos.y });
     }
-
   };
 
   // ------------------------------- 마우스 이동 -------------------------------
@@ -149,7 +174,7 @@ export const OverlayCanvas = ({
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
-      throttledSendDrawMove(pos.x, pos.y)
+      throttledSendDrawMove(pos.x, pos.y);
     } else if (startPos.current && currentShape) {
       setCurrentShape({
         ...currentShape,
@@ -168,7 +193,7 @@ export const OverlayCanvas = ({
     }
     isDrawing.current = false;
     startPos.current = null;
-    sendDrawingData({event: 'draw-end'})
+    sendDrawingData({ event: "draw-end" });
   };
 
   // ------------------------------- 삭제 -------------------------------
@@ -260,10 +285,10 @@ export const OverlayCanvas = ({
   };
 
   return (
-    <>
+    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
       <Stage
-        width={968}
-        height={857}
+        width={stageSize.width}
+        height={stageSize.height}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -300,15 +325,15 @@ export const OverlayCanvas = ({
               key={marker.idx}
               x={marker.info.x}
               y={marker.info.y}
-              radius={marker.info.size} 
+              radius={marker.info.size}
               fill="rgba(255, 0, 0, 0.3)" // 반투명 빨간색
               stroke="#ff0000"
               strokeWidth={2}
               listening={tool === "eraser"} // eraser 선택 시 클릭 이벤트 활성화
               onClick={() => {
-                console.log('AR 마커 클릭:', marker.idx);
+                console.log("AR 마커 클릭:", marker.idx);
                 // 마커 관련 동작
-                socket.emit("delete-marker", {idx: marker.idx});
+                socket.emit("delete-marker", { idx: marker.idx });
               }}
             />
           ))}
@@ -327,6 +352,6 @@ export const OverlayCanvas = ({
           )}
         </Layer>
       </Stage>
-    </>
+    </div>
   );
 };

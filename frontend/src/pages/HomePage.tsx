@@ -100,8 +100,9 @@ function HomePage() {
     },
     {
       isGraph: true,
-      numInfo: totalEmployees,
-      title: "작업 인원 수",
+      numInfo: onlineEmployees, // 변경: totalEmployees → onlineEmployees
+      totalInfo: totalEmployees, // 추가: 전체 인원 수
+      title: "작업 인원 수", // 변경: "전체 작업 인원" → "작업 인원 수"
       value: onlinePercentage,
       icon: "icons/profile.png",
     },
@@ -132,6 +133,7 @@ function HomePage() {
               key={index}
               isGraph={item.isGraph}
               numInfo={item.numInfo}
+              totalInfo={item.totalInfo}
               title={item.title}
               value={item.value}
               icon={item.icon}

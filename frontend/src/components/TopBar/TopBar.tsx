@@ -34,12 +34,6 @@ function TopBar() {
     <header className="topbar-container">
       {isAuthenticated && user ? (
         <div className="topbar-right" ref={menuRef}>
-          {/* 알림 */}
-          {/* <div className="topbar-icon">
-            <Bell size={22} strokeWidth={2} />
-            <span className="notification-dot" />
-          </div> */}
-
           {/* 프로필 */}
           <img
             src={profileImage}
@@ -54,8 +48,6 @@ function TopBar() {
           {/* 드롭다운 메뉴 */}
           {isMenuOpen && (
             <div className="profile-menu">
-              {/* <p onClick={() => navigate("/profile")}>내 프로필</p> */}
-              {/* <p onClick={() => navigate("/settings")}>설정</p> */}
               <p onClick={handleLogout}>로그아웃</p>
             </div>
           )}

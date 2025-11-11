@@ -63,6 +63,9 @@ function WorkPage() {
   };
 
   const isAdmin = myInfo?.role === "관리자";
+  const rightClassName = isAdmin
+    ? "work-page-right work-page-right--admin"
+    : "work-page-right work-page-right--worker";
 
   return (
     <div className="work-page-wrapper">
@@ -71,9 +74,9 @@ function WorkPage() {
         onTaskUpdated={handleTaskUpdated}
         onSelectTask={handleSelectTask}
       />
-      <div className="work-page-right">
+      <div className={rightClassName}>
         {isAdmin ? (
-          <div className="work-page-left">
+          <div className="work-page-stack">
             <WorkAdd onTaskAdded={handleTaskAdded} />
             <WorkAssign onTaskReassigned={handleTaskReassigned} />
           </div>

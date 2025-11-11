@@ -6,7 +6,7 @@ import { sendConnectionRequest } from "../../api/webrtc";
 import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
 import WorkAdd from "../Work/WorkAdd";
 import Modal from "../Work/Modal";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSSEStore } from "../../store/useSSEStore";
 import { getCompanyEquipmentList } from "../../api/equipment";
 import { assignEquipment, checkIn, checkOut } from "../../api/user";
@@ -18,7 +18,7 @@ type EmployeeDetailProps = {
 
 function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const { myInfo, fetchEmployees, fetchMyInfo } = useUserStore();
-  const { addSentRequest } = useWebRtcRequestStore();
+  const { addSentRequest, sentRequests } = useWebRtcRequestStore();
   const isMine = myInfo?.userAccountId === employee?.userAccountId;
   const isAdmin = myInfo?.role === "관리자";
   const [showRequestBox, setShowRequestBox] = useState(false);
@@ -33,6 +33,115 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const [isAssigning, setIsAssigning] = useState(false);
   const [isCheckingInOut, setIsCheckingInOut] = useState(false);
   const equipmentDropdownRef = useRef<HTMLDivElement | null>(null);
+  const pendingFallbackStartRef = useRef<number | null>(null);
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+  const [hasDismissedPending, setHasDismissedPending] = useState(false);
+  const [pendingElapsed, setPendingElapsed] = useState(0);
+  const [currentRequestDescription, setCurrentRequestDescription] =
+    useState("");
+  const [isRejectedModalOpen, setIsRejectedModalOpen] = useState(false);
+  const [acknowledgedRejectedRequestId, setAcknowledgedRejectedRequestId] =
+    useState<string | null>(null);
+
+  const activeRequest = useMemo(() => {
+    if (!isAdmin || !employee) return null;
+    const related = sentRequests.filter(
+      (req) => req.receiverInfo?.senderAccountId === employee.userAccountId
+    );
+    if (related.length === 0) return null;
+    return related.sort(
+      (a, b) =>
+        new Date(b.requestTime).getTime() - new Date(a.requestTime).getTime()
+    )[0];
+  }, [isAdmin, employee, sentRequests]);
+
+  const isPendingRequest = activeRequest?.status === "pending";
+  const isRejectedRequest = activeRequest?.status === "rejected";
+  const activeRequestId = activeRequest?.id ?? null;
+
+  const pendingWorkerName =
+    activeRequest?.receiverInfo?.name || employee?.name || "";
+  const pendingEquipmentName =
+    activeRequest?.receiverInfo?.equipmentName || employee?.equipmentName;
+
+  useEffect(() => {
+    if (activeRequest?.description) {
+      setCurrentRequestDescription(activeRequest.description);
+    }
+  }, [activeRequest]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    if (isPendingRequest && activeRequest) {
+      pendingFallbackStartRef.current = new Date(
+        activeRequest.requestTime
+      ).getTime();
+      setCurrentRequestDescription(activeRequest.description ?? "");
+      setAcknowledgedRejectedRequestId(null);
+      if (!hasDismissedPending) {
+        setIsPendingModalOpen(true);
+      }
+      setIsRejectedModalOpen(false);
+      return;
+    }
+
+    if (isRejectedRequest && activeRequest) {
+      pendingFallbackStartRef.current = null;
+      setPendingElapsed(0);
+      setCurrentRequestDescription(activeRequest.description ?? "");
+      setIsPendingModalOpen(false);
+      if (acknowledgedRejectedRequestId !== activeRequestId) {
+        setIsRejectedModalOpen(true);
+      } else {
+        setIsRejectedModalOpen(false);
+      }
+      return;
+    }
+
+    setIsPendingModalOpen(false);
+    setIsRejectedModalOpen(false);
+    setHasDismissedPending(false);
+    setPendingElapsed(0);
+    pendingFallbackStartRef.current = null;
+    setCurrentRequestDescription("");
+  }, [
+    isAdmin,
+    isPendingRequest,
+    isRejectedRequest,
+    activeRequest,
+    activeRequestId,
+    hasDismissedPending,
+    acknowledgedRejectedRequestId,
+  ]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const startTimestamp =
+      (isPendingRequest && activeRequest
+        ? new Date(activeRequest.requestTime).getTime()
+        : pendingFallbackStartRef.current) ?? null;
+
+    if (!startTimestamp) return;
+
+    const updateElapsed = () => {
+      const diff = Math.max(0, Date.now() - startTimestamp);
+      setPendingElapsed(Math.floor(diff / 1000));
+    };
+
+    updateElapsed();
+    const interval = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(interval);
+  }, [isAdmin, isPendingRequest, activeRequest]);
+
+  const formatElapsedTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remain = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remain).padStart(
+      2,
+      "0"
+    )}`;
+  };
 
   // 요청 기능 사용 전, SSE 연결이 없으면 선연결
   useEffect(() => {
@@ -121,7 +230,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
   };
 
   // 연결 요청 핸들러
-  const handleConnectionRequest = async (_description: string) => {
+  const handleConnectionRequest = async (description: string) => {
     if (!employee || !isAdmin) return;
 
     try {
@@ -147,6 +256,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             name: myInfo.name,
             phone: myInfo.phone || "",
             equipmentName: myInfo.equipmentName || null,
+            description,
           },
           {
             senderAccountId: employee.userAccountId,
@@ -157,13 +267,48 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         );
       }
 
-      alert("연결 요청이 성공적으로 전송되었습니다.");
+      setCurrentRequestDescription(description);
+      pendingFallbackStartRef.current = Date.now();
+      setHasDismissedPending(false);
+      setPendingElapsed(0);
+      setIsPendingModalOpen(true);
+      setAcknowledgedRejectedRequestId(null);
+      setIsRejectedModalOpen(false);
       // 요청만 보내고 응답을 기다림 (SSE로 토큰을 받을 예정)
       // 백엔드에서 작업자에게 SSE로 전달되며, 작업자는 HomePage의 요청 목록에서 확인 가능
       // 관리자가 보낸 요청은 자신의 요청 목록에 표시되지 않음 (작업자의 요청 목록에만 표시됨)
     } catch (error) {
       console.error("연결 요청 중 오류:", error);
       alert("요청 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleConnectButtonClick = () => {
+    if (isPendingRequest) {
+      setHasDismissedPending(false);
+      setIsPendingModalOpen(true);
+      return;
+    }
+    if (
+      isRejectedRequest &&
+      activeRequestId &&
+      acknowledgedRejectedRequestId !== activeRequestId
+    ) {
+      setIsRejectedModalOpen(true);
+      return;
+    }
+    setShowRequestBox(true);
+  };
+
+  const handlePendingModalClose = () => {
+    setIsPendingModalOpen(false);
+    setHasDismissedPending(true);
+  };
+
+  const handleRejectedModalClose = () => {
+    setIsRejectedModalOpen(false);
+    if (activeRequestId) {
+      setAcknowledgedRejectedRequestId(activeRequestId);
     }
   };
 
@@ -209,72 +354,76 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             <div className="detail-item">
               <dt>설비 지정</dt>
               <dd>
-                <div
-                  className="equipment-assign-wrapper"
-                  ref={equipmentDropdownRef}
-                >
-                  <button
-                    type="button"
-                    className={`equipment-select-trigger${
-                      isEquipmentDropdownOpen ? " open" : ""
-                    }`}
-                    onClick={() => setIsEquipmentDropdownOpen((prev) => !prev)}
-                    disabled={isAssigning}
+                <div className="equipment-assign-row">
+                  <div
+                    className="equipment-assign-wrapper"
+                    ref={equipmentDropdownRef}
                   >
-                    {selectedEquipmentId
-                      ? equipments.find((eq) => eq.id === selectedEquipmentId)
-                          ?.name || "설비를 선택하세요"
-                      : "설비를 선택하세요"}
-                  </button>
-                  {isEquipmentDropdownOpen && (
-                    <ul className="equipment-select-dropdown">
-                      <li>
-                        <button
-                          type="button"
-                          className={`equipment-select-option${
-                            selectedEquipmentId === null ? " selected" : ""
-                          }`}
-                          onClick={() => {
-                            setSelectedEquipmentId(null);
-                            setIsEquipmentDropdownOpen(false);
-                          }}
-                        >
-                          <span>설비 없음</span>
-                        </button>
-                      </li>
-                      {equipments.map((equipment) => (
-                        <li key={equipment.id}>
+                    <button
+                      type="button"
+                      className={`equipment-select-trigger${
+                        isEquipmentDropdownOpen ? " open" : ""
+                      }`}
+                      onClick={() =>
+                        setIsEquipmentDropdownOpen((prev) => !prev)
+                      }
+                      disabled={isAssigning}
+                    >
+                      {selectedEquipmentId
+                        ? equipments.find((eq) => eq.id === selectedEquipmentId)
+                            ?.name || "설비를 선택하세요"
+                        : employee.equipmentName || "설비를 선택하세요"}
+                    </button>
+                    {isEquipmentDropdownOpen && (
+                      <ul className="equipment-select-dropdown">
+                        <li>
                           <button
                             type="button"
                             className={`equipment-select-option${
-                              equipment.id === selectedEquipmentId
-                                ? " selected"
-                                : ""
+                              selectedEquipmentId === null ? " selected" : ""
                             }`}
                             onClick={() => {
-                              setSelectedEquipmentId(equipment.id);
+                              setSelectedEquipmentId(null);
                               setIsEquipmentDropdownOpen(false);
                             }}
                           >
-                            <span className="equipment-select-option-title">
-                              {equipment.name}
-                            </span>
-                            <span className="equipment-select-option-meta">
-                              {equipment.category}
-                            </span>
+                            <span>설비 없음</span>
                           </button>
                         </li>
-                      ))}
-                    </ul>
-                  )}
+                        {equipments.map((equipment) => (
+                          <li key={equipment.id}>
+                            <button
+                              type="button"
+                              className={`equipment-select-option${
+                                equipment.id === selectedEquipmentId
+                                  ? " selected"
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                setSelectedEquipmentId(equipment.id);
+                                setIsEquipmentDropdownOpen(false);
+                              }}
+                            >
+                              <span className="equipment-select-option-title">
+                                {equipment.name}
+                              </span>
+                              <span className="equipment-select-option-meta">
+                                {equipment.category}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <button
+                    className="equipment-assign-button"
+                    onClick={handleAssignEquipment}
+                    disabled={isAssigning || !selectedEquipmentId}
+                  >
+                    {isAssigning ? "지정 중..." : "설비 지정"}
+                  </button>
                 </div>
-                <button
-                  className="equipment-assign-button"
-                  onClick={handleAssignEquipment}
-                  disabled={isAssigning || !selectedEquipmentId}
-                >
-                  {isAssigning ? "지정 중..." : "설비 지정"}
-                </button>
               </dd>
             </div>
           </>
@@ -311,9 +460,24 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         <>
           <button
             className="connect-button"
-            onClick={() => setShowRequestBox(true)}
+            data-status={
+              isPendingRequest
+                ? "pending"
+                : isRejectedRequest &&
+                  activeRequestId &&
+                  acknowledgedRejectedRequestId !== activeRequestId
+                ? "rejected"
+                : "idle"
+            }
+            onClick={handleConnectButtonClick}
           >
-            연결 요청
+            {isPendingRequest
+              ? "응답 대기 중..."
+              : isRejectedRequest &&
+                activeRequestId &&
+                acknowledgedRejectedRequestId !== activeRequestId
+              ? "요청이 거절되었습니다"
+              : "연결 요청"}
           </button>
 
           <Modal
@@ -325,11 +489,118 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
               label="요청 사유"
               placeholder="요청 사유를 입력하세요."
               buttonText="연결 요청 보내기"
+              defaultEquipmentId={employee.equipmentId}
+              defaultEquipmentLabel={
+                employee.equipmentName
+                  ? employee.equipmentCategoryName
+                    ? `${employee.equipmentName} (${employee.equipmentCategoryName})`
+                    : employee.equipmentName
+                  : undefined
+              }
+              defaultEmployeeId={employee.userAccountId}
+              defaultEmployeeLabel={
+                employee.part
+                  ? `${employee.name} (${employee.part})`
+                  : employee.name
+              }
               onSubmit={(text) => {
                 handleConnectionRequest(text);
                 setShowRequestBox(false);
               }}
             />
+          </Modal>
+
+          <Modal
+            isOpen={isPendingModalOpen}
+            onClose={handlePendingModalClose}
+            contentClassName="modal-content--compact"
+          >
+            <div className="connection-pending-modal">
+              <div className="connection-pending-spinner" aria-hidden="true" />
+              <h3 className="connection-pending-title">
+                작업자 응답을 기다리는 중입니다
+              </h3>
+              <p className="connection-pending-sub">
+                {pendingWorkerName}님에게 연결 요청을 전송했습니다.
+                <br />
+                응답이 도착하면 자동으로 통화 화면으로 이동합니다.
+              </p>
+
+              <div className="connection-pending-info">
+                <div className="connection-pending-row">
+                  <span className="connection-pending-label">작업자</span>
+                  <span className="connection-pending-value">
+                    {pendingWorkerName}
+                  </span>
+                </div>
+                {pendingEquipmentName && (
+                  <div className="connection-pending-row">
+                    <span className="connection-pending-label">담당 설비</span>
+                    <span className="connection-pending-value">
+                      {pendingEquipmentName}
+                    </span>
+                  </div>
+                )}
+                <div className="connection-pending-row">
+                  <span className="connection-pending-label">경과 시간</span>
+                  <span className="connection-pending-timer">
+                    {formatElapsedTime(pendingElapsed)}
+                  </span>
+                </div>
+              </div>
+
+              {currentRequestDescription && (
+                <div className="connection-pending-request">
+                  <span className="connection-pending-label">요청 사유</span>
+                  <p className="connection-pending-request-text">
+                    {currentRequestDescription}
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="connection-pending-close"
+                onClick={handlePendingModalClose}
+              >
+                확인
+              </button>
+            </div>
+          </Modal>
+
+          <Modal
+            isOpen={isRejectedModalOpen}
+            onClose={handleRejectedModalClose}
+            contentClassName="modal-content--compact"
+          >
+            <div className="connection-rejected-modal">
+              <div
+                className="connection-rejected-icon"
+                aria-hidden="true"
+              ></div>
+              <h3 className="connection-rejected-title">
+                작업자가 연결 요청을 거절했습니다
+              </h3>
+              <p className="connection-rejected-sub">
+                {pendingWorkerName}님이 해당 요청에 응답하지 않았습니다.
+                필요하다면 다시 요청을 보내주세요.
+              </p>
+              {currentRequestDescription && (
+                <div className="connection-rejected-request">
+                  <span className="connection-rejected-label">요청 사유</span>
+                  <p className="connection-rejected-request-text">
+                    {currentRequestDescription}
+                  </p>
+                </div>
+              )}
+              <button
+                type="button"
+                className="connection-rejected-close"
+                onClick={handleRejectedModalClose}
+              >
+                확인
+              </button>
+            </div>
           </Modal>
         </>
       )}

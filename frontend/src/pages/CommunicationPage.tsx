@@ -5,6 +5,7 @@ import WorkerPanel from "../components/Communication/WorkerPanel";
 import { useWebRtcRequestStore } from "../store/useWebRtcRequestStore";
 import type { DrawingLine } from "../types/DrawingLine";
 import "../styles/Communication/CommunicationPage.css";
+import { useEffect } from "react";
 
 export const CommunicationPage = () => {
   const location = useLocation();
@@ -31,7 +32,47 @@ export const CommunicationPage = () => {
     navigate("/home", { replace: true });
   };
 
-  if (!token) return <p>LiveKit 토큰이 없습니다.</p>;
+  useEffect(() => {
+    if (!token) {
+      // URL 직접 접근 등으로 진입 시 리스트 페이지로 되돌림
+      const timeout = window.setTimeout(() => {
+        navigate("/communication", { replace: true });
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+  }, [token, navigate]);
+
+  if (!token) {
+    return (
+      <div className="communication-container empty">
+        <div className="communication-empty-card">
+          <h2 className="communication-empty-title">
+            통화 연결을 준비하고 있어요
+          </h2>
+          <p className="communication-empty-sub">
+            승인이 아직 완료되지 않았을 수 있어요. <br />
+            다시 요청을 보내거나 새로고침해 주세요.
+          </p>
+          <div className="communication-empty-actions">
+            <button
+              type="button"
+              className="communication-empty-button"
+              onClick={() => navigate("/home", { replace: true })}
+            >
+              홈으로 이동
+            </button>
+            <button
+              type="button"
+              className="communication-empty-secondary"
+              onClick={() => window.location.reload()}
+            >
+              새로고침
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="communication-container">

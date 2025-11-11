@@ -1,23 +1,25 @@
 .sidebar-container {
   box-sizing: border-box;
-  width: 256px;
-  height: 1080px;
-  background-color: #FFFFFF;
+  width: 220px;
+  height: 100vh;
+  background-color: var(--color-surface-base);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px 0;
+  padding: 24px 0;
   box-shadow: 0px 2px 12px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+  overflow-y: auto;
+  color: var(--color-text-primary);
 }
 
 .logo-container {
-  width: 223px;
-  height: 72px;
+  width: 190px;
+  height: 64px;
   display: flex;
   flex-direction: row;
   align-items: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .logo-container > .logo-text {
@@ -31,50 +33,57 @@
 }
 
 .logo-text .upper {
-  font-family: 'inter';
-  font-size: 18px;
+  font-family: "inter", var(--font-family-base);
+  font-size: var(--font-size-title);
   font-weight: 800;
+  color: var(--color-text-primary);
 }
 
 .logo-text .down {
-  font-size: 14px;
+  font-size: var(--font-size-body-sm);
   font-weight: 400;
-  color: #555555;
+  color: var(--color-text-secondary);
 }
 
 .nav-button {
-  width: 223px;
-  height: 48px;
-  margin: 4px 0;
-  border-radius: 12px;
+  width: 190px;
+  height: 42px;
+  margin: 3px 0;
+  border-radius: 10px;
   border: none;
   background-color: transparent;
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding-left: 20px;
+  padding-left: 16px;
   text-decoration: none;
-  color: #2E2E2E;
+  color: var(--color-text-primary);
 }
 
 .nav-button img {
-  width: 17px;
+  width: clamp(14px, 1vw, 16px);
+  height: clamp(14px, 1vw, 16px);
 }
 
 .nav-button .button-text {
-  font-family: 'NotoSansKR';
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
   font-weight: 400;
-  margin-left: 12px;
+  margin-left: 10px;
 }
 
 .nav-button:hover {
-  background-color: #ECEDF1;
+  background-color: #ecedf1;
   cursor: pointer;
   box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 .nav-button.active {
-  background-color: #ECEDF1;
+  background-color: #ecedf1;
   box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.nav-button.active .button-text {
+  color: var(--color-text-primary);
+  font-weight: 700;
 }
