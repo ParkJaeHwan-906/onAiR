@@ -1,38 +1,42 @@
 .work-detail-wrapper {
-  width: 572px;
-  height: 961px;
-  background-color: #ffffff;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
   border-radius: 16px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  padding: clamp(14px, 1.2vw, 18px);
+  background-color: var(--color-surface-base);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
-  padding: 24px;
   box-sizing: border-box;
+  color: var(--color-text-primary);
 }
 
 .work-detail-header {
-  font-family: "NotoSansKR";
-  font-size: 20px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-heading-md);
   font-weight: 800;
-  color: #3b4a6b;
-  margin-bottom: 24px;
+  color: var(--color-text-primary);
+  margin-bottom: clamp(12px, 1vw, 16px);
 }
 
 .work-detail-empty {
-  font-family: "NotoSansKR";
-  font-size: 16px;
-  color: #9ca3af;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-lg);
+  color: var(--color-text-muted);
   text-align: center;
-  margin-top: 100px;
+  margin-top: clamp(40px, 6vw, 80px);
 }
 
 .work-detail-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  flex: 1;
+  gap: clamp(12px, 1vw, 16px);
+  flex: 1 1 auto;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
 }
 
 .work-detail-item {
@@ -42,17 +46,17 @@
 }
 
 .work-detail-item dt {
-  font-family: "NotoSansKR";
-  font-size: 14px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .work-detail-item dd {
-  font-family: "NotoSansKR";
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-lg);
   font-weight: 400;
-  color: #1f2937;
+  color: var(--color-text-primary);
   margin: 0;
   word-break: break-word;
 }
@@ -61,10 +65,10 @@
   display: inline-block;
   padding: 4px 12px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: var(--font-size-body-md);
   font-weight: 600;
   background-color: #f3f4f6;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .work-detail-connect-button {
@@ -74,8 +78,8 @@
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  font-family: "NotoSansKR";
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-lg);
   font-weight: 600;
   cursor: pointer;
   margin-top: auto;
@@ -89,5 +93,3 @@
 .work-detail-connect-button:active {
   background-color: #1d4ed8;
 }
-
-

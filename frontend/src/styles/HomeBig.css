@@ -1,35 +1,49 @@
 .home-big {
-  width: 788px;
-  height: 628px;
-  border-radius: 16px;
-  background-color: #ffffff;
+  flex: 1 1 clamp(300px, 47%, 560px);
+  min-width: 300px;
+  max-width: 100%;
+  height: clamp(320px, 52.5vh, 550px);
+  border-radius: clamp(8px, 0.9vw, 12px);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 25px;
+  align-items: stretch;
+  padding: clamp(16px, 1.5vw, 20px) clamp(14px, 1.5vw, 20px)
+    clamp(14px, 1.3vw, 18px);
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .home-big-header {
-  width: 748px;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0;
-  margin-bottom: 20px;
+  margin-bottom: clamp(8px, 1vw, 12px);
   box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.home-big-header img {
+  width: clamp(14px, 1.1vw, 17px);
+  height: clamp(14px, 1.1vw, 17px);
+  filter: opacity(0.95);
 }
 
 .title {
-  font-family: "NotoSansKR";
-  font-size: 20px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-title);
   font-weight: 800;
-  color: #3b4a6b;
+  color: var(--color-text-primary);
 }
 
 /* 리스트 전체 박스 */
 .home-table {
-  width: 748px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -39,22 +53,23 @@
 /* 리스트 헤더 */
 .home-table .list-header {
   width: 100%;
-  height: 69px;
+  height: clamp(38px, 3.2vw, 46px);
   display: flex;
   align-items: center;
-  background-color: #f9fafb;
+  background-color: var(--color-surface-subtle);
   border-bottom: 1px solid #e5e7eb;
-  border-radius: 8px 8px 0 0;
+  border-radius: clamp(6px, 0.6vw, 8px) clamp(6px, 0.6vw, 8px) 0 0;
+  flex-shrink: 0;
 }
 
 .home-table .list-header > div {
-  font-family: "NotoSansKR";
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: clamp(8px, 0.9vw, 12px);
   box-sizing: border-box;
 }
 
@@ -85,10 +100,11 @@
   width: 100%;
   flex: 1;
   overflow-y: auto;
-  display: flex;
+  display: block;
   flex-direction: column;
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: clamp(6px, 0.7vw, 8px);
+  border-bottom-right-radius: clamp(6px, 0.7vw, 8px);
+  min-height: 0;
 }
 
 .home-table .list-body::-webkit-scrollbar {
@@ -98,15 +114,15 @@
 /* 빈 데이터 메시지 */
 .home-table .list-body .no-data {
   text-align: center;
-  padding: 40px 0;
-  font-family: "NotoSansKR";
-  font-size: 16px;
-  color: #9ca3af;
+  padding: clamp(18px, 2.2vw, 24px) 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-muted);
 }
 
 /* HomeBig 내부 work-row 스타일 조정 */
 .home-table .list-body .work-row {
-  width: 748px;
+  width: 100%;
 }
 
 /* 요청 목록용 컬럼 너비 조정 */
@@ -118,10 +134,11 @@
   width: 20%;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-start;
-  padding-left: 16px;
+  padding-left: 10px;
   box-sizing: border-box;
+  flex-direction: row;
 }
 
 /* 요청 목록 전용 레이아웃 */
@@ -138,8 +155,8 @@
   width: 26%;
   align-items: center;
   padding-right: 8px;
-  color: #4b5563;
-  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-md);
 }
 
 .home-table.request-list .col-status {
@@ -162,11 +179,12 @@
   background: none;
   border: none;
   padding: 0;
-  font-family: "NotoSansKR";
-  font-size: 15px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   cursor: pointer;
   transition: color 0.15s ease;
+  white-space: nowrap;
 }
 
 .accept-button {

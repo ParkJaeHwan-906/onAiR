@@ -1,61 +1,73 @@
 .work-big {
-  width: 1096px;
-  height: 961px;
-  border-radius: 16px;
-  background-color: #ffffff;
+  flex: 1 1 clamp(380px, 45%, 600px);
+  min-width: 360px;
+  max-width: 100%;
+  height: 100%;
+  border-radius: clamp(8px, 0.9vw, 12px);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 25px;
+  align-items: flex-start;
+  padding: clamp(14px, 1.4vw, 18px) clamp(12px, 1.4vw, 18px)
+    clamp(12px, 1.2vw, 16px);
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 1;
 }
 
 /* 상단 제목 */
 .work-big-header {
-  width: 1048px;
+  width: 100%;
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: clamp(8px, 1vw, 10px);
   padding-left: 0;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .work-list {
-  font-family: "NotoSansKR";
-  font-size: 20px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-title);
   font-weight: 800;
-  color: #3b4a6b;
+  color: var(--color-text-primary);
   padding-left: 0;
   box-sizing: border-box;
 }
 
 /* 리스트 전체 박스 */
 .work-table {
-  width: 1048px;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 리스트 헤더 */
 .work-table .list-header {
-  width: 1048px;
-  height: 69px;
+  width: 100%;
+  height: clamp(40px, 3.5vw, 48px);
   display: flex;
   align-items: center;
-  background-color: #f9fafb;
+  background-color: var(--color-surface-subtle);
   border-bottom: 1px solid #e5e7eb;
-  border-radius: 8px 8px 0 0;
+  border-radius: clamp(6px, 0.6vw, 8px) clamp(6px, 0.6vw, 8px) 0 0;
+  flex-shrink: 0;
 }
 
 .work-table .list-header > div {
-  font-family: "NotoSansKR";
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: clamp(8px, 0.9vw, 12px);
   box-sizing: border-box;
 }
 
@@ -78,26 +90,27 @@
 
 .col-solution {
   width: 20%;
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-secondary);
 }
 
 .col-actions-header {
   width: 20%;
-  font-size: 16px;
+  font-size: var(--font-size-body-lg);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 /* 리스트 본문 */
 .work-table .list-body {
-  width: 1048px;
+  width: 100%;
   flex: 1;
   overflow-y: auto;
-  display: flex;
+  display: block;
   flex-direction: column;
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: clamp(6px, 0.8vw, 8px);
+  border-bottom-right-radius: clamp(6px, 0.8vw, 8px);
+  min-height: 0;
 }
 
 .work-table .list-body::-webkit-scrollbar {
@@ -108,13 +121,56 @@
 .loading-text,
 .no-data {
   text-align: center;
-  padding: 40px 0;
-  font-family: "NotoSansKR";
-  font-size: 16px;
-  color: #9ca3af;
+  padding: clamp(22px, 2.8vw, 30px) 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-muted);
 }
 
 .loading-text {
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+/* 작업 상태 필터 탭 */
+.work-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 12px; /* 위아래 균형 */
+  padding: 0 2px; /* 좌우 여백 */
+  flex-wrap: wrap; /* 반응형 줄바꿈 지원 */
+}
+
+/* 기본 버튼 스타일 */
+.work-filter-tabs button {
+  border: 1px solid #d1d5db; /* 중간 밝기의 회색 테두리 */
+  background-color: #f8fafc; /* 기본 밝은 배경 */
+  color: #334155; /* 진한 회색 텍스트 */
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: var(--font-size-body-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1; /* 텍스트 세로정렬 안정화 */
+  box-shadow: none; /* 그림자 제거 */
+}
+
+.work-filter-tabs button:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* 활성 상태 */
+.work-filter-tabs button.active {
+  background-color: #3b4a6b; /* 네이비 블루 */
+  color: white;
+  border-color: #3b4a6b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15); /* 은은한 내부 그림자 */
+}
+
+/* 클릭 시 부드러운 눌림 효과 */
+.work-filter-tabs button:active {
+  transform: scale(0.98);
 }

@@ -52,6 +52,7 @@ public class SseManager {
 
     public void sendSseMessage(SseEmitter emitter, SseMessageDto request) {
         log.debug("sse emitter : {}", emitter);
+        log.debug("sse request : {}", request);
 
         try {
             emitter.send(
@@ -107,10 +108,10 @@ public class SseManager {
      * @param targetWorkerId
      * : 연결하고자하는 작업자 id
      */
-    public void sendRequestAdminToWorker(Long targetWorkerId, Object data) {
+    public void sendRequestAdminToWorker(Long targetWorkerId, Object data, String eventName) {
         sendSseMessage(emitters.get(targetWorkerId),
                 SseMessageDto.builder()
-                        .eventName("")  // 이벤트 명 지정해주세여
+                        .eventName(eventName)  // 이벤트 명 지정해주세여
                         .data(data)     // 여기에 뭔가 필요한 데이터가 있다면 넣으세여
                         .build());
     }
@@ -119,7 +120,7 @@ public class SseManager {
      * @param companyId
      * : 요청한 작업자의 회사 id
      */
-    public void sendRequestWorkerToAdmin(Long companyId, Object data) {
+    public void sendRequestWorkerToAdmin(Long companyId, Object data, String eventName) {
         UserInfoDto admin = companies.get(companyId).stream().filter((user) -> user.getRole().equals("관리자"))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("관리자가 부재중입니다."));
 
@@ -127,7 +128,7 @@ public class SseManager {
 
         sendSseMessage(emitters.get(admin.getUserAccountId()),
                 SseMessageDto.builder()
-                        .eventName("")  // 이벤트 명 지정해주세여
+                        .eventName(eventName)  // 이벤트 명 지정해주세여
                         .data(data)     // 여기에 뭔가 필요한 데이터가 있다면 넣으세여
                         .build());
     }

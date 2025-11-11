@@ -1,4 +1,4 @@
-package com.onair.mobile.communicate
+package com.onair.mobile.communicate.presentation.ui
 
 import CommunicationScreen
 import android.Manifest
@@ -10,12 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import com.onair.mobile.communicate.presentation.ui.CommunicationViewModel
-import com.onair.mobile.communicate.utils.DependencyProvider
-import com.onair.mobile.databinding.ActivityCommunicationBinding
 import io.livekit.android.room.Room
 
 class CommunicationActivity  : ComponentActivity() {

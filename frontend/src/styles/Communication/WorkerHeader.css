@@ -4,7 +4,7 @@
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
-  max-width: 572px;
+  max-width: clamp(260px, 39.7vw, 572px);
   box-sizing: border-box;
   overflow: visible;
 }
@@ -12,7 +12,7 @@
 /* 리스트 오버레이 */
 .dropdown-overlay {
   position: absolute;
-  top: 80px;
+  top: clamp(60px, 5.6vw, 80px);
   left: 0;
   width: 100%;
   z-index: 10;
@@ -22,22 +22,22 @@
 .dropdown-list {
   width: 100%;
   background-color: #f9fafb;
-  border-radius: 16px;
+  border-radius: clamp(12px, 1.1vw, 16px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  padding: 16px;
+  padding: clamp(12px, 1.1vw, 16px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(8px, 0.7vw, 10px);
   animation: dropdownSlide 0.2s ease;
 }
 
 /* 제목 */
 .dropdown-title {
-  font-size: 14px;
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   color: #6b7280;
-  margin-left: 4px;
+  margin-left: clamp(3px, 0.3vw, 4px);
 }
 
 /* 애니메이션 */
@@ -55,7 +55,7 @@
 .worker-profile {
   display: flex;
   align-items: flex-start; /* 홍길동 기준 맞추기 */
-  gap: 16px;
+  gap: clamp(12px, 1.1vw, 16px);
 }
 
 .worker-texts {
@@ -68,22 +68,22 @@
 .top-row {
   display: flex;
   align-items: baseline; /* 글자 높이 기준 정렬 */
-  gap: 8px; /* 홍길동-부서 사이 간격 */
+  gap: clamp(6px, 0.6vw, 8px); /* 홍길동-부서 사이 간격 */
 }
 
 .worker-name {
   font-weight: 600;
-  color: #111827;
-  font-size: 16px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-title);
 }
 
 .worker-position {
-  font-size: 12px;
+  font-size: var(--font-size-body-sm);
   color: #9ca3af;
 }
 
 .status-text {
-  font-size: 14px;
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   line-height: 1.2;
   margin-left: 0;
@@ -93,10 +93,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: clamp(28px, 2.2vw, 32px);
+  height: clamp(28px, 2.2vw, 32px);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: clamp(6px, 0.6vw, 8px);
   background-color: transparent;
   color: #6b7280;
   transition: all 0.2s ease;
