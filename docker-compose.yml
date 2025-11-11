@@ -34,6 +34,10 @@ services:
       - LOGGING_PATTERN_CONSOLE=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
       # Async
       - SPRING_MVC_ASYNC_REQUEST_TIMEOUT=0
+    volumes:
+      # ✅ 호스트(EC2)의 시간 설정 파일을 컨테이너에 마운트
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
   frontend:
     container_name: react
