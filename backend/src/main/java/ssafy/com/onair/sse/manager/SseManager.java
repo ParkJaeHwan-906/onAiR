@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -128,9 +129,32 @@ public class SseManager {
 
         sendSseMessage(emitters.get(admin.getUserAccountId()),
                 SseMessageDto.builder()
-                        .eventName(eventName)  // 이벤트 명 지정해주세여
-                        .data(data)     // 여기에 뭔가 필요한 데이터가 있다면 넣으세여
+                        .eventName(eventName)
+                        .data(data)
                         .build());
+    }
+
+    public void sendRtcCancelEvent(Long senderAccountId, Long receiverAccountId) {
+        SseEmitter sendEmitter = findTargerSseEmitter(senderAccountId);
+        SseEmitter receiveEmitter = findTargerSseEmitter(receiverAccountId);
+
+        sendSseMessage(sendEmitter, SseMessageDto.builder()
+                .eventName("rtcCanceled")
+                .data(Map.of(
+                        "requestUserAccountId", receiverAccountId
+                ))
+                .build());
+
+        sendSseMessage(receiveEmitter, SseMessageDto.builder()
+                .eventName("rtcCanceled")
+                .data(Map.of(
+                        "requestUserAccountId", senderAccountId
+                ))
+                .build());
+    }
+
+    private SseEmitter findTargerSseEmitter(Long targetAccountId) {
+        return emitters.get(targetAccountId);
     }
 
     /**
