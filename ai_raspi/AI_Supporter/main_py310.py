@@ -14,7 +14,7 @@ from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
-from bridge.stt_bridge_server import run_server, send_stt_result, set_start_streaming_stt_callback
+from bridge.stt_bridge_server import run_server, send_stt_result, set_start_streaming_stt_callback, set_service_completed_callback, send_wakeword_detected, set_wakeword_audio_completed_callback
 from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
 
@@ -227,15 +227,46 @@ def run_stt_loop():
                 logger.info("🔇 Wakeword 감지기 일시 중지 (STT 세션 중)")
                 mic.disable_wakeword_callback()
                 
+                # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
                 logger.info("=" * 60)
-                logger.info("⏳ [단계 2-1] 사용자 발화 준비 대기 중... (3초)")
-                logger.info("   💡 이제 말씀해주세요!")
+                logger.info("📤 [단계 2-1] 브리지 서버로 Wakeword 감지 이벤트 전송")
+                logger.info("=" * 60)
+                send_wakeword_detected()
+                wait_for_next_step_sync("Wakeword 감지 이벤트 전송 완료", "2-1")
+                
+                # 모바일에서 음성 파일 재생 완료 대기
+                logger.info("=" * 60)
+                logger.info("⏳ [단계 2-2] 모바일 음성 파일 재생 완료 대기 중...")
+                logger.info("   💡 모바일에서 'onAir 서비스를 시작합니다. 어떤 것을 도와드릴까요?' 재생 중...")
                 logger.info("=" * 60)
                 
-                # 3초 대기 (사용자가 말할 시간 제공)
-                for i in range(3, 0, -1):
-                    logger.info(f"   ⏰ {i}초 후 버퍼링 STT 세션 시작...")
-                    time.sleep(1)
+                wakeword_audio_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                
+                def on_wakeword_audio_completed():
+                    """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                    wakeword_audio_completed_flag["completed"] = True
+                    logger.info("=" * 60)
+                    logger.info("✅ 모바일 음성 파일 재생 완료 신호 수신")
+                    logger.info("=" * 60)
+                
+                # 모바일 음성 파일 재생 완료 콜백 등록
+                set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
+                
+                max_wait_time = 30  # 최대 30초 대기 (음성 파일 재생 시간)
+                wait_start = time.time()
+                
+                while not wakeword_audio_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
+                    time.sleep(0.5)  # 0.5초마다 확인
+                
+                if not wakeword_audio_completed_flag["completed"]:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다. 타임아웃으로 버퍼링 STT 시작")
+                    logger.warning("=" * 60)
+                else:
+                    logger.info("=" * 60)
+                    logger.info("✅ [단계 2-2 완료] 모바일 음성 파일 재생 완료")
+                    logger.info("=" * 60)
+                    wait_for_next_step_sync("모바일 음성 파일 재생 완료", "2-2")
                 
                 logger.info("=" * 60)
                 logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
@@ -251,24 +282,28 @@ def run_stt_loop():
                 wait_for_next_step_sync("STT 세션 종료", "완료")
                 
                 # 서비스 완료 대기 (FastAPI 서버에서 GPT-4o 답변 생성 및 TTS 완료 후 service_completed 이벤트 수신)
+                # 주의: Python 3.10과 Python 3.13은 별도 프로세스이므로 메모리를 공유할 수 없음
+                # 따라서 브리지 서버를 통해 서비스 완료 신호를 받아야 함
                 logger.info("⏳ 서비스 완료 대기 중... (GPT-4o 답변 생성 및 TTS 완료 후 wakeword 재활성화)")
-                service_completed = False
+                service_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                
+                def on_service_completed():
+                    """서비스 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                    service_completed_flag["completed"] = True
+                    logger.info("=" * 60)
+                    logger.info("✅ 서비스 완료 신호 수신: GPT-4o 답변 생성 및 TTS 완료")
+                    logger.info("=" * 60)
+                
+                # 서비스 완료 콜백 등록
+                set_service_completed_callback(on_service_completed)
+                
                 max_wait_time = 300  # 최대 5분 대기
                 wait_start = time.time()
                 
-                while not service_completed and (time.time() - wait_start) < max_wait_time:
-                    # manager를 통해 서비스 완료 상태 확인
-                    if hasattr(manager, 'is_service_completed'):
-                        service_completed = manager.is_service_completed()
-                        if service_completed:
-                            break
+                while not service_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
                     time.sleep(0.5)  # 0.5초마다 확인
                 
-                if service_completed:
-                    logger.info("=" * 60)
-                    logger.info("✅ 서비스 완료 확인: GPT-4o 답변 생성 및 TTS 완료")
-                    logger.info("=" * 60)
-                else:
+                if not service_completed_flag["completed"]:
                     logger.warning("=" * 60)
                     logger.warning("⚠️ 서비스 완료 신호를 받지 못했습니다. 타임아웃으로 wakeword 재활성화")
                     logger.warning("=" * 60)
@@ -278,8 +313,7 @@ def run_stt_loop():
                     logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
                     mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
                     # 서비스 완료 플래그 리셋
-                    if hasattr(manager, 'reset_service_completed'):
-                        manager.reset_service_completed()
+                    service_completed_flag["completed"] = False
                 
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
     except KeyboardInterrupt:

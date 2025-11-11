@@ -13,11 +13,29 @@ connected_clients = set()
 # Streaming STT 시작 콜백 (Python 3.10에서 설정)
 start_streaming_stt_callback = None
 
+# 서비스 완료 콜백 (Python 3.10에서 설정)
+service_completed_callback = None
+
+# 모바일 음성 파일 재생 완료 콜백 (Python 3.10에서 설정)
+wakeword_audio_completed_callback = None
+
 def set_start_streaming_stt_callback(callback):
     """Streaming STT 시작 콜백 설정 (Python 3.10에서 호출)"""
     global start_streaming_stt_callback
     start_streaming_stt_callback = callback
     logger.info("✅ Streaming STT 시작 콜백이 등록되었습니다")
+
+def set_service_completed_callback(callback):
+    """서비스 완료 콜백 설정 (Python 3.10에서 호출)"""
+    global service_completed_callback
+    service_completed_callback = callback
+    logger.info("✅ 서비스 완료 콜백이 등록되었습니다")
+
+def set_wakeword_audio_completed_callback(callback):
+    """모바일 음성 파일 재생 완료 콜백 설정 (Python 3.10에서 호출)"""
+    global wakeword_audio_completed_callback
+    wakeword_audio_completed_callback = callback
+    logger.info("✅ 모바일 음성 파일 재생 완료 콜백이 등록되었습니다")
 
 # 2️⃣ 클라이언트 연결 이벤트
 @sio.event
@@ -55,6 +73,80 @@ def handle_start_streaming_stt(sid, data):
         logger.warning("=" * 60)
         logger.warning("⚠️ Streaming STT 시작 콜백이 등록되지 않았습니다")
         logger.warning("=" * 60)
+
+# 서비스 완료 신호 수신 (Python 3.13 → Python 3.10)
+@sio.on('service_completed')
+def handle_service_completed(sid, data):
+    """Python 3.13에서 서비스 완료 신호 수신"""
+    session_id = data.get("session_id", "")
+    status = data.get("status", "")
+    logger.info("=" * 60)
+    logger.info(f"📥 [서비스 완료] 브리지 서버: 서비스 완료 신호 수신")
+    logger.info(f"   Session ID: {session_id}, Status: {status}")
+    logger.info("=" * 60)
+    
+    if service_completed_callback:
+        try:
+            service_completed_callback()
+            logger.info("=" * 60)
+            logger.info(f"✅ [서비스 완료] 브리지 서버: 서비스 완료 신호 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ [서비스 완료 실패] 서비스 완료 신호 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 서비스 완료 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
+# 모바일 음성 파일 재생 완료 신호 수신 (Python 3.13 → Python 3.10)
+@sio.on('wakeword_audio_completed')
+def handle_wakeword_audio_completed(sid, data):
+    """Python 3.13에서 모바일 음성 파일 재생 완료 신호 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 [모바일 음성 재생 완료] 브리지 서버: 모바일 음성 파일 재생 완료 신호 수신")
+    logger.info("=" * 60)
+    
+    if wakeword_audio_completed_callback:
+        try:
+            wakeword_audio_completed_callback()
+            logger.info("=" * 60)
+            logger.info(f"✅ [모바일 음성 재생 완료] 브리지 서버: 모바일 음성 파일 재생 완료 신호 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ [모바일 음성 재생 완료 실패] 모바일 음성 파일 재생 완료 신호 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 모바일 음성 파일 재생 완료 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
+# Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
+def send_wakeword_detected():
+    """Wakeword 감지 이벤트를 브리지 클라이언트(3.13)에게 전송"""
+    logger.info("=" * 60)
+    logger.info(f"📤 [단계 2-1] 브리지 서버: Wakeword 감지 이벤트 전송 시작")
+    logger.info(f"   연결된 클라이언트: {len(connected_clients)}개")
+    logger.info("=" * 60)
+    
+    if not connected_clients:
+        logger.warning("⚠️ 연결된 클라이언트가 없습니다. Wakeword 감지 이벤트를 전송할 수 없습니다.")
+        return
+    
+    # 모든 연결된 클라이언트에게 전송
+    for client_sid in list(connected_clients):  # 리스트로 복사하여 안전하게 순회
+        try:
+            sio.emit('wakeword_detected', {}, room=client_sid)
+            logger.info(f"✅ 클라이언트 {client_sid[:10]}...에게 전송 완료")
+        except Exception as e:
+            logger.error(f"❌ 클라이언트 {client_sid}에게 전송 실패: {e}")
+            connected_clients.discard(client_sid)  # 실패한 클라이언트 제거
+    
+    logger.info("=" * 60)
+    logger.info("✅ [단계 2-1 완료] 브리지 서버: Wakeword 감지 이벤트 전송 완료")
+    logger.info("=" * 60)
 
 # 3️⃣ 외부에서 호출될 함수 (STT 결과 emit)
 def send_stt_result(result: dict):
