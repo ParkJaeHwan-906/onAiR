@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 //    id("com.google.devtools.ksp")
 //    id("com.google.dagger.hilt.android")
 }
@@ -21,7 +22,7 @@ android {
 
         // ✅ Orchestrator와의 연결 설정
         testInstrumentationRunnerArguments clearPackageData: 'true'
-        
+
         // BuildConfig 필드 (환경 변수에서 읽거나 기본값 사용)
         // 주의: 프로덕션에서는 빈 문자열로 설정하고, 로그인 API를 통해 토큰을 받아야 합니다
         buildConfigField "String", "DEFAULT_ACCESS_TOKEN", "\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMyIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNzYyNDc3NjI1LCJleHAiOjE3NjI5MDk2MjV9.CHd-R8t2-HORjihxrRIEASjTg09nrZksOQ3rxG2o43E\""
@@ -42,7 +43,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-
     kotlinOptions {
         jvmTarget = '17'
     }
@@ -70,36 +70,6 @@ configurations.all {
 }
 
 dependencies {
-    // Android 기본
-    implementation "androidx.core:core-ktx:1.13.1"
-    implementation "androidx.appcompat:appcompat:1.7.0"
-    implementation "com.google.android.material:material:1.12.0"
-
-    // STT 관련 - Android 내장 SpeechRecognizer
-    // (별도 의존성 불필요 - Android SDK에 포함됨)
-
-    // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신) - 레거시, Socket.IO 클라이언트로 대체 예정
-    implementation("org.java-websocket:Java-WebSocket:1.5.6")
-    
-    // Socket.IO 클라이언트 (Socket.IO 서버에서 stt_result 이벤트 수신)
-    implementation("io.socket:socket.io-client:2.1.0")
-
-    // HTTP 서버 (라즈베리파이로부터 stt_start 알림 수신)
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
-
-    // JSON 처리
-    implementation("org.json:json:20231013")
-
-    // Retrofit (FastAPI 서버 호출용)
-    implementation "com.squareup.retrofit2:retrofit:2.9.0"
-    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
-    
-    // OkHttp (WebSocket 클라이언트용)
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-
-    // ONNX Runtime 제거됨 (Gemini-Flash로 Intent 분류 대체)
-
-    testImplementation "junit:junit:4.13.2"
 
     def composeBom = platform('androidx.compose:compose-bom:2025.10.01')
     implementation composeBom
@@ -121,12 +91,19 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
+    implementation libs.androidx.fragment.ktx
+
+    // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신) - 레거시, Socket.IO 클라이언트로 대체 예정
+    implementation libs.java.websocket.v156
+
+    // Socket.IO 클라이언트 (Socket.IO 서버에서 stt_result 이벤트 수신)
+    implementation libs.socket.io.client
 
     // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
     implementation libs.java.websocket
     // JSON 처리
     implementation libs.json
-    // ONNX Runtime 제거됨 (Gemini-Flash로 Intent 분류 대체)
+
 
     testImplementation libs.junit
 
@@ -141,9 +118,12 @@ dependencies {
 //    implementation libs.androidx.hilt.navigation.fragment
 //    implementation(libs.hilt.android)
 //    ksp(libs.hilt.android.compiler)
-    androidTestImplementation "androidx.test.ext:junit:1.1.5"
-    androidTestImplementation "androidx.test:runner:1.5.2"
-    androidTestImplementation "androidx.test:rules:1.5.0"
-    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
-    androidTestUtil "androidx.test:orchestrator:1.4.2"
+    implementation libs.retrofit
+    implementation libs.kotlinx.serialization.json
+    implementation libs.retrofit2.kotlinx.serialization.converter
+    implementation libs.androidx.core.splashscreen
+    implementation libs.logging.interceptor
+    implementation(libs.okhttp.eventsource)
+    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+
 }

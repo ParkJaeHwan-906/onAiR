@@ -81,9 +81,15 @@ def run_socketio_client():
         
 
         
+        # 브리지 클라이언트 연결 (별도 스레드에서 실행)
+        # 주의: 브리지 서버는 Python 3.10 프로세스(main_py310.py)에서 실행됩니다.
+        # Python 3.10 프로세스가 실행 중이 아니면 초기 연결이 실패할 수 있지만,
+        # 재연결 옵션이 활성화되어 있어 자동으로 연결됩니다.
         bridge_thread = threading.Thread(target=bridge_client.connect, daemon=True)
         bridge_thread.start()
         logger.info("✅ 브리지 서버(Socket.IO) 연결 시도 중 (스레드 실행)")
+        logger.info("   ℹ️  브리지 서버는 Python 3.10 프로세스에서 실행됩니다.")
+        logger.info("   ℹ️  Python 3.10 프로세스를 실행하려면: python3.10 main_py310.py")
         
         try:
             # 무한 대기 (Ctrl+C로 종료)

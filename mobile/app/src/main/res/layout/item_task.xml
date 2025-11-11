@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="10dp"
+    android:paddingTop="8dp">
+    <CheckBox
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/task_done_check"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBaseline_toBaselineOf="parent" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/task_name"
+        android:text="작업을 요청합니다"
+        android:textSize="16sp"
+        android:textFontWeight="700"
+        android:layout_marginBottom="15dp"
+        app:layout_constraintStart_toEndOf="@id/task_done_check"
+        app:layout_constraintBaseline_toBaselineOf="parent"
+        />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/equipment_name"
+        android:text="함안주막"
+        android:textSize="12sp"
+        android:textFontWeight="500"
+        app:layout_constraintTop_toBottomOf="@id/task_name"
+        android:background="@drawable/priority_trivial_tag"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="2dp"
+        android:textColor="@color/colorPrimary"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="5dp"
+        app:layout_constraintStart_toEndOf="@id/task_done_check" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/solution"
+        android:textSize="11sp"
+        android:gravity="center"
+        app:layout_constraintStart_toEndOf="@id/equipment_name"
+        app:layout_constraintBaseline_toBaselineOf="@id/equipment_name"
+        android:layout_marginTop="5dp"
+        android:layout_marginStart="5dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

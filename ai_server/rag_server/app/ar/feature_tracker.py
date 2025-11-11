@@ -136,7 +136,7 @@ def track_features(
     valid = _filter_by_lk_error(err_fwd, valid, iqr_scale=3.0)
 
     # ---------- 큰 이동 감지 ----------
-    if np.count_nonzero(valid) >= 5:
+    if np.count_nonzero(valid) >= 10:
         mean_flow = _mean_flow(prev_pts[valid], next_pts[valid])
         if mean_flow > large_motion_px:
             print(f"⚠️ Large motion detected: {mean_flow:.1f}px (not resetting)")

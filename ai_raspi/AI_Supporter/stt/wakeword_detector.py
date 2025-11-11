@@ -152,13 +152,37 @@ class WakewordDetector:
                 time.sleep(0.1)
             return
         
-        # 오디오 버퍼 초기화
-        self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
+        def callback(indata, frames, time_info, status):
+            buffer.extend(indata[:, 0])
+            
+            # Wakeword 감지
+            if len(buffer) >= SAMPLE_RATE:
+                audio = np.array(buffer)
+                pred = self.predict_wakeword(audio)
+                
+                if pred is not None:
+                    label = "onair" if np.argmax(pred) == 0 else "negative"
+                    conf = np.max(pred)
+                    
+                    if label == "onair" and conf > WAKEWORD_THRESHOLD:
+                        print(f"Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
+                        self.detection_queue.put(True)
+                        # 중복 감지 방지를 위해 버퍼 초기화
+                        buffer.clear()
         
-        print("🎧 Wakeword 감지 대기 중... (MicStream에서 오디오 데이터 수신)")
-        while self.is_running:
-            time.sleep(0.1)
-
+        try:
+            with sd.InputStream(
+            callback=callback,
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            device='hw:CARD=sndrpigooglevoi,DEV=0'  # ← 마이크 장치 지정!
+            ):
+                print("🎧 Wakeword 감지 대기 중... (onAir)")
+                while self.is_running:
+                    time.sleep(0.1)
+        except Exception as e:
+            print(f"❌ Wakeword 감지 오류: {e}")
+    
     def start(self):
         """Wakeword 감지 시작"""
         if self.is_running:

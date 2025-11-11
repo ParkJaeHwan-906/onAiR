@@ -45,7 +45,6 @@ class SocketIOClient:
         
         # 자동 재연결 설정
         # SSL 검증은 기본값 사용 (인증서 검증 활성화)
-        # 실제 인증서 문제는 서버 측에서 해결해야 함
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
             reconnection_attempts=5,  # 최대 5회 재시도
@@ -234,6 +233,21 @@ class SocketIOClient:
         async def handle_pong(data):
             """서버로부터 pong 응답 수신"""
             logger.debug(f"🏓 Pong 수신: {data}")
+        
+        @self.sio.on("service_completed")
+        async def handle_service_completed(data):
+            """서비스 완료 이벤트 수신 (GPT-4o 답변 생성 및 TTS 완료 후)"""
+            session_id = data.get("session_id", "")
+            status = data.get("status", "")
+            logger.info("=" * 60)
+            logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신")
+            logger.info(f"   Session ID: {session_id}, Status: {status}")
+            logger.info("=" * 60)
+            
+            # manager를 통해 wakeword 재활성화 신호 전달
+            if self.manager:
+                self.manager.set_service_completed(True)
+                logger.info("🔊 Wakeword 재활성화 신호 전달 완료")
     
     def _check_server_certificate(self):
         """
@@ -281,7 +295,13 @@ class SocketIOClient:
         try:
             logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url} (경로: /ws)")
             # Socket.IO 경로는 /ws로 설정 (FastAPI 서버에 통합된 Socket.IO 서버)
-            await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
+            # SSL 인증서 검증 활성화 (기본값)
+            await self.sio.connect(
+                self.server_url,
+                socketio_path="/ws",
+                wait_timeout=10,
+                transports=["polling", "websocket"]  # Polling 우선, WebSocket fallback
+            )
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
         except ssl.SSLCertVerificationError as e:

@@ -74,7 +74,7 @@ class SocketIoSttClient(
             Log.i(TAG, "   옵션: reconnection=${options.reconnection}, timeout=${options.timeout}, transports=${options.transports?.joinToString()}")
             
             try {
-                socket = IO.socket(serverUrl, options)
+            socket = IO.socket(serverUrl, options)
                 Log.i(TAG, "✅ Socket.IO 인스턴스 생성 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Socket.IO 인스턴스 생성 실패: ${e.message}")
