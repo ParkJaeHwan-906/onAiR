@@ -460,9 +460,10 @@ async def handle_stt_result(sid, data):
                         # (라즈베리파이에서 이 이벤트를 받아서 처리)
                     else:
                         # CV 모델이 오류를 탐지한 경우
-                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('error_type', 'Unknown')}")
-                        # TODO: 오류 탐지 성공 시 처리 로직 추가
-                    
+                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
+                        print("=" * 60)
+                        await broadcast_to("mobile", "cv_detection_success", cv_result.get('message', ''))
+                        await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
                 except Exception as e:
                     print(f"❌ CV 모델 실행 오류: {e}")
                     # CV 모델 오류 시에도 탐지 실패로 처리
