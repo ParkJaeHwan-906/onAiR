@@ -10,8 +10,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
+import com.onair.mobile.communicate.data.SSERepository
 import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.sse.SseClient
+import com.onair.mobile.communicate.presentation.ui.CommunicationViewModel
 import com.onair.mobile.communicate.presentation.ui.LoginActivity
 import com.onair.mobile.communicate.presentation.ui.MainViewModel
 import com.onair.mobile.communicate.presentation.ui.NavigationNext
@@ -23,11 +26,18 @@ import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private val viewModel: MainViewModel by viewModelByFactory {
+    private val mainViewModel: MainViewModel by viewModelByFactory {
         val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
         val repository = AuthRepository(apiService, PreferenceUtil(applicationContext))
 
         MainViewModel(repository)
+    }
+    private val sseViewModel: CommunicationViewModel by viewModelByFactory {
+        val okHttpClient = ApiClient(this).getOkHttpClient()
+        val sseRepo = SSERepository(
+            SseClient(okHttpClient, "/task/stream")
+        )
+        CommunicationViewModel(sseRepo)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,19 +45,20 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         splashScreen.setKeepOnScreenCondition {
-            viewModel.isLoading.value
+            mainViewModel.isLoading.value
         }
         observeNavigation()
         }
     private fun observeNavigation() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.navigationNext.collectLatest { target ->
+                mainViewModel.navigationNext.collectLatest { target ->
                     when (target) {
                         NavigationNext.MAIN -> {
                             binding = ActivityMainBinding.inflate(layoutInflater)
                             setContentView(binding.root)
                             initView()
+                            sseViewModel.startSSE()
                         }
                         NavigationNext.LOGIN -> {
                             startActivity(Intent(this@MainActivity, LoginActivity::class.java))
