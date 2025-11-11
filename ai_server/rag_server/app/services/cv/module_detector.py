@@ -13,17 +13,13 @@ from loguru import logger
 # YOLO 모델 캐시
 _yolo_module_model = None
 
-# CPU 최적화
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-
 
 def get_module_model():
     """YOLO 모듈 탐지 모델 (lazy load, 단일 인스턴스)"""
     global _yolo_module_model
     if _yolo_module_model is None:
         logger.info("📦 [module_detector] YOLO 모델 로드 중...")
-        _yolo_module_model = YOLO("/app/models/module.pt")
+        _yolo_module_model = YOLO("/app/models/module_best.pt")
         _yolo_module_model.fuse()  # CPU 최적화
         logger.info("✅ [module_detector] YOLO 모델 로드 완료")
     return _yolo_module_model

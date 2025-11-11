@@ -11,9 +11,6 @@ import numpy as np
 from pathlib import Path
 from loguru import logger
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-
 
 def load_yolo_model(model_path: str):
     """

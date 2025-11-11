@@ -17,9 +17,6 @@ current_device_type: str = "unknown"
 # YOLO 모델 전역 캐시
 _yolo_device_model = None
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-
 
 async def background_device_detector():
     """
