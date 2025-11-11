@@ -226,6 +226,9 @@ def run_stt_loop():
                 # Wakeword 감지 후 즉시 wakeword 콜백 비활성화 (STT 세션 중 wakeword 감지 중지)
                 logger.info("🔇 Wakeword 감지기 일시 중지 (STT 세션 중)")
                 mic.disable_wakeword_callback()
+                # Wakeword 감지기 자체도 일시 중지
+                if wakeword_detector:
+                    wakeword_detector.pause()
                 
                 # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
                 logger.info("=" * 60)
@@ -248,6 +251,8 @@ def run_stt_loop():
                     logger.info("=" * 60)
                     logger.info("✅ 모바일 음성 파일 재생 완료 신호 수신")
                     logger.info("=" * 60)
+                    # 디버그 모드에서 Enter 키 대기 (콜백 내부에서 호출)
+                    wait_for_next_step_sync("모바일 음성 파일 재생 완료", "2-2")
                 
                 # 모바일 음성 파일 재생 완료 콜백 등록
                 set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
@@ -262,11 +267,13 @@ def run_stt_loop():
                     logger.warning("=" * 60)
                     logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다. 타임아웃으로 버퍼링 STT 시작")
                     logger.warning("=" * 60)
+                    # 타임아웃 시에도 디버그 모드에서 Enter 키 대기
+                    wait_for_next_step_sync("모바일 음성 파일 재생 완료 (타임아웃)", "2-2")
                 else:
                     logger.info("=" * 60)
                     logger.info("✅ [단계 2-2 완료] 모바일 음성 파일 재생 완료")
                     logger.info("=" * 60)
-                    wait_for_next_step_sync("모바일 음성 파일 재생 완료", "2-2")
+                    # 콜백 내부에서 이미 wait_for_next_step_sync 호출됨
                 
                 logger.info("=" * 60)
                 logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
@@ -312,6 +319,7 @@ def run_stt_loop():
                 if settings.REENABLE_WAKEWORD_AFTER_SERVICE:
                     if wakeword_detector and wakeword_detector.interpreter is not None:
                         logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
+                        wakeword_detector.resume()  # Wakeword 감지기 재개
                         mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
                         # 서비스 완료 플래그 리셋
                         service_completed_flag["completed"] = False
