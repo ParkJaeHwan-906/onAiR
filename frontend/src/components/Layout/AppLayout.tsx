@@ -148,7 +148,7 @@ function AppLayout() {
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         processEvent(data);
       } catch (error) {
-        console.error("❌ SSE 데이터 파싱 실패", error);
+        console.error("SSE 데이터 파싱 실패", error);
       }
     };
 

@@ -30,12 +30,12 @@ function HomeBig({
   const allRequests = useWebRtcRequestStore((state) => state.requests);
   const { updateRequestStatus } = useWebRtcRequestStore();
 
-  // 요청 목록 필터링 (메모이제이션으로 무한 루프 방지)
+  // 요청 목록 필터링 및 정렬 (내림차순)
   const requests = useMemo(() => {
     if (!isRequestList) return [];
 
     const today = new Date();
-    return allRequests.filter((req) => {
+    const filtered = allRequests.filter((req) => {
       const reqDate = new Date(req.requestTime);
       const isToday =
         reqDate.getFullYear() === today.getFullYear() &&
@@ -43,7 +43,25 @@ function HomeBig({
         reqDate.getDate() === today.getDate();
       return isToday;
     });
+
+    // 요청시간 기준 내림차순 정렬
+    return filtered.sort((a, b) => {
+      const timeA = new Date(a.requestTime).getTime();
+      const timeB = new Date(b.requestTime).getTime();
+      return timeB - timeA; // 내림차순 (최신순부터)
+    });
   }, [isRequestList, allRequests]);
+
+  // 작업 목록 정렬 (오름차순)
+  const sortedTasks = useMemo(() => {
+    if (!tasks || tasks.length === 0) return [];
+
+    return [...tasks].sort((a, b) => {
+      const timeA = new Date(a.lastUpdateTime).getTime();
+      const timeB = new Date(b.lastUpdateTime).getTime();
+      return timeA - timeB; // 오름차순 (오래된 것부터)
+    });
+  }, [tasks]);
 
   // 연결 요청 수락/거절 핸들러
   const handleResponse = async (
@@ -133,9 +151,9 @@ function HomeBig({
       case "pending":
         return "대기중";
       case "accepted":
-        return "수락됨";
+        return "수락";
       case "rejected":
-        return "거절됨";
+        return "거절";
       case "completed":
         return "완료";
       default:
@@ -263,10 +281,10 @@ function HomeBig({
                 );
               })
             )
-          ) : tasks.length === 0 ? (
+          ) : sortedTasks.length === 0 ? (
             <p className="no-data">오늘의 작업이 없습니다.</p>
           ) : (
-            tasks.map((task) => {
+            sortedTasks.map((task) => {
               const actionStatus =
                 task.actionStatus && task.actionStatus.trim()
                   ? task.actionStatus

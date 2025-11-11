@@ -1,9 +1,23 @@
 :root {
-  font-family: 'NotoSansKR', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-base: "NotoSansKR", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --color-text-primary: #3b4a6b;
+  --color-text-secondary: #5c6478;
+  --color-text-muted: #6b7280;
+  --color-surface-base: #ffffff;
+  --color-surface-subtle: #f5f6f8;
+  --font-size-heading-lg: clamp(16px, 1.3vw, 21px);
+  --font-size-heading-md: clamp(14px, 1.1vw, 18px);
+  --font-size-title: clamp(13px, 1vw, 16px);
+  --font-size-body-lg: clamp(12px, 0.95vw, 15px);
+  --font-size-body-md: clamp(11px, 0.9vw, 13px);
+  --font-size-body-sm: clamp(10px, 0.85vw, 12px);
+  --font-size-caption: clamp(9px, 0.75vw, 11px);
+  font-family: var(--font-family-base);
   line-height: 1.5;
   font-weight: 400;
-  color: #2E2E2E;
-  background-color: #F5F6F8;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-subtle);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -13,11 +27,16 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  min-width: 1920px;
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
-  background-color: #F5F6F8;
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-subtle);
+  overflow-x: hidden;
 }
 
 a {

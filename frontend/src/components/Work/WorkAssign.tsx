@@ -251,41 +251,6 @@ function WorkAssign({ onTaskReassigned }: WorkAssignProps) {
         alert(res.message || "작업 재할당에 실패했습니다.");
       }
     } catch (error: any) {
-      // console.error('=== 작업 재할당 실패 ===');
-      // console.error('에러 객체:', error);
-      // console.error('에러 타입:', error.constructor.name);
-      // console.error('에러 메시지:', error.message);
-      // console.error('에러 응답:', error.response);
-
-      // // 에러 응답 데이터를 상세히 출력
-      // if (error.response?.data) {
-      //   console.error('=== 에러 응답 데이터 상세 ===');
-      //   console.error('전체 응답 데이터:', JSON.stringify(error.response.data, null, 2));
-      //   console.error('응답 데이터 타입:', typeof error.response.data);
-      //   console.error('응답 데이터 keys:', Object.keys(error.response.data || {}));
-      //   console.error('응답 message:', error.response.data.message);
-      //   console.error('응답 error:', error.response.data.error);
-      //   console.error('응답 data:', error.response.data.data);
-      //   console.error('응답 status:', error.response.data.status);
-      // } else {
-      //   console.error('에러 응답 데이터가 없습니다.');
-      // }
-
-      // console.error('에러 상태 코드:', error.response?.status);
-      // console.error('에러 상태 텍스트:', error.response?.statusText);
-      // console.error('요청 URL:', error.config?.url);
-      // console.error('요청 메서드:', error.config?.method);
-      // console.error('요청 데이터:', error.config?.data);
-      // console.error('요청 헤더:', error.config?.headers);
-      // console.error('요청 정보:', {
-      //   taskId: selectedWorkId,
-      //   employeeId: selectedEmployeeId,
-      //   requestData: {
-      //     taskId: selectedWorkId,
-      //     userAccountId: selectedEmployeeId
-      //   }
-      // });
-
       // 백엔드 에러 메시지 추출 (여러 가능성 체크)
       const errorMessage =
         error.response?.data?.message ||
@@ -394,102 +359,107 @@ function WorkAssign({ onTaskReassigned }: WorkAssignProps) {
     return null; // 관리자가 아니면 작업 재할당 컴포넌트를 표시하지 않음
   }
 
+  const isBodyScrollable = isWorkDropdownOpen || isEmployeeDropdownOpen;
+
   return (
     <div className="work-assign">
       <div className="work-assign-header">작업 재할당</div>
 
-      <div className="assign-header">작업</div>
-      <div className="work-select-wrapper" ref={workDropdownRef}>
-        <button
-          type="button"
-          className={`work-select-trigger${isWorkDropdownOpen ? " open" : ""}`}
-          onClick={() => setIsWorkDropdownOpen((prev) => !prev)}
-        >
-          <span>
-            {selectedWork ? selectedWork.request : "작업을 선택하세요"}
-          </span>
-        </button>
-        {isWorkDropdownOpen && (
-          <ul className="work-select-dropdown">
-            {works.length === 0 ? (
-              <li style={{ padding: "10px", textAlign: "center" }}>
-                작업이 없습니다.
-              </li>
-            ) : (
-              works.map((work) => (
-                <li key={work.id}>
-                  <button
-                    type="button"
-                    className={`work-select-option${
-                      work.id === selectedWorkId ? " selected" : ""
-                    }`}
-                    onClick={() => {
-                      setSelectedWorkId(work.id);
-                      setIsWorkDropdownOpen(false);
-                    }}
-                  >
-                    <span className="work-select-option-title">
-                      {work.request}
-                    </span>
-                    <span className="work-select-option-meta">
-                      {work.equipmentName}
-                    </span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
+      <div
+        className={`work-assign-body${isBodyScrollable ? " scrollable" : ""}`}
+      >
+        <div className="assign-header">작업</div>
+        <div className="work-select-wrapper" ref={workDropdownRef}>
+          <button
+            type="button"
+            className={`work-select-trigger${
+              isWorkDropdownOpen ? " open" : ""
+            }`}
+            onClick={() => setIsWorkDropdownOpen((prev) => !prev)}
+          >
+            <span>
+              {selectedWork ? selectedWork.request : "작업을 선택하세요"}
+            </span>
+          </button>
+          {isWorkDropdownOpen && (
+            <ul className="work-select-dropdown">
+              {works.length === 0 ? (
+                <li className="empty-option">작업이 없습니다.</li>
+              ) : (
+                works.map((work) => (
+                  <li key={work.id}>
+                    <button
+                      type="button"
+                      className={`work-select-option${
+                        work.id === selectedWorkId ? " selected" : ""
+                      }`}
+                      onClick={() => {
+                        setSelectedWorkId(work.id);
+                        setIsWorkDropdownOpen(false);
+                      }}
+                    >
+                      <span className="work-select-option-title">
+                        {work.request}
+                      </span>
+                      <span className="work-select-option-meta">
+                        {work.equipmentName}
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+
+        <div className="assign-header">담당자</div>
+        <div className="work-select-wrapper" ref={employeeDropdownRef}>
+          <button
+            type="button"
+            className={`work-select-trigger${
+              isEmployeeDropdownOpen ? " open" : ""
+            }`}
+            onClick={() => setIsEmployeeDropdownOpen((prev) => !prev)}
+          >
+            {selectedEmployee
+              ? `${selectedEmployee.name} (${selectedEmployee.part})`
+              : "담당자를 선택하세요"}
+          </button>
+          {isEmployeeDropdownOpen && (
+            <ul className="work-select-dropdown">
+              {employees.length === 0 ? (
+                <li className="empty-option">직원이 없습니다.</li>
+              ) : (
+                employees.map((employee) => (
+                  <li key={employee.userAccountId}>
+                    <button
+                      type="button"
+                      className={`work-select-option${
+                        employee.userAccountId === selectedEmployeeId
+                          ? " selected"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        setSelectedEmployeeId(employee.userAccountId);
+                        setIsEmployeeDropdownOpen(false);
+                      }}
+                    >
+                      <span className="work-select-option-title">
+                        {employee.name}
+                      </span>
+                      <span className="work-select-option-meta">
+                        {employee.part} |{" "}
+                        {employee.online ? "온라인" : "오프라인"}
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
       </div>
 
-      <div className="assign-header">담당자</div>
-      <div className="work-select-wrapper" ref={employeeDropdownRef}>
-        <button
-          type="button"
-          className={`work-select-trigger${
-            isEmployeeDropdownOpen ? " open" : ""
-          }`}
-          onClick={() => setIsEmployeeDropdownOpen((prev) => !prev)}
-        >
-          {selectedEmployee
-            ? `${selectedEmployee.name} (${selectedEmployee.part})`
-            : "담당자를 선택하세요"}
-        </button>
-        {isEmployeeDropdownOpen && (
-          <ul className="work-select-dropdown">
-            {employees.length === 0 ? (
-              <li style={{ padding: "10px", textAlign: "center" }}>
-                직원이 없습니다.
-              </li>
-            ) : (
-              employees.map((employee) => (
-                <li key={employee.userAccountId}>
-                  <button
-                    type="button"
-                    className={`work-select-option${
-                      employee.userAccountId === selectedEmployeeId
-                        ? " selected"
-                        : ""
-                    }`}
-                    onClick={() => {
-                      setSelectedEmployeeId(employee.userAccountId);
-                      setIsEmployeeDropdownOpen(false);
-                    }}
-                  >
-                    <span className="work-select-option-title">
-                      {employee.name}
-                    </span>
-                    <span className="work-select-option-meta">
-                      {employee.part} |{" "}
-                      {employee.online ? "온라인" : "오프라인"}
-                    </span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-      </div>
       <button
         className="assign-button"
         onClick={handleReAssign}
