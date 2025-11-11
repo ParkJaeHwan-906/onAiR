@@ -193,6 +193,7 @@ async def process_frame(frame_bgr, sid=None):
             continue
         res = cv2.matchTemplate(roi, tpl, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        match_scores.append(max_val)
         if max_val >= 0.80:  # 임계값
             dx, dy = max_loc
             nx = (max(0,xs0) + dx) + patch_hw
