@@ -17,7 +17,9 @@ import ssafy.com.onair.webrtc.dto.WebRtcRequestDto;
 import ssafy.com.onair.webrtc.dto.WebRtcResponseDto;
 import ssafy.com.onair.webrtc.manager.WebRtcManager;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -50,7 +52,7 @@ public class WebRtcService {
 
         StringBuilder roomName = new StringBuilder();
         roomName.append(senderInfoDto.senderAccountId()).append(' ').append(webRtcRequestDto.receiverAccountId());
-        webRtcManager.getWaitingRoomList().put(roomName.toString(), LocalDateTime.now().plusMinutes(5));
+        webRtcManager.getWaitingRoomList().put(roomName.toString(), LocalDateTime.now(Clock.system(ZoneId.of("Asia/Seoul"))).plusMinutes(1));
         // 사용자가 요청한거면 sender : 사용자, receiver : 관리자
         if(senderRole.equals("사용자")){
             // 작업자 -> 관리자
