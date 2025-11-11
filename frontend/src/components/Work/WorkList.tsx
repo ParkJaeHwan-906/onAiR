@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "../../styles/WorkList.css";
 import WorkActionModal from "./WorkActionModal";
+import type { WorkDetailInfo } from "./WorkDetailModal";
 import { useUserStore } from "../../store/useUserStore";
 
 type WorkListProps = {
@@ -15,6 +16,7 @@ type WorkListProps = {
   isAdmin?: boolean; // 관리자 여부
   onTaskUpdated?: () => void; // 작업 완료/취소 후 콜백
   onSelect?: (taskId: number) => void; // 작업 선택 시 콜백
+  onViewDetail?: (detail: WorkDetailInfo) => void;
 };
 
 const backColors = ["#F4C0C0", "#F9E9B5", "#B5BFE0", "#B6E7C8"];
@@ -32,6 +34,7 @@ function WorkList({
   isAdmin = false,
   onTaskUpdated,
   onSelect,
+  onViewDetail,
 }: WorkListProps) {
   const { myInfo } = useUserStore();
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
@@ -54,6 +57,9 @@ function WorkList({
     }
   };
 
+  const normalizedSolution =
+    solution && solution.trim().length > 0 ? solution : undefined;
+
   return (
     <>
       <div className="work-row" onClick={() => onSelect && onSelect(taskId)}>
@@ -70,13 +76,24 @@ function WorkList({
         <div className="col-time">{lastUpdateTime}</div>
         {isAdmin ? (
           <>
-            <div className="col-solution">{solution || "-"}</div>
+            <div
+              className="col-solution"
+              title={normalizedSolution || undefined}
+            >
+              {normalizedSolution || "-"}
+            </div>
             <div className="col-view">
               <button
                 className="view-button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelect && onSelect(taskId);
+                  onViewDetail?.({
+                    userName,
+                    request,
+                    actionStatus,
+                    lastUpdateTime,
+                    solution: normalizedSolution || "-",
+                  });
                 }}
               >
                 보기

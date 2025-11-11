@@ -1,11 +1,14 @@
 .employee-page-wrapper {
   box-sizing: border-box;
-  width: 1664px;
-  height: 1011px;
-  background-color: #F5F6F8;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-surface-subtle);
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 24px 32px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: clamp(10px, 1vw, 14px);
+  padding: clamp(0px, 1vw, 2px);
+  overflow: hidden;
+  overflow-x: hidden;
+  min-width: 0;
 }

@@ -26,10 +26,12 @@ function EquipmentPage() {
 
   if (!isAdmin) {
     return (
-      <div className="equipment-page-wrapper">
-        <div style={{ padding: "40px", textAlign: "center", color: "#9CA3AF" }}>
-          <h2>접근 권한이 없습니다.</h2>
-          <p>설비 관리는 관리자만 이용할 수 있습니다.</p>
+      <div className="equipment-page-wrapper empty">
+        <div className="equipment-access-card">
+          <h2 className="equipment-access-title">접근 권한이 없습니다.</h2>
+          <p className="equipment-access-sub">
+            설비 관리는 관리자만 이용할 수 있습니다.
+          </p>
         </div>
       </div>
     );

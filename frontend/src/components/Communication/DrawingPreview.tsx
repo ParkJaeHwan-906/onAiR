@@ -174,7 +174,9 @@ const DrawingPreview = () => {
 
       const ahuWorldCenter = new THREE.Vector3();
       ahuGroup.getWorldPosition(ahuWorldCenter);
-      const focusTarget = ahuWorldCenter.clone().add(new THREE.Vector3(0, 0.5, 0));
+      const focusTarget = ahuWorldCenter
+        .clone()
+        .add(new THREE.Vector3(0, 0.5, 0));
 
       const frontDirection = new THREE.Vector3(0, 0, 1)
         .applyQuaternion(ahuGroup.quaternion)
@@ -261,8 +263,16 @@ const DrawingPreview = () => {
     const animate = () => {
       frameId = requestAnimationFrame(animate);
       if (ahuVisual) {
-        ahuCurrentScale = THREE.MathUtils.lerp(ahuCurrentScale, ahuScaleTarget, 0.15);
-        ahuCurrentY = THREE.MathUtils.lerp(ahuCurrentY, ahuPositionYTarget, 0.15);
+        ahuCurrentScale = THREE.MathUtils.lerp(
+          ahuCurrentScale,
+          ahuScaleTarget,
+          0.15
+        );
+        ahuCurrentY = THREE.MathUtils.lerp(
+          ahuCurrentY,
+          ahuPositionYTarget,
+          0.15
+        );
         ahuVisual.scale.setScalar(ahuCurrentScale);
         ahuVisual.position.y = ahuCurrentY;
       }
@@ -271,7 +281,11 @@ const DrawingPreview = () => {
         const elapsed = performance.now() - cameraAnimationStart;
         const t = Math.min(elapsed / CAMERA_ANIMATION_DURATION, 1);
         const eased = 1 - Math.pow(1 - t, 3);
-        camera.position.lerpVectors(cameraStartPosition, cameraPositionEnd, eased);
+        camera.position.lerpVectors(
+          cameraStartPosition,
+          cameraPositionEnd,
+          eased
+        );
         controls.target.lerpVectors(cameraTargetStart, cameraTargetEnd, eased);
         camera.lookAt(controls.target);
         if (t >= 1) {

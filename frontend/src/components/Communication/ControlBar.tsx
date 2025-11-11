@@ -46,10 +46,10 @@ const ControlBar = ({
   const colors = ["#000000", "#ff0000", "#0000ff", "#00ff00", "#ffff00"];
   // 도형 선택용 (Circle, Square, Triangle, Arrow)
   const shapes = [
-    { name: "circle", icon: <Circle className="icon" size={18} /> },
-    { name: "square", icon: <Square className="icon" size={18} /> },
-    { name: "triangle", icon: <Triangle className="icon" size={18} /> },
-    { name: "arrow", icon: <MoveUpRight className="icon" size={18} /> },
+    { name: "circle", icon: <Circle className="icon" size={14} /> },
+    { name: "square", icon: <Square className="icon" size={14} /> },
+    { name: "triangle", icon: <Triangle className="icon" size={14} /> },
+    { name: "arrow", icon: <MoveUpRight className="icon" size={14} /> },
   ];
 
   // 외부 클릭 시 메뉴 자동 닫기
@@ -118,7 +118,7 @@ const ControlBar = ({
           className={`icon-button ${currentTool === "pen" ? "active" : ""}`}
           onClick={() => handleToolChange("pen")}
         >
-          <PenLine className="icon" size={18} style={{ color: "#111827" }} />
+          <PenLine className="icon" size={14} style={{ color: "#111827" }} />
         </button>
 
         {/* 도형 */}
@@ -135,7 +135,7 @@ const ControlBar = ({
             }}
           >
             {shapes.find((s) => s.name === selectedShape)?.icon || (
-              <Square className="icon" size={18} />
+              <Square className="icon" size={14} />
             )}
           </button>
 
@@ -168,7 +168,7 @@ const ControlBar = ({
             }`}
             onClick={() => handleToolChange("eraser")}
           >
-            <Eraser className="icon" size={18} />
+            <Eraser className="icon" size={14} />
           </button>
         </div>
 
@@ -183,7 +183,7 @@ const ControlBar = ({
             }
           }}
         >
-          <Phone className="icon end-call-icon" size={18} />
+          <Phone className="icon end-call-icon" size={14} />
         </button>
       </div>
     </div>
