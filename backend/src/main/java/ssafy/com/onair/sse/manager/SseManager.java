@@ -127,7 +127,7 @@ public class SseManager {
 
         sendSseMessage(emitters.get(admin.getUserAccountId()),
                 SseMessageDto.builder()
-                        .eventName("")  // 이벤트 명 지정해주세여
+                        .eventName("callRequest")  // 이벤트 명 지정해주세여
                         .data(data)     // 여기에 뭔가 필요한 데이터가 있다면 넣으세여
                         .build());
     }
