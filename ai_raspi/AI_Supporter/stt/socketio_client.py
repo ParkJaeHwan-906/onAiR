@@ -240,14 +240,67 @@ class SocketIOClient:
             session_id = data.get("session_id", "")
             status = data.get("status", "")
             logger.info("=" * 60)
-            logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신")
+            logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신 (FastAPI 서버)")
             logger.info(f"   Session ID: {session_id}, Status: {status}")
             logger.info("=" * 60)
             
-            # manager를 통해 wakeword 재활성화 신호 전달
-            if self.manager:
-                self.manager.set_service_completed(True)
-                logger.info("🔊 Wakeword 재활성화 신호 전달 완료")
+            # 브리지 서버를 통해 Python 3.10으로 서비스 완료 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 [서비스 완료] 브리지 서버로 서비스 완료 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('service_completed', {
+                            "session_id": session_id,
+                            "status": status
+                        })
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [서비스 완료] 브리지 서버로 서비스 완료 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [서비스 완료 실패] 브리지 서버로 서비스 완료 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                logger.warning("=" * 60)
+        
+        @self.sio.on("wakeword_audio_completed")
+        async def handle_wakeword_audio_completed(data):
+            """모바일 음성 파일 재생 완료 이벤트 수신 (FastAPI 서버에서 전송)"""
+            logger.info("=" * 60)
+            logger.info(f"📥 [모바일 음성 재생 완료] wakeword_audio_completed 이벤트 수신 (FastAPI 서버)")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 모바일 음성 파일 재생 완료 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 [모바일 음성 재생 완료] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('wakeword_audio_completed', {})
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [모바일 음성 재생 완료] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [모바일 음성 재생 완료 실패] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
+                logger.warning("=" * 60)
     
     def _check_server_certificate(self):
         """
@@ -384,6 +437,32 @@ class SocketIOClient:
             stt_data["session_id"] = session_id
         
         return await self.emit_stt_result(stt_data)
+    
+    async def emit_wakeword_detected(self):
+        """
+        Wakeword 감지 이벤트를 Socket.IO 서버로 전송합니다.
+        
+        Returns:
+            bool: 전송 성공 여부
+        """
+        if not self.connected:
+            logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 재연결 시도...")
+            # 재연결 시도
+            await self.connect()
+            
+            if not self.connected:
+                logger.error("❌ 재연결 실패, Wakeword 감지 이벤트 전송 불가")
+                return False
+        
+        try:
+            await self.sio.emit("wakeword_detected", {})
+            logger.info("📤 Wakeword 감지 이벤트 전송 완료")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Wakeword 감지 이벤트 전송 오류: {e}")
+            # 전송 실패 시 연결 상태 리셋
+            self.connected = False
+            return False
     
     def is_connected(self):
         """연결 상태 확인"""
