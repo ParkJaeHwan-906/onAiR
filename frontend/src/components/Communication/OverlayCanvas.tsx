@@ -19,8 +19,58 @@ interface CanvasProps {
   tool?: string;
 }
 
-export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
-  const socket = useSocket(); // 연결되어있는 소켓 객체를 가져옴
+// AR 마커 타입 정의
+type ArMarker = {
+  idx: number;
+  info: {
+    x: number;
+    y: number;
+    size: number;
+  };
+};
+
+// stage size
+const STAGE_WIDTH = 968;
+const STAGE_HEIGHT = 857;
+// 카메라 화면 size
+const CAMERA_WIDTH = 640;
+const CAMERA_HEIGHT = 480;
+// convert에 사용될 변수
+const scale = STAGE_HEIGHT / CAMERA_HEIGHT;
+const scaledCameraWidth = CAMERA_WIDTH * scale;
+
+// convert stage -> camera
+const convertStageToCamera = (stageX: number, stageY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
+
+  // Stage 좌표를 카메라 좌표로 변환
+  const cameraX = ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
+  const cameraY = (stageY / STAGE_HEIGHT) * CAMERA_HEIGHT;
+
+  return {
+    x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
+    y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY)))
+  };
+};
+
+// convert camera -> stage
+const convertCameraToStage = (cameraX: number, cameraY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
+  
+  const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
+  const stageY = (cameraY / CAMERA_HEIGHT) * STAGE_HEIGHT;
+  
+  return {
+    x: Math.round(stageX),
+    y: Math.round(stageY)
+  };
+};
+
+export const OverlayCanvas = ({
+  penColor,
+  tool = "pen",
+}: CanvasProps) => {
+  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
 
   const [lines, setLines] = useState<DrawingLine[]>([]);
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
@@ -74,34 +124,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     30
   );
 
-  const [arMarkers, setArMarkers] = useState<
-    Array<{
-      idx: number;
-      info: {
-        x: number;
-        y: number;
-        size: number;
-      };
-    }>
-  >([
-    // 테스트용으로 초기 마커 생성
-    {
-      idx: 0,
-      info: {
-        x: 200,
-        y: 300,
-        size: 50,
-      },
-    },
-    {
-      idx: 1,
-      info: {
-        x: 500,
-        y: 400,
-        size: 30,
-      },
-    },
-  ]);
+  const [arMarkers, setArMarkers] = useState<ArMarker[]>([]);
 
   // ------------------------------- Listen Socket Event -------------------------------
   useEffect(() => {
@@ -110,23 +133,27 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       // ar-info 이벤트 listen
       socket.on('ar-info', (data) => {
         console.log('receive ar info', data);
-        console.log('data type:', typeof data, 'isArray:', Array.isArray(data));
-        console.log('data constructor:', data?.constructor?.name);
         
-        // 배열인지 확인하고 안전하게 처리
-        if (Array.isArray(data)) {
-          setArMarkers(data);
-        } else if (data && typeof data === 'object' && 'markers' in data) {
-          // 객체로 감싸져 있는 경우 (예: { markers: [...] })
-          const markersData = data as { markers: unknown };
-          if (Array.isArray(markersData.markers)) {
-            setArMarkers(markersData.markers);
-          } else {
-            console.warn('data.markers is not an array:', markersData.markers);
-            setArMarkers([]);
-          }
+        // { markers: [...] } 형태의 데이터 처리
+        const markersData = data as unknown as { markers: ArMarker[] };
+        if (Array.isArray(markersData.markers)) {
+          // 카메라 좌표를 Stage 좌표로 변환
+          const convertedMarkers = markersData.markers.map((marker: ArMarker) => {
+            const stagePos = convertCameraToStage(marker.info.x, marker.info.y);
+            return {
+              ...marker,
+              info: {
+                ...marker.info,
+                x: stagePos.x,
+                y: stagePos.y,
+                size: marker.info.size * scale // size도 스케일 적용
+              }
+            };
+          });
+          setArMarkers(convertedMarkers);
+          console.log('converted AR Markers : ', convertedMarkers);
         } else {
-          console.error('Invalid ar-info data:', data);
+          console.warn('data.markers is not an array:', markersData.markers);
           setArMarkers([]);
         }
       });
@@ -135,12 +162,6 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       return () => {
         socket.off('ar-info');
       };
-  }, [socket])
-
-    // cleanup
-    return () => {
-      socket.off("ar-info");
-    };
   }, [socket]);
 
   // ------------------------------- 마우스 클릭 시작 -------------------------------
@@ -174,8 +195,12 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       });
     } else if (["arrow"].includes(tool)) {
       startPos.current = pos;
-      console.log(`ar-marker created: ${pos.x}, ${pos.y}`);
-      socket.emit("ar-marker", { marker_x: pos.x, marker_y: pos.y });
+
+      // stage 좌표를 카메라 좌표로 변환
+      const cameraPos = convertStageToCamera(pos.x, pos.y);
+
+      console.log(`ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`);
+      socket.emit("ar-marker", {marker_x: cameraPos.x, marker_y: cameraPos.y});
     }
   };
 
