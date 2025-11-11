@@ -27,7 +27,7 @@ def call_gemini_via_gms(
         모델 응답 텍스트
     """
     # GMS Gemini 엔드포인트 구성
-    # 예: https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GMS_KEY
+    # 예: https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GMS_KEY
     endpoint = f"{GMS_BASE_URL}/generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     
     # 요청 본문 구성

@@ -82,7 +82,7 @@ def classify_intent(text: str) -> dict:
         print(f"🔵 [Intent 분류] Gemini-Flash API 호출 시작: '{text[:50]}...'")
         # GMS API를 통해 Gemini 호출
         text_response = call_gemini_via_gms(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",  # GMS에서 지원하는 모델명
             prompt=prompt,
             api_key=gms_api_key
         ).strip()
