@@ -83,5 +83,26 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+        # 환경 변수 우선순위: 환경 변수 > .env 파일
+        # Docker 컨테이너에서는 환경 변수로 전달되므로 env_file_encoding 명시
+        env_file_encoding = 'utf-8'
+        case_sensitive = False  # 대소문자 구분 안 함
 
 settings = Settings()
+
+# 디버그: API 키 로드 상태 확인 (서버 시작 시 한 번만 출력)
+import os
+env_gms_key = os.getenv("GMS_API_KEY")
+if env_gms_key:
+    print(f"🔍 [Config] 환경 변수 GMS_API_KEY 발견: {env_gms_key[:10]}... (길이: {len(env_gms_key)})")
+else:
+    print("⚠️ [Config] 환경 변수 GMS_API_KEY가 설정되지 않았습니다.")
+
+if settings.GMS_API_KEY:
+    print(f"✅ [Config] Settings.GMS_API_KEY 로드 성공: {settings.GMS_API_KEY[:10]}... (길이: {len(settings.GMS_API_KEY)})")
+else:
+    print("❌ [Config] Settings.GMS_API_KEY가 None이거나 빈 문자열입니다.")
+    print("   가능한 원인:")
+    print("   1. .env 파일에 GMS_API_KEY가 없음")
+    print("   2. Docker 환경 변수 GMS_API_KEY가 전달되지 않음")
+    print("   3. Jenkins credentials에 GMS_API_KEY가 설정되지 않음")

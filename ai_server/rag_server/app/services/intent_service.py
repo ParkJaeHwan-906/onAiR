@@ -9,10 +9,19 @@ except Exception:
     genai_available = False
 
 # ✅ Gemini 설정 (config.py의 GMS_API_KEY 사용)
-if genai_available and settings.GMS_API_KEY:
-    genai.configure(api_key=settings.GMS_API_KEY)
-    model_intent = genai.GenerativeModel("gemini-1.5-flash")
+if genai_available:
+    if settings.GMS_API_KEY:
+        # API 키가 설정되어 있는지 확인
+        api_key_preview = settings.GMS_API_KEY[:10] + "..." if len(settings.GMS_API_KEY) > 10 else settings.GMS_API_KEY
+        print(f"✅ [Intent Service] GMS_API_KEY 로드됨: {api_key_preview} (길이: {len(settings.GMS_API_KEY)})")
+        genai.configure(api_key=settings.GMS_API_KEY)
+        model_intent = genai.GenerativeModel("gemini-1.5-flash")
+    else:
+        print("⚠️ [Intent Service] GMS_API_KEY가 설정되지 않았습니다. (None 또는 빈 문자열)")
+        print("   환경 변수 GMS_API_KEY를 확인하세요.")
+        model_intent = None
 else:
+    print("⚠️ [Intent Service] google.generativeai 모듈을 사용할 수 없습니다.")
     model_intent = None
 
 
@@ -49,16 +58,26 @@ def classify_intent(text: str) -> dict:
 사용자의 말을 분석하여 다음 두 가지 중 하나로 분류하세요:
 
 1. **OPERATOR**: 사람 오퍼레이터와의 통신 연결이 필요한 경우
-   - 예: "통신연결이 필요해", "사람 불러줘", "오퍼레이터 연결해줘", "직원 불러줘", "담당자 연결", "상담원 연결", "전화 연결해줘" 등
+   - 키워드: "오퍼레이터", "통신", "연결", "사람", "직원", "담당자", "상담원", "전화", "통화"
+   - 예시: 
+     * "오퍼레이터 통신", "오퍼레이터 연결", "오퍼레이터 불러줘"
+     * "통신 연결", "통신 연결해줘", "통신이 필요해"
+     * "사람 불러줘", "직원 불러줘", "담당자 연결", "상담원 연결"
+     * "전화 연결해줘", "통화 연결", "사람과 통화"
    - 사람과 직접 통화하거나 상담이 필요한 요청
 
 2. **AI_SUPPORTER**: AI 서포터가 처리할 수 있는 질문이나 요청
-   - 예: "AI 도움이 필요해", "이거 어떻게 하는지 알려줘", "설명해줘", "질문이 있어", "방법 알려줘" 등
+   - 키워드: "질문", "알려줘", "설명", "방법", "어떻게", "도움", "AI"
+   - 예시: 
+     * "AI 도움이 필요해", "이거 어떻게 하는지 알려줘"
+     * "설명해줘", "질문이 있어", "방법 알려줘"
+     * "이거 뭐야", "어떻게 해야 해", "가르쳐줘"
    - AI가 답변하거나 안내할 수 있는 일반적인 질문
 
 사용자 입력: "{text}"
 
 **중요 규칙:**
+- "오퍼레이터", "통신", "연결" 등의 키워드가 포함되면 OPERATOR로 분류하세요.
 - 반드시 "OPERATOR" 또는 "AI_SUPPORTER" 중 하나만 반환하세요.
 - 다른 값이나 설명을 추가하지 마세요.
 - JSON 형식으로만 응답하세요.
@@ -72,8 +91,10 @@ def classify_intent(text: str) -> dict:
 """
 
     try:
+        print(f"🔵 [Intent 분류] Gemini-Flash API 호출 시작: '{text[:50]}...'")
         response = model_intent.generate_content(prompt)
         text_response = response.text.strip()
+        print(f"✅ [Intent 분류] Gemini-Flash API 호출 성공 (응답 길이: {len(text_response)} bytes)")
 
         # ```json ``` 블록 형식 대응
         if "```" in text_response:
@@ -89,7 +110,13 @@ def classify_intent(text: str) -> dict:
             result["confidence"] = 0.5
             result["reasoning"] = f"잘못된 Intent 값 '{intent}'를 받아 기본값으로 처리했습니다."
         
+        print(f"✅ [Intent 분류] Intent 분류 결과: {result.get('intent')} (신뢰도: {result.get('confidence', 0.5):.2f})")
         return result
+        
+    except (AttributeError, TypeError) as e:
+        # model_intent가 None이거나 generate_content가 없는 경우
+        print(f"❌ [Intent 분류] 모델 호출 오류: {e}")
+        return _fallback_classify_intent(text, f"모델 호출 오류: {e}")
         
     except json.JSONDecodeError as e:
         # JSON 파싱 실패 시 텍스트에서 직접 추출 시도
@@ -107,9 +134,43 @@ def classify_intent(text: str) -> dict:
                 "reasoning": "JSON 파싱 실패로 기본값으로 처리했습니다."
             }
     except Exception as e:
+        error_msg = str(e)
+        print(f"❌ [Intent 분류] 예외 발생: {type(e).__name__}: {error_msg[:200]}")
+        return _fallback_classify_intent(text, error_msg)
+
+
+def _fallback_classify_intent(text: str, error_msg: str) -> dict:
+    """
+    API 키 오류 등으로 Gemini 호출이 실패했을 때 텍스트 기반 키워드 매칭으로 Intent 분류
+    
+    Args:
+        text: 사용자 입력 텍스트
+        error_msg: 발생한 오류 메시지
+        
+    Returns:
+        Intent 분류 결과 딕셔너리
+    """
+    # OPERATOR 키워드 목록 (한글은 대소문자 구분 없음)
+    operator_keywords = ["오퍼레이터", "통신", "연결", "사람", "직원", "담당자", "상담원", "전화", "통화", "연락"]
+    
+    # 텍스트에서 키워드 검색 (대소문자 구분 없이)
+    text_lower = text.lower()  # 한글은 영향 없지만 일관성을 위해
+    
+    # 키워드 매칭 (한글 키워드는 원본 그대로 사용)
+    found_keywords = [kw for kw in operator_keywords if kw in text]
+    
+    if found_keywords:
+        print(f"✅ [Fallback 분류] OPERATOR 키워드 감지: {found_keywords}")
+        return {
+            "intent": "OPERATOR",
+            "confidence": 0.7,
+            "reasoning": f"API 오류로 텍스트 기반 분류 수행: OPERATOR 키워드 감지 ({', '.join(found_keywords)})"
+        }
+    else:
+        print(f"⚠️ [Fallback 분류] OPERATOR 키워드 없음 → AI_SUPPORTER로 분류")
         return {
             "intent": "AI_SUPPORTER",
-            "confidence": 0.5,
-            "reasoning": f"Intent 분류 중 오류 발생: {e}"
+            "confidence": 0.6,
+            "reasoning": f"API 오류로 텍스트 기반 분류 수행: OPERATOR 키워드 없음 (원본 오류: {error_msg[:100]})"
         }
 
