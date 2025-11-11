@@ -273,31 +273,57 @@ async def process_frame(frame_bgr, sid=None):
 # ============================
 def pixel_to_world_on_plane(u, v, plane_z=0.0):
     """
-    현재 포즈(R_total,t_total)와 K를 사용해, 이미지 픽셀(u,v)의 광선을
+    현재 포즈(R_total, t_total)와 K를 사용해 이미지 픽셀(u,v)의 광선을
     월드 z=plane_z 평면과 교차시켜 3D 좌표를 구함.
-    반환: (x,y,z) or None
+    반환: (x, y, z) or None
+
+    개선 사항:
+    - 초기 포즈 미설정 시 None 반환
+    - z=0 평면과 평행한 경우 plane_z 자동 보정
+    - 디버그 로그 및 안전한 fallback
     """
+    global R_total, t_total, K
+
+    # --- ① 포즈 유효성 검사 ---
+    if np.allclose(t_total, 0, atol=1e-6):
+        print("⚠️ [pixel_to_world_on_plane] Pose not initialized (t_total≈0). Returning None.")
+        return None
+
+    # --- ② 내참수 추출 ---
     fx, fy = K[0, 0], K[1, 1]
     cx, cy = K[0, 2], K[1, 2]
 
+    # --- ③ 픽셀 → 카메라좌표계 방향벡터 ---
     x_cam = (u - cx) / fx
     y_cam = (v - cy) / fy
     dir_cam = np.array([x_cam, y_cam, 1.0], dtype=np.float32).reshape(3, 1)
 
-    # world 방향
+    # --- ④ 카메라→월드 방향 변환 ---
     dir_world = R_total @ dir_cam
     dir_world = dir_world.reshape(3)
 
     C = t_total.reshape(3)
     denom = dir_world[2]
+
+    # --- ⑤ z=0 평면과 평행한 경우 자동 보정 ---
     if abs(denom) < 1e-8:
-        return None
+        print("⚠️ [pixel_to_world_on_plane] Ray nearly parallel to plane_z, adjusting plane_z→-1.0")
+        plane_z = -1.0
+        denom = dir_world[2] if abs(dir_world[2]) > 1e-8 else 1e-8
+
+    # --- ⑥ 평면 교차점 계산 ---
     t = (plane_z - C[2]) / denom
     if t <= 0:
+        print(f"⚠️ [pixel_to_world_on_plane] Intersection behind camera (t={t:.4f}) → returning None.")
         return None
-    P = C + t * dir_world
-    return (float(P[0]), float(P[1]), float(P[2]))
 
+    P = C + t * dir_world
+    wx, wy, wz = float(P[0]), float(P[1]), float(P[2])
+
+    # --- ⑦ 디버그 로그 ---
+    print(f"📍 [pixel_to_world_on_plane] pixel=({u:.1f},{v:.1f}) → world=({wx:.3f},{wy:.3f},{wz:.3f}) | t={t:.3f}")
+
+    return wx, wy, wz
 
 # ============================
 # 🧩 상대적 size 헬퍼
@@ -331,7 +357,7 @@ def relative_size_at(u, v, k=5):
     local = _knn_local_parallax(u, v, k=k)
     if local is None or local <= 1e-9:
         return None
-    return float(last_parallax_med / (local + 1e-6))
+    return float((local + 1e-6) / last_parallax_med)
 
 
 def relative_size_in_bbox(x0, y0, x1, y1):
