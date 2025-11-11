@@ -21,6 +21,14 @@ class MicStream:
     def set_wakeword_callback(self, callback):
         """Wakeword 감지기 콜백 설정 (16000Hz 오디오 데이터를 받음)"""
         self.wakeword_callback = callback
+    
+    def disable_wakeword_callback(self):
+        """Wakeword 콜백 비활성화 (STT 세션 중 wakeword 감지 중지)"""
+        self.wakeword_callback = None
+    
+    def enable_wakeword_callback(self, callback):
+        """Wakeword 콜백 활성화 (STT 세션 종료 후 wakeword 감지 재개)"""
+        self.wakeword_callback = callback
 
     def _callback(self, in_data, frames, time_info, status):
         """입력 오디오 데이터를 큐에 저장 및 Wakeword 감지기에 전달"""

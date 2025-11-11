@@ -868,6 +868,18 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
+            # 서비스 완료: 라즈베리파이로 서비스 종료 이벤트 전송 (wakeword 재활성화 신호)
+            print("=" * 60)
+            print(f"📤 [단계 13-11] 라즈베리파이로 서비스 완료 이벤트 전송 시작")
+            print("=" * 60)
+            await broadcast_to("raspi", "service_completed", {
+                "session_id": session_id,
+                "status": "completed"
+            })
+            print("=" * 60)
+            print(f"✅ [단계 13-11 완료] 라즈베리파이로 서비스 완료 이벤트 전송 완료")
+            print("=" * 60)
+            
     except Exception as e:
         print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
         import traceback

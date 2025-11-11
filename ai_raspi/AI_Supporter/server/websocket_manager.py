@@ -16,6 +16,7 @@ class ConnectionManager:
         self.mic_stream = None  # 마이크 스트림 인스턴스
         self.streaming_stt_instance = None  # Streaming STT 인스턴스 참조
         self.stop_streaming_sessions = set()  # 종료할 세션 ID 집합
+        self.service_completed = False  # 서비스 완료 플래그 (GPT-4o 답변 생성 및 TTS 완료 후 True)
 
     def set_socketio_client(self, socketio_client):
         """
@@ -129,3 +130,22 @@ class ConnectionManager:
                     logger.warning("⚠️ STT 결과 전송 실패")
             except Exception as e:
                 logger.error(f"❌ Socket.IO 전송 오류: {e}")
+    
+    def set_service_completed(self, completed: bool = True):
+        """
+        서비스 완료 플래그 설정 (GPT-4o 답변 생성 및 TTS 완료 후 호출)
+        
+        Args:
+            completed: 서비스 완료 여부 (기본값: True)
+        """
+        self.service_completed = completed
+        logger.info(f"✅ 서비스 완료 플래그 설정: {completed}")
+    
+    def is_service_completed(self) -> bool:
+        """서비스 완료 상태 확인"""
+        return self.service_completed
+    
+    def reset_service_completed(self):
+        """서비스 완료 플래그 리셋 (다음 서비스 대기)"""
+        self.service_completed = False
+        logger.info("🔄 서비스 완료 플래그 리셋")
