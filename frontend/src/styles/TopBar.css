@@ -2,26 +2,27 @@
   box-sizing: border-box;
   width: 100%;
   height: 72px;
-  background-color: #ffffff;
+  background-color: var(--color-surface-base);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
   box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding-right: 32px;
+  gap: clamp(12px, 1.8vw, 20px);
+  padding: 0 clamp(14px, 2vw, 28px);
   position: relative;
 }
 
 .topbar-icon {
   position: relative;
   cursor: pointer;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .notification-dot {
@@ -35,8 +36,8 @@
 }
 
 .topbar-profile {
-  width: 36px;
-  height: 36px;
+  width: clamp(32px, 2.2vw, 36px);
+  height: clamp(32px, 2.2vw, 36px);
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
@@ -48,9 +49,9 @@
 }
 
 .topbar-name {
-  font-size: 15px;
+  font-size: var(--font-size-body-lg);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 /* 드롭다운 메뉴 */
@@ -58,7 +59,7 @@
   position: absolute;
   right: 0;
   top: 60px;
-  background: #ffffff;
+  background: var(--color-surface-base);
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -72,8 +73,8 @@
 .profile-menu p {
   margin: 0;
   padding: 10px 16px;
-  font-size: 14px;
-  color: #374151;
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
@@ -82,11 +83,12 @@
 }
 
 .topbar-login-link {
-  color: #3b4a6b;
-  font-weight: 400;
+  color: var(--color-text-primary);
+  font-weight: 500;
+  font-size: var(--font-size-body-md);
   cursor: pointer;
-  margin-left: 6px;
-  padding: 8px 16px; /* hover 시 배경이 자연스럽게 보이도록 여백 추가 */
+  margin-left: 4px;
+  padding: clamp(6px, 0.8vw, 10px) clamp(12px, 1.1vw, 16px);
   border-radius: 8px;
   transition: all 0.2s ease-in-out;
 }
@@ -94,6 +96,7 @@
 /* hover 시 밝은 배경 + 그림자 */
 .topbar-login-link:hover {
   background-color: #f3f4f6;
+  color: #2f3b5a;
 }
 
 /* 클릭 시 살짝 눌림 느낌 */

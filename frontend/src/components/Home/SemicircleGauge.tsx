@@ -1,4 +1,5 @@
-import { ResponsivePie } from '@nivo/pie';
+import { ResponsivePie } from "@nivo/pie";
+import "../../styles/SemicircleGauge.css";
 
 type SemicircleGaugeProps = {
   value?: number;
@@ -11,12 +12,12 @@ function SemicircleGauge({ value = 0, max = 100 }: SemicircleGaugeProps) {
   const remainder = safeMax - clampedValue;
 
   const data = [
-    { id: 'filled', value: clampedValue, color: '#3B4A6B' },
-    { id: 'empty', value: remainder, color: '#ECEDF1' },
+    { id: "filled", value: clampedValue, color: "#3B4A6B" },
+    { id: "empty", value: remainder, color: "#ECEDF1" },
   ];
 
   return (
-    <div style={{ position: 'relative', width: '160px', height: '160px' }}>
+    <div className="semicircle-gauge-container">
       <ResponsivePie
         data={data}
         startAngle={-135}
@@ -30,21 +31,9 @@ function SemicircleGauge({ value = 0, max = 100 }: SemicircleGaugeProps) {
         enableArcLabels={false}
         padAngle={0}
       />
-      <span
-        style={{
-          position: 'absolute',
-          top: '55%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: '#3B4A6B',
-          fontWeight: 600,
-          fontSize: 36,
-        }}
-      >
-        {value}%
-      </span>
+      <span className="semicircle-gauge-value">{value}%</span>
     </div>
   );
-};
+}
 
 export default SemicircleGauge;

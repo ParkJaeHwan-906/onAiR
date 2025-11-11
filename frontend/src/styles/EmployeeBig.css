@@ -1,77 +1,88 @@
 .employee-big {
-  width: 1096px;
-  height: 961px;
-  border-radius: 16px;
-  background-color: #ffffff;
+  flex: 1 1 clamp(380px, 50%, 620px);
+  min-width: 360px;
+  max-width: 100%;
+  height: 100%;
+  border-radius: clamp(8px, 0.9vw, 12px);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 25px;
+  align-items: stretch;
+  padding: clamp(16px, 1.5vw, 20px) clamp(14px, 1.4vw, 18px)
+    clamp(14px, 1.3vw, 18px);
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 /* 상단 제목 */
 .employee-big-header {
-  width: 1048px;
+  width: 100%;
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  margin-bottom: 12px;
-  padding-left: 0;
+  margin-bottom: clamp(8px, 1vw, 12px);
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .employee-list {
-  font-family: "NotoSansKR";
-  font-size: 20px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-title);
   font-weight: 800;
-  color: #3b4a6b;
-  padding-left: 0;
-  box-sizing: border-box;
+  color: var(--color-text-primary);
 }
 
 /* 검색창 */
 .search-bar {
-  width: 1048px;
-  height: 48px;
-  border-radius: 12px;
+  width: 100%;
+  height: clamp(34px, 3.1vw, 38px);
+  border-radius: clamp(8px, 0.8vw, 10px);
   border: 1px solid #e5e7eb;
-  margin-bottom: 20px;
-  padding-left: 16px;
-  font-size: 14px;
-  color: #374151;
+  margin-bottom: clamp(12px, 1.4vw, 16px);
+  padding-left: clamp(10px, 1vw, 12px);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  box-sizing: border-box;
+  font-family: var(--font-family-base);
 }
 
 .search-bar::placeholder {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 /* 리스트 전체 박스 */
 .employee-table {
-  width: 1048px;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 리스트 헤더 */
 .list-header {
-  width: 1048px;
-  height: 69px;
+  width: 100%;
+  height: clamp(40px, 3.4vw, 48px);
   display: flex;
   align-items: center;
-  background-color: #f9fafb;
+  background-color: var(--color-surface-subtle);
   border-bottom: 1px solid #e5e7eb;
-  border-radius: 8px 8px 0 0;
+  border-radius: clamp(6px, 0.6vw, 8px) clamp(6px, 0.6vw, 8px) 0 0;
+  flex-shrink: 0;
 }
 
 .employee-table .list-header > div {
-  font-family: "NotoSansKR";
-  font-size: 16px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: clamp(10px, 1vw, 14px);
   box-sizing: border-box;
 }
 
@@ -101,32 +112,42 @@
 
 /* 리스트 본문 */
 .list-body {
-  width: 1048px;
+  width: 100%;
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: clamp(6px, 0.6vw, 8px);
+  border-bottom-right-radius: clamp(6px, 0.6vw, 8px);
+  min-height: 0;
 }
 
 .list-body::-webkit-scrollbar {
   display: none;
 }
 
+.loading-text,
+.no-data {
+  text-align: center;
+  padding: clamp(22px, 2.8vw, 30px) 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-muted);
+}
+
 /* 접근 불가 메시지 */
 .no-access-box {
   text-align: center;
-  margin-top: 80px;
-  color: #555;
+  margin-top: clamp(60px, 7vw, 80px);
+  color: var(--color-text-secondary);
 }
 .no-access-title {
   font-weight: 600;
-  font-size: 20px;
-  margin-bottom: 8px;
-  color: #3b4a6b;
+  font-size: var(--font-size-body-lg);
+  margin-bottom: clamp(5px, 0.7vw, 7px);
+  color: var(--color-text-primary);
 }
 .no-access-sub {
-  font-size: 16px;
-  color: #888;
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-secondary);
 }
