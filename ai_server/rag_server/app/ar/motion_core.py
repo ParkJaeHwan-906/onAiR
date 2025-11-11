@@ -137,12 +137,11 @@ async def process_frame(frame_bgr, sid=None):
     """
     global prev_gray, frame_idx, R_total, t_total, feature_pool, K
     global last_inlier_prev, last_inlier_next, last_parallax, last_parallax_med
-    global _latest_gray  # 최신 프레임 저장 (패치 추출용)
 
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    _latest_gray = gray.copy()  # 최신 gray 프레임 업데이트
+    _latest_gray = gray.copy()  # 최신 프레임 갱신
 
-    # === 초기 프레임 처리 ===
+    # 초기 프레임: 특징점 초기화
     if prev_gray is None:
         init_pts, _ = extract_features(gray)
         if init_pts is not None and len(init_pts) > 0:
@@ -159,8 +158,10 @@ async def process_frame(frame_bgr, sid=None):
             "R_total": R_total.copy(), "t_total": t_total.copy()
         }
 
-    # === Optical Flow ===
+    # 이전 프레임의 특징점
     prev_pts = feature_pool["pts"]
+
+    # === Optical Flow ===
     prev_valid, next_valid, _ = track_features(
         prev_gray, gray, prev_pts,
         fb_thresh=1.5,
@@ -172,73 +173,46 @@ async def process_frame(frame_bgr, sid=None):
         frame=None
     )
 
-    # OpticalFlow 결과가 너무 적으면 skip
-    if len(prev_valid) < 8:
-        print("⚠️ OpticalFlow insufficient points")
-        prev_gray = gray.copy()
-        frame_idx += 1
-        return {"status": "skip", "x": float(t_total[0]), "y": float(t_total[1]), "z": float(t_total[2])}
-
-    # === 🎯 Patch-based refinement (NCC 보정) ===
     prev_valid_refined = []
     next_valid_refined = []
-    match_scores = []
-
-    patch_hw = 8   # 패치 절반 크기 (17x17)
-    search_r = 14  # ROI 탐색 반경 (약 ±14px)
-
-    for (x0, y0), (x1, y1) in zip(prev_valid.reshape(-1, 2), next_valid.reshape(-1, 2)):
-        # --- 패치 추출 ---
-        tpl = prev_gray[int(y0 - patch_hw):int(y0 + patch_hw + 1),
-                        int(x0 - patch_hw):int(x0 + patch_hw + 1)]
-        if tpl.shape[0] != 2 * patch_hw + 1 or tpl.shape[1] != 2 * patch_hw + 1:
+    match_scores = []    
+    patch_hw = 8  # 17x17 템플릿
+    search_r = 12 # 25x25 검색
+    for (x0, y0), (x1, y1) in zip(prev_valid.reshape(-1,2), next_valid.reshape(-1,2)):
+        y0a, y1a = max(0, int(y0 - patch_hw)), min(prev_gray.shape[0], int(y0 + patch_hw + 1))
+        x0a, x1a = max(0, int(x0 - patch_hw)), min(prev_gray.shape[1], int(x0 + patch_hw + 1))
+        tpl = prev_gray[int(y0-patch_hw):int(y0+patch_hw+1),
+                        int(x0-patch_hw):int(x0+patch_hw+1)]
+        if tpl.shape[0] != 2*patch_hw+1 or tpl.shape[1] != 2*patch_hw+1:
             continue
-
-        # --- ROI 설정 ---
-        xs0, ys0 = int(x1 - search_r), int(y1 - search_r)
-        xs1, ys1 = int(x1 + search_r + 1), int(y1 + search_r + 1)
-        roi = gray[max(0, ys0):min(gray.shape[0], ys1),
-                   max(0, xs0):min(gray.shape[1], xs1)]
+        xs0, ys0 = int(x1-search_r), int(y1-search_r)
+        xs1, ys1 = int(x1+search_r+1), int(y1+search_r+1)
+        roi = gray[max(0,ys0):min(gray.shape[0],ys1),
+                max(0,xs0):min(gray.shape[1],xs1)]
         if roi.shape[0] < tpl.shape[0] or roi.shape[1] < tpl.shape[1]:
             continue
-
-        # --- dtype / 정규화 ---
-        tpl = tpl.astype(np.uint8)
-        roi = roi.astype(np.uint8)
-        tpl_eq = cv2.equalizeHist(tpl)
-        roi_eq = cv2.equalizeHist(roi)
-
-        # --- 템플릿 매칭 ---
-        res = cv2.matchTemplate(roi_eq, tpl_eq, cv2.TM_CCOEFF_NORMED)
+        res = cv2.matchTemplate(roi, tpl, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
-        match_scores.append(max_val)
-
-        if max_val >= 0.75:  # 신뢰도 기준
+        if max_val >= 0.80:  # 임계값
             dx, dy = max_loc
-            nx = (max(0, xs0) + dx) + patch_hw
-            ny = (max(0, ys0) + dy) + patch_hw
+            nx = (max(0,xs0) + dx) + patch_hw
+            ny = (max(0,ys0) + dy) + patch_hw
             prev_valid_refined.append([x0, y0])
             next_valid_refined.append([nx, ny])
 
-    # === NCC 통계 출력 ===
-    if match_scores:
-        mean_score = float(np.mean(match_scores))
-        print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
+    if len(prev_valid_refined) < 8:
+        print(f"⚠️ Too few refined ({len(prev_valid_refined)}), fallback to OF result")
     else:
-        mean_score = 0.0
-        print("⚠️ Patch refine: no valid matches (meanNCC=0.000)")
+        if match_scores: 
+            mean_score = np.mean(match_scores)
+        else:
+            mean_score = 0.0
+        # print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
 
-    # === Refinement fallback ===
-    if len(prev_valid_refined) < 8 or mean_score < 0.4:
-        print(f"⚠️ Refinement fallback → Using OpticalFlow result only "
-              f"({len(prev_valid_refined)} refined, meanNCC={mean_score:.2f})")
-        prev_valid_refined = prev_valid.reshape(-1, 2)
-        next_valid_refined = next_valid.reshape(-1, 2)
+    prev_valid = np.array(prev_valid_refined, dtype=np.float32).reshape(-1,1,2)
+    next_valid = np.array(next_valid_refined, dtype=np.float32).reshape(-1,1,2)
 
-    prev_valid = np.array(prev_valid_refined, dtype=np.float32).reshape(-1, 1, 2)
-    next_valid = np.array(next_valid_refined, dtype=np.float32).reshape(-1, 1, 2)
-
-    # === 점 풀 유지/보강 ===
+    # 점 풀 유지/보강
     _maintain_feature_pool(gray, prev_valid, next_valid)
 
     # === RANSAC + Essential ===
@@ -257,14 +231,14 @@ async def process_frame(frame_bgr, sid=None):
             inliers = int(np.count_nonzero(inlier_mask))
 
             if inliers >= 8:
-                # === 시차 통계 ===
-                parallax = np.linalg.norm(inlier_next - inlier_prev, axis=1)
+                # === 시차 통계 계산 (상대 size 근거) ===
+                parallax = np.linalg.norm(inlier_next - inlier_prev, axis=1)  # (N,)
                 parallax_mean = float(np.mean(parallax))
                 parallax_med = float(np.median(parallax)) if parallax.size > 0 else last_parallax_med
                 if parallax_med <= 1e-9:
                     parallax_med = 1e-6
 
-                # 캐시 업데이트
+                # 캐시 갱신
                 last_inlier_prev = inlier_prev.copy()
                 last_inlier_next = inlier_next.copy()
                 last_parallax = parallax.copy()
@@ -274,6 +248,7 @@ async def process_frame(frame_bgr, sid=None):
                 R, t, E, stats = estimate_motion(inlier_prev, inlier_next, K)
                 if stats.get("pose_ok", False):
                     scale = float(stats.get("scale", 1.0))
+                    # 누적 포즈 갱신: t_total = t_total + R_total@(s*t), R_total = R @ R_total
                     t_total += R_total @ (scale * t)
                     R_total = R @ R_total
                     status = "ok"
@@ -281,7 +256,7 @@ async def process_frame(frame_bgr, sid=None):
     prev_gray = gray.copy()
     frame_idx += 1
 
-    relative_depth_global = 1.0 / (parallax_med + 1e-6)
+    relative_depth_global = 1.0 / (parallax_med + 1e-6)  # 전역 기준(작을수록 멀리)
 
     return {
         "status": status,
@@ -289,7 +264,6 @@ async def process_frame(frame_bgr, sid=None):
         "inliers": inliers, "scale": scale,
         "parallax_mean": parallax_mean, "parallax_med": parallax_med,
         "relative_depth_global": float(relative_depth_global),
-        "meanNCC": mean_score,
         "R_total": R_total.copy(), "t_total": t_total.copy()
     }
 
