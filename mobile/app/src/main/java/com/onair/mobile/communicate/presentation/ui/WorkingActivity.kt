@@ -10,12 +10,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
-import com.onair.mobile.communicate.data.SSERepository
 import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.api.ApiClient
@@ -34,7 +31,9 @@ class WorkingActivity : AppCompatActivity() {
         val repository = TaskRepository(apiService)
         WorkingViewModel(repository)
     }
-    private val sseViewModel = (application as OnairApp).sseViewModel
+    private val sseViewModel: CommunicationViewModel by lazy {
+        (application as OnairApp).sseViewModel
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {

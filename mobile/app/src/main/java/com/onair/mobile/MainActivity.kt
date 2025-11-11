@@ -32,14 +32,17 @@ class MainActivity : AppCompatActivity() {
 
         MainViewModel(repository)
     }
-    private val sseViewModel: CommunicationViewModel by viewModelByFactory {
-        val okHttpClient = ApiClient(this).getOkHttpClient()
-        val sseRepo = SSERepository(
-            SseClient(okHttpClient, "/task/stream")
-        )
-        CommunicationViewModel(sseRepo)
+//    private val sseViewModel: CommunicationViewModel by viewModelByFactory {
+//        val okHttpClient = ApiClient(this).getOkHttpClient()
+//        val sseRepo = SSERepository(
+//            SseClient(okHttpClient, "/task/stream")
+//        )
+//        CommunicationViewModel(sseRepo)
+//    }
+//    private val sseViewModel = (application as OnairApp).sseViewModel
+    private val sseViewModel: CommunicationViewModel by lazy {
+        (application as OnairApp).sseViewModel
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
