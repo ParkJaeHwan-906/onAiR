@@ -1,0 +1,4 @@
+# === Bridge Client (Python 3.13) ===
+python-socketio[client]==5.11.3
+python-engineio==4.12.3
+aiohttp==3.9.0

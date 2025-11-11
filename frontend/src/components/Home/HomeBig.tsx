@@ -1,7 +1,10 @@
-import '../../styles/HomeBig.css';
-import '../../styles/WorkList.css';
-import { useWebRtcRequestStore } from '../../store/useWebRtcRequestStore';
-import type { Work } from '../../types/work';
+import { useMemo } from "react";
+import "../../styles/HomeBig.css";
+import "../../styles/WorkList.css";
+import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
+import { sendConnectionResponse } from "../../api/webrtc";
+import { useNavigate } from "react-router-dom";
+import type { Work } from "../../types/work";
 
 const backColors = ["#F4C0C0", "#F9E9B5", "#B5BFE0", "#B6E7C8"];
 const fontColors = ["#EF4444", "#FFBC11", "#1E40AF", "#22C55E"];
@@ -12,11 +15,101 @@ type HomeBigProps = {
   tasks?: Work[];
   formatTime?: (time: string) => string;
   isRequestList?: boolean;
-}
+};
 
-function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }: HomeBigProps) {
-  const { getTodayRequests } = useWebRtcRequestStore();
-  const requests = isRequestList ? getTodayRequests() : [];
+function HomeBig({
+  title,
+  icon,
+  tasks = [],
+  formatTime,
+  isRequestList = false,
+}: HomeBigProps) {
+  const navigate = useNavigate();
+
+  // Zustand store 구독 - requests만 구독하여 리렌더링 트리거
+  const allRequests = useWebRtcRequestStore((state) => state.requests);
+  const { updateRequestStatus } = useWebRtcRequestStore();
+
+  // 요청 목록 필터링 (메모이제이션으로 무한 루프 방지)
+  const requests = useMemo(() => {
+    if (!isRequestList) return [];
+
+    const today = new Date();
+    return allRequests.filter((req) => {
+      const reqDate = new Date(req.requestTime);
+      const isToday =
+        reqDate.getFullYear() === today.getFullYear() &&
+        reqDate.getMonth() === today.getMonth() &&
+        reqDate.getDate() === today.getDate();
+      return isToday;
+    });
+  }, [isRequestList, allRequests]);
+
+  // 연결 요청 수락/거절 핸들러
+  const handleResponse = async (
+    senderAccountId: number,
+    senderName: string,
+    acceptConnection: boolean
+  ) => {
+    // 유효성 검사
+    if (!senderAccountId || !senderName) {
+      console.error("유효하지 않은 요청 데이터:", {
+        senderAccountId,
+        senderName,
+      });
+      alert("요청 정보가 올바르지 않습니다.");
+      return;
+    }
+
+    try {
+      const res = await sendConnectionResponse(
+        senderAccountId,
+        senderName,
+        acceptConnection
+      );
+
+      if (!res.success) {
+        alert(res.message || "응답 처리 중 오류가 발생했습니다.");
+        return;
+      }
+
+      // 수락한 경우에만 토큰을 받고 CommunicationPage로 이동
+      if (acceptConnection && res.data?.accessToken) {
+        updateRequestStatus(senderAccountId, true, res.data.accessToken);
+
+        // 요청 목록에서 상대방 정보 찾기
+        const requests = useWebRtcRequestStore.getState().requests;
+        const request = requests.find(
+          (req) => req.senderAccountId === senderAccountId
+        );
+
+        navigate("/communication", {
+          state: {
+            token: res.data.accessToken,
+            partnerInfo: request
+              ? {
+                  senderAccountId: request.senderAccountId,
+                  name: request.name,
+                  phone: request.phone,
+                  equipmentName: request.equipmentName,
+                }
+              : null,
+          },
+        });
+      } else {
+        // 거절한 경우 상태만 업데이트
+        updateRequestStatus(senderAccountId, false);
+        alert(
+          acceptConnection
+            ? "연결 요청이 수락되었습니다."
+            : "연결 요청이 거절되었습니다."
+        );
+      }
+    } catch (error) {
+      console.error("연결 응답 중 오류:", error);
+      alert("응답 처리 중 오류가 발생했습니다.");
+    }
+  };
 
   // action 값을 actionStatus 문자열로 변환
   const getActionStatus = (action: number): string => {
@@ -43,6 +136,8 @@ function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }:
         return "수락됨";
       case "rejected":
         return "거절됨";
+      case "completed":
+        return "완료";
       default:
         return "대기중";
     }
@@ -57,6 +152,8 @@ function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }:
         return { bg: "#B6E7C8", color: "#22C55E" };
       case "rejected":
         return { bg: "#F4C0C0", color: "#EF4444" };
+      case "completed":
+        return { bg: "#E0E7FF", color: "#6366F1" };
       default:
         return { bg: "#F9E9B5", color: "#FFBC11" };
     }
@@ -73,62 +170,111 @@ function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }:
 
   return (
     <div className="home-big">
-      <div className='home-big-header'>
-        <span className='title'>{title}</span>
+      <div className="home-big-header">
+        <span className="title">{title}</span>
         <img src={icon} alt="list" />
       </div>
-      <div className="home-table">
-        <div className='list-header'>
+      <div className={`home-table ${isRequestList ? "request-list" : ""}`}>
+        <div className="list-header">
           {isRequestList ? (
             <>
-              <div className='col-worker'>작업자</div>
-              <div className='col-content'>설비</div>
-              <div className='col-status'>상태</div>
-              <div className='col-time'>요청시간</div>
+              <div className="col-worker">요청자</div>
+              <div className="col-content">설비</div>
+              <div className="col-description">요청 내용</div>
+              <div className="col-status">상태</div>
+              <div className="col-time">요청시간</div>
+              <div className="col-actions-header">응답</div>
             </>
           ) : (
             <>
-              <div className='col-worker'>작업자</div>
-              <div className='col-content'>작업 내용</div>
-              <div className='col-status'>상태</div>
-              <div className='col-time'>시간</div>
+              <div className="col-worker">작업자</div>
+              <div className="col-content">작업 내용</div>
+              <div className="col-status">상태</div>
+              <div className="col-time">시간</div>
             </>
           )}
         </div>
-        <div className='list-body'>
-        {isRequestList ? (
-          requests.length === 0 ? (
-            <p className="no-data">오늘의 요청이 없습니다.</p>
-          ) : (
-            requests.map((request) => {
-              const statusColor = getRequestStatusColor(request.status);
-              return (
-                <div key={request.id} className="work-row">
-                  <div className="col-worker">{request.name}</div>
-                  <div className="col-content">{request.equipmentName || "-"}</div>
-                  <div className="col-status">
-                    <span
-                      className="status-badge"
-                      style={{ backgroundColor: statusColor.bg, color: statusColor.color }}
-                    >
-                      {getRequestStatus(request.status)}
-                    </span>
+        <div className="list-body">
+          {isRequestList ? (
+            requests.length === 0 ? (
+              <p className="no-data">오늘의 요청이 없습니다.</p>
+            ) : (
+              requests.map((request) => {
+                const statusColor = getRequestStatusColor(request.status);
+                const isPending = request.status === "pending";
+                return (
+                  <div key={request.id} className="work-row">
+                    <div className="col-worker">{request.name}</div>
+                    <div className="col-content">
+                      {request.equipmentName || "-"}
+                    </div>
+                    <div className="col-description">
+                      {request.description && request.description.trim()
+                        ? request.description
+                        : "-"}
+                    </div>
+                    <div className="col-status">
+                      <span
+                        className="status-badge"
+                        style={{
+                          backgroundColor: statusColor.bg,
+                          color: statusColor.color,
+                        }}
+                      >
+                        {getRequestStatus(request.status)}
+                      </span>
+                    </div>
+                    <div className="col-time">
+                      {formatRequestTime(request.requestTime)}
+                    </div>
+                    <div className="col-actions">
+                      {isPending ? (
+                        <>
+                          <button
+                            className="action-button accept-button"
+                            onClick={() =>
+                              handleResponse(
+                                request.senderAccountId,
+                                request.name,
+                                true
+                              )
+                            }
+                          >
+                            수락
+                          </button>
+                          <button
+                            className="action-button reject-button"
+                            onClick={() =>
+                              handleResponse(
+                                request.senderAccountId,
+                                request.name,
+                                false
+                              )
+                            }
+                          >
+                            거절
+                          </button>
+                        </>
+                      ) : (
+                        <span className="no-action">-</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="col-time">{formatRequestTime(request.requestTime)}</div>
-                </div>
-              );
-            })
-          )
-        ) : (
-          tasks.length === 0 ? (
+                );
+              })
+            )
+          ) : tasks.length === 0 ? (
             <p className="no-data">오늘의 작업이 없습니다.</p>
           ) : (
             tasks.map((task) => {
-              const actionStatus = task.actionStatus && task.actionStatus.trim()
-                ? task.actionStatus
-                : getActionStatus(task.action);
-              const formattedTime = formatTime ? formatTime(task.lastUpdateTime) : task.lastUpdateTime;
-              
+              const actionStatus =
+                task.actionStatus && task.actionStatus.trim()
+                  ? task.actionStatus
+                  : getActionStatus(task.action);
+              const formattedTime = formatTime
+                ? formatTime(task.lastUpdateTime)
+                : task.lastUpdateTime;
+
               return (
                 <div key={task.id} className="work-row">
                   <div className="col-worker">{task.userName || "미할당"}</div>
@@ -136,9 +282,19 @@ function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }:
                   <div className="col-status">
                     <span
                       className="status-badge"
-                      style={{ 
-                        backgroundColor: backColors[task.action >= 0 && task.action < backColors.length ? task.action : 0], 
-                        color: fontColors[task.action >= 0 && task.action < fontColors.length ? task.action : 0] 
+                      style={{
+                        backgroundColor:
+                          backColors[
+                            task.action >= 0 && task.action < backColors.length
+                              ? task.action
+                              : 0
+                          ],
+                        color:
+                          fontColors[
+                            task.action >= 0 && task.action < fontColors.length
+                              ? task.action
+                              : 0
+                          ],
                       }}
                     >
                       {actionStatus}
@@ -148,12 +304,11 @@ function HomeBig({ title, icon, tasks = [], formatTime, isRequestList = false }:
                 </div>
               );
             })
-          )
-        )}
+          )}
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default HomeBig;

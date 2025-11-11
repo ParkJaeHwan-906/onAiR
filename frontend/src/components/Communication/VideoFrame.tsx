@@ -6,9 +6,10 @@ import "../../styles/Communication/VideoFrame.css";
 
 interface VideoFrameProps {
   handleSerialize: (lines: DrawingLine[]) => void;
+  onEndCall?: () => void;
 }
 
-const VideoFrame = ({ handleSerialize }: VideoFrameProps) => {
+const VideoFrame = ({ handleSerialize, onEndCall }: VideoFrameProps) => {
   const [currentTool, setCurrentTool] = useState<string>(""); // 펜, 도형, 지우개
   const [penColor, setPenColor] = useState("#000000");
 
@@ -27,6 +28,7 @@ const VideoFrame = ({ handleSerialize }: VideoFrameProps) => {
           setCurrentTool={setCurrentTool}
           penColor={penColor}
           setPenColor={setPenColor}
+          onEndCall={onEndCall}
         />
       </div>
     </div>

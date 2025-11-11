@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     EMB_ENCODING_MODE: str = "query"
     FAISS_METRIC: str = "cosine"
 
-    USE_ELASTIC: bool = True  # Hybrid 검색을 위해 기본값을 True로 변경
+    USE_ELASTIC: bool = True  # Elasticsearch 활성화 (Hybrid Search 사용)
     ES_HOST: str = "http://localhost:9200"
     ES_INDEX: str = "samkos"
 
@@ -54,6 +54,17 @@ class Settings(BaseSettings):
     # Phi-3 및 ONNX 모델 관련 설정 제거됨
 
     # =======================================
+    # 🌐 FastAPI Server URL
+    # =======================================
+    # FastAPI 서버 URL (모바일 앱에서 접근할 URL)
+    # EC2 배포: "http://k13a407.p.ssafy.io/ai"
+    # 로컬 개발: "http://localhost:8000"
+    # 같은 네트워크: "http://192.168.0.100:8000"
+    FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
+    FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
+    FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
+
+    # =======================================
     # 🔊 TTS (Text-to-Speech) - GCP TTS
     # =======================================
     GCP_TTS_CREDENTIALS_PATH: str | None = None  # GCP 서비스 계정 JSON 키 파일 경로
@@ -61,6 +72,13 @@ class Settings(BaseSettings):
     GCP_TTS_VOICE_NAME: str = "ko-KR-Standard-A"  # 한국어 여성 음성
     GCP_TTS_LANGUAGE_CODE: str = "ko-KR"
     GCP_TTS_AUDIO_ENCODING: str = "MP3"  # MP3, LINEAR16, OGG_OPUS 등
+
+    # =======================================
+    # 🐛 디버그 모드 (단계별 수동 실행)
+    # =======================================
+    DEBUG_STEP_BY_STEP: bool = False  # True: 각 단계마다 파일 트리거 대기, False: 자동 진행
+    DEBUG_STEP_TRIGGER_FILE: str = "/tmp/next_step"  # 다음 단계 진행 트리거 파일 경로
+    DEBUG_STEP_WAIT_TIMEOUT: int = 300  # 최대 대기 시간 (초, 기본 5분)
 
     class Config:
         env_file = ".env"
