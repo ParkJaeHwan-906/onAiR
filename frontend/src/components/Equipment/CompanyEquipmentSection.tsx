@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import '../../styles/CompanyEquipmentSection.css';
+import { useState, useEffect, useRef } from "react";
+import "../../styles/CompanyEquipmentSection.css";
 import {
   getEquipmentList,
   getCompanyEquipmentList,
   registCompanyEquipment,
-} from '../../api/equipment';
+} from "../../api/equipment";
 
 interface Equipment {
   id: number;
@@ -16,7 +16,9 @@ interface CompanyEquipmentSectionProps {
   equipmentRefreshKey?: number;
 }
 
-function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSectionProps) {
+function CompanyEquipmentSection({
+  equipmentRefreshKey = 0,
+}: CompanyEquipmentSectionProps) {
   const [allEquipments, setAllEquipments] = useState<Equipment[]>([]);
   const [companyEquipments, setCompanyEquipments] = useState<Equipment[]>([]);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(
@@ -47,9 +49,9 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isDropdownOpen]);
 
@@ -60,7 +62,7 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
         setAllEquipments(res.data);
       }
     } catch (error) {
-      console.error('설비 목록 조회 실패:', error);
+      console.error("설비 목록 조회 실패:", error);
     }
   };
 
@@ -71,13 +73,13 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
         setCompanyEquipments(res.data);
       }
     } catch (error) {
-      console.error('회사 설비 목록 조회 실패:', error);
+      console.error("회사 설비 목록 조회 실패:", error);
     }
   };
 
   const handleAssign = async () => {
     if (!selectedEquipmentId) {
-      alert('설비를 선택해주세요.');
+      alert("설비를 선택해주세요.");
       return;
     }
 
@@ -87,7 +89,7 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
     );
 
     if (isAlreadyRegistered) {
-      alert('이미 등록된 설비입니다.');
+      alert("이미 등록된 설비입니다.");
       return;
     }
 
@@ -98,13 +100,13 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
         setSelectedEquipmentId(null);
         await fetchAllEquipments();
         await fetchCompanyEquipments();
-        alert('설비가 등록되었습니다.');
+        alert("설비가 등록되었습니다.");
       } else {
-        alert(res.message || '설비 등록에 실패했습니다.');
+        alert(res.message || "설비 등록에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error('설비 등록 실패:', error);
-      alert(error.response?.data?.message || '설비 등록에 실패했습니다.');
+      console.error("설비 등록 실패:", error);
+      alert(error.response?.data?.message || "설비 등록에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -127,17 +129,23 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
         <div className="work-select-wrapper" ref={dropdownRef}>
           <button
             type="button"
-            className={`work-select-trigger${isDropdownOpen ? ' open' : ''}`}
+            className={`work-select-trigger${isDropdownOpen ? " open" : ""}`}
             onClick={() => setIsDropdownOpen((prev) => !prev)}
           >
             {selectedEquipment
               ? `${selectedEquipment.name} (${selectedEquipment.category})`
-              : '설비를 선택하세요'}
+              : "설비를 선택하세요"}
           </button>
           {isDropdownOpen && (
             <ul className="work-select-dropdown">
               {availableEquipments.length === 0 ? (
-                <li style={{ padding: '10px', textAlign: 'center', color: '#9CA3AF' }}>
+                <li
+                  style={{
+                    padding: "10px",
+                    textAlign: "center",
+                    color: "#9CA3AF",
+                  }}
+                >
                   등록 가능한 설비가 없습니다.
                 </li>
               ) : (
@@ -146,7 +154,7 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
                     <button
                       type="button"
                       className={`work-select-option${
-                        equipment.id === selectedEquipmentId ? ' selected' : ''
+                        equipment.id === selectedEquipmentId ? " selected" : ""
                       }`}
                       onClick={() => {
                         setSelectedEquipmentId(equipment.id);
@@ -172,7 +180,7 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
           onClick={handleAssign}
           disabled={loading || !selectedEquipmentId}
         >
-          {loading ? '등록 중...' : '회사에 설비 등록'}
+          {loading ? "등록 중..." : "회사에 설비 등록"}
         </button>
       </div>
 
@@ -196,4 +204,3 @@ function CompanyEquipmentSection({ equipmentRefreshKey = 0 }: CompanyEquipmentSe
 }
 
 export default CompanyEquipmentSection;
-

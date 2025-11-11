@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import '../../styles/EquipmentRegisterSection.css';
+import { useState, useEffect, useRef } from "react";
+import "../../styles/EquipmentRegisterSection.css";
 import {
   getEquipmentCategoryList,
   getEquipmentList,
   registEquipment,
-} from '../../api/equipment';
+} from "../../api/equipment";
 
 interface Category {
   id: number;
@@ -22,16 +22,16 @@ interface EquipmentRegisterSectionProps {
   onEquipmentAdded?: () => void;
 }
 
-function EquipmentRegisterSection({ 
-  categoryRefreshKey = 0, 
-  onEquipmentAdded 
+function EquipmentRegisterSection({
+  categoryRefreshKey = 0,
+  onEquipmentAdded,
 }: EquipmentRegisterSectionProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(
     null
   );
-  const [equipmentName, setEquipmentName] = useState('');
+  const [equipmentName, setEquipmentName] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -57,9 +57,9 @@ function EquipmentRegisterSection({
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isDropdownOpen]);
 
@@ -72,7 +72,7 @@ function EquipmentRegisterSection({
         setSelectedCategoryId(null);
       }
     } catch (error) {
-      console.error('카테고리 목록 조회 실패:', error);
+      console.error("카테고리 목록 조회 실패:", error);
     }
   };
 
@@ -83,37 +83,40 @@ function EquipmentRegisterSection({
         setEquipments(res.data);
       }
     } catch (error) {
-      console.error('설비 목록 조회 실패:', error);
+      console.error("설비 목록 조회 실패:", error);
     }
   };
 
   const handleRegister = async () => {
     if (!selectedCategoryId) {
-      alert('카테고리를 선택해주세요.');
+      alert("카테고리를 선택해주세요.");
       return;
     }
 
     if (!equipmentName.trim()) {
-      alert('설비 이름을 입력해주세요.');
+      alert("설비 이름을 입력해주세요.");
       return;
     }
 
     try {
       setLoading(true);
-      const res = await registEquipment(selectedCategoryId, equipmentName.trim());
+      const res = await registEquipment(
+        selectedCategoryId,
+        equipmentName.trim()
+      );
       if (res.success) {
-        setEquipmentName('');
+        setEquipmentName("");
         await fetchEquipments();
         if (onEquipmentAdded) {
           onEquipmentAdded();
         }
-        alert('설비가 등록되었습니다.');
+        alert("설비가 등록되었습니다.");
       } else {
-        alert(res.message || '설비 등록에 실패했습니다.');
+        alert(res.message || "설비 등록에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error('설비 등록 실패:', error);
-      alert(error.response?.data?.message || '설비 등록에 실패했습니다.');
+      console.error("설비 등록 실패:", error);
+      alert(error.response?.data?.message || "설비 등록에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -131,12 +134,10 @@ function EquipmentRegisterSection({
         <div className="work-select-wrapper" ref={dropdownRef}>
           <button
             type="button"
-            className={`work-select-trigger${isDropdownOpen ? ' open' : ''}`}
+            className={`work-select-trigger${isDropdownOpen ? " open" : ""}`}
             onClick={() => setIsDropdownOpen((prev) => !prev)}
           >
-            {selectedCategory
-              ? selectedCategory.name
-              : '카테고리를 선택하세요'}
+            {selectedCategory ? selectedCategory.name : "카테고리를 선택하세요"}
           </button>
           {isDropdownOpen && (
             <ul className="work-select-dropdown">
@@ -145,7 +146,7 @@ function EquipmentRegisterSection({
                   <button
                     type="button"
                     className={`work-select-option${
-                      category.id === selectedCategoryId ? ' selected' : ''
+                      category.id === selectedCategoryId ? " selected" : ""
                     }`}
                     onClick={() => {
                       setSelectedCategoryId(category.id);
@@ -170,7 +171,7 @@ function EquipmentRegisterSection({
           value={equipmentName}
           onChange={(e) => setEquipmentName(e.target.value)}
           onKeyPress={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               handleRegister();
             }
           }}
@@ -181,7 +182,7 @@ function EquipmentRegisterSection({
           onClick={handleRegister}
           disabled={loading}
         >
-          {loading ? '등록 중...' : '설비 등록'}
+          {loading ? "등록 중..." : "설비 등록"}
         </button>
       </div>
 
@@ -205,4 +206,3 @@ function EquipmentRegisterSection({
 }
 
 export default EquipmentRegisterSection;
-
