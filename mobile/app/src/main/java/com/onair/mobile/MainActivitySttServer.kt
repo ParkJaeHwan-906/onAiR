@@ -288,7 +288,24 @@ class MainActivitySttServer : AppCompatActivity() {
                         addLog("✅ AI_SUPPORTER 분기 처리 시작")
                         
                         // 모바일 UI 업데이트: Socket.IO로 받은 intent_result 이벤트를 통해 처리
-                        // 1. 로컬 음성 파일 재생: "AI_Supporter 기능을 시작합니다. 오류 탐지."
+                        // 1. 음성 파일 재생 시작 시점에 "AI Supporter on" 화면 표시 (1초간)
+                        runOnUiThread {
+                            updateIntentUI(IntentType.AI_SUPPORTER, "AI Supporter on")
+                        }
+                        Log.i(TAG, "📱 UI 업데이트: AI Supporter on (1초간 표시)")
+                        addLog("📱 UI: AI Supporter on")
+                        
+                        // 2. 1초 후 "오류 탐지 중..." 화면 표시 (CV 결과를 받을 때까지 유지)
+                        lifecycleScope.launch {
+                            kotlinx.coroutines.delay(1000) // 1초 대기
+                            runOnUiThread {
+                                updateIntentUI(IntentType.AI_SUPPORTER, "오류 탐지 중...")
+                            }
+                            Log.i(TAG, "📱 UI 업데이트: 오류 탐지 중... (CV 결과 대기 중)")
+                            addLog("📱 UI: 오류 탐지 중...")
+                        }
+                        
+                        // 3. 로컬 음성 파일 재생: "AI_Supporter 기능을 시작합니다. 오류 탐지."
                         Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
                         addLog("🔊 AI_SUPPORTER 음성 파일 재생: $AI_SUPPORTER_AUDIO_FILE")
                         
@@ -296,23 +313,12 @@ class MainActivitySttServer : AppCompatActivity() {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
                             addLog("✅ AI_SUPPORTER 음성 파일 재생 완료")
-                            
-                            // 2. UI 업데이트: "AI_SUPPORTER on" 화면 표시
-                            runOnUiThread {
-                                updateIntentUI(IntentType.AI_SUPPORTER, "AI_SUPPORTER on")
-                            }
-                            
-                            // 3. 잠시 후 "오류 분석 중입니다. 움직이지 말아주세요." 화면 표시
-                            lifecycleScope.launch {
-                                kotlinx.coroutines.delay(1000) // 재생 완료 후 1초 대기
-                                runOnUiThread {
-                                    updateIntentUI(IntentType.AI_SUPPORTER, "오류 분석 중입니다. 움직이지 말아주세요.")
-                                }
-                            }
+                            // 음성 파일 재생 완료 후에도 "오류 탐지 중..." 화면은 CV 결과를 받을 때까지 유지됨
                         }
                         
                         // CV 모델은 FastAPI 서버에서 실행됨
                         // 오류 탐지 실패 시 cv_detection_failed 이벤트를 통해 알림 받음
+                        // cv_detection_failed 이벤트 수신 시 "오류 탐지 중..." 화면이 업데이트됨
                         // 라즈베리파이 제어는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
                         // TODO: CV 연결 구현 예정 (현재는 비워둠)
                     }
@@ -448,15 +454,21 @@ class MainActivitySttServer : AppCompatActivity() {
     /**
      * Socket.IO로부터 CV 탐지 실패 수신 처리
      * FastAPI 서버에서 CV 모델이 오류를 탐지하지 못했을 때 전송
+     * "오류 탐지 중..." 화면을 업데이트함
      */
     private fun handleCvDetectionFailed(cvFailed: CvDetectionFailedDto) {
         Log.i(TAG, "📩 CV 탐지 실패 수신: ${cvFailed.message}")
+        addLog("📩 CV 탐지 실패: ${cvFailed.message}")
         
         lifecycleScope.launch {
             try {
-                // UI 업데이트: "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
+                // UI 업데이트: "오류 탐지 중..." 화면을 CV 결과 메시지로 업데이트
                 val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
-                updateIntentUI(IntentType.AI_SUPPORTER, message)
+                runOnUiThread {
+                    updateIntentUI(IntentType.AI_SUPPORTER, message)
+                }
+                Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
+                addLog("📱 UI: CV 탐지 실패 메시지")
                 
                 // 라즈베리파이 제어는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
                 // (라즈베리파이에 마이크 켜고 Streaming STT 세션 시작)
