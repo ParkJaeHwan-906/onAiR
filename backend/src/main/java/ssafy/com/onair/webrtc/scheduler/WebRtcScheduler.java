@@ -1,6 +1,7 @@
 package ssafy.com.onair.webrtc.scheduler;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ssafy.com.onair.sse.manager.SseManager;
@@ -9,6 +10,7 @@ import ssafy.com.onair.webrtc.manager.WebRtcManager;
 import java.time.LocalDateTime;
 import java.util.StringTokenizer;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class WebRtcScheduler {
@@ -28,6 +30,7 @@ public class WebRtcScheduler {
                 Long senderAccountId = Long.parseLong(st.nextToken());
                 Long receiverAccountId = Long.parseLong(st.nextToken());
                 sseManager.sendRtcCancelEvent(senderAccountId, receiverAccountId);
+                log.info("{} room was closed", roomName);
             }
         }
     }
