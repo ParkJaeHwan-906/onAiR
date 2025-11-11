@@ -38,6 +38,7 @@ class SocketIoSttClient(
     private val onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
     private val onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
     private val onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
+    private val onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private val onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
     private val onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
     private val onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -280,6 +281,18 @@ class SocketIoSttClient(
                 }
             }
             
+            // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
+            socket?.on("wakeword_detected") { args ->
+                try {
+                    val data = args[0] as? JSONObject
+                    Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
+                    onWakewordDetected?.invoke()
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Wakeword 감지 이벤트 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
             // 서버 메시지 수신 (디버깅용)
             socket?.on("server_message") { args ->
                 val data = args[0] as? JSONObject
@@ -428,6 +441,32 @@ class SocketIoSttClient(
             true
         } catch (e: Exception) {
             Log.e(TAG, "❌ 라즈베리파이 제어 명령 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * 모바일 음성 파일 재생 완료 이벤트 전송
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendWakewordAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("wakeword_audio_completed", payload)
+            Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
             e.printStackTrace()
             false
         }

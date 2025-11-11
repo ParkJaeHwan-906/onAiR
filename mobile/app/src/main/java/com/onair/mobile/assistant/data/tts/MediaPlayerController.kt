@@ -85,6 +85,62 @@ class MediaPlayerController(private val context: Context) {
     }
     
     /**
+     * 로컬 음성 파일 재생 (assets 또는 raw 폴더)
+     * 
+     * @param fileName 파일명 (예: "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3")
+     * @param onCompletion 재생 완료 콜백
+     */
+    suspend fun playLocalAudio(fileName: String, onCompletion: (() -> Unit)? = null) {
+        try {
+            // assets 폴더에서 파일 읽기
+            val assetManager = context.assets
+            val inputStream = assetManager.open(fileName)
+            
+            // 임시 파일 생성
+            val tempFile = File(context.cacheDir, "temp_local_audio_${System.currentTimeMillis()}.mp3")
+            tempFile.outputStream().use { output ->
+                inputStream.copyTo(output)
+            }
+            inputStream.close()
+            
+            Log.d(TAG, "📁 로컬 오디오 파일 복사: ${tempFile.absolutePath}")
+            
+            // 기존 MediaPlayer 정리
+            mediaPlayer?.release()
+            
+            // MediaPlayer로 재생
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(tempFile.absolutePath)
+                prepare()
+                setOnCompletionListener {
+                    release()
+                    mediaPlayer = null
+                    // 재생 후 임시 파일 삭제
+                    if (tempFile.exists()) {
+                        tempFile.delete()
+                        Log.d(TAG, "🗑️ 임시 오디오 파일 삭제")
+                    }
+                    // 재생 완료 콜백 호출
+                    onCompletion?.invoke()
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "❌ MediaPlayer 오류: what=$what, extra=$extra")
+                    release()
+                    mediaPlayer = null
+                    onCompletion?.invoke()  // 오류 발생 시에도 콜백 호출
+                    false
+                }
+                start()
+                Log.i(TAG, "▶️ 로컬 오디오 재생 시작: $fileName")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 로컬 오디오 재생 실패: ${e.message}")
+            e.printStackTrace()
+            onCompletion?.invoke()  // 오류 발생 시에도 콜백 호출
+        }
+    }
+    
+    /**
      * MediaPlayer 리소스 정리
      */
     fun cleanup() {
