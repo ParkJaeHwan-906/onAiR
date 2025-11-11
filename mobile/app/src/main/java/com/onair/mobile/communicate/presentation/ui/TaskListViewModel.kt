@@ -24,10 +24,10 @@ class TaskListViewModel(
     private val _taskList = MutableStateFlow<List<TaskResponse>>(emptyList())
     val taskList = _taskList.asStateFlow()
     val incompletedTask = _taskList.map { list ->
-        list.filter { it.action != 4 }
+        list.filter { it.action != 3 }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val completedTask = _taskList.map { list ->
-        list.filter { it.action == 4 }
+        list.filter { it.action == 3 }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {

@@ -7,6 +7,7 @@ hiltAndroid = "2.57.2"
 hiltAndroidCompiler = "2.57.2"
 hiltNavigationFragment = "1.3.0"
 javaWebsocket = "1.6.0"
+javaWebsocketVersion = "1.5.6"
 json = "20250517"
 kotlin = "2.2.21"
 coreKtx = "1.17.0"
@@ -21,9 +22,9 @@ material = "1.13.0"
 activity = "1.11.0"
 constraintlayout = "2.2.1"
 okhttpEventsource = "4.1.1"
-onnxruntimeAndroid = "1.23.2"
 retrofit = "3.0.0"
 retrofit2KotlinxSerializationConverter = "1.0.0"
+socketIoClient = "2.1.2"
 # onnxruntimeAndroid = "1.23.2"  # 제거됨 (Gemini-Flash로 Intent 분류 대체)
 
 [libraries]
@@ -40,6 +41,7 @@ androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hiltAndroid" }
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroidCompiler" }
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "javaWebsocket" }
+java-websocket-v156 = { module = "org.java-websocket:Java-WebSocket", version.ref = "javaWebsocketVersion" }
 json = { module = "org.json:json", version.ref = "json" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -54,6 +56,7 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 okhttp-eventsource = { module = "com.launchdarkly:okhttp-eventsource", version.ref = "okhttpEventsource" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit2-kotlinx-serialization-converter = { module = "com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter", version.ref = "retrofit2KotlinxSerializationConverter" }
+socket-io-client = { module = "io.socket:socket.io-client", version.ref = "socketIoClient" }
 # onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntimeAndroid" }  # 제거됨
 
 [plugins]
