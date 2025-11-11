@@ -163,10 +163,20 @@ class GcpBufferedStt:
         # 마이크 안정화 대기 (0.1초)
         await asyncio.sleep(0.1)
         
+        # 큐에 쌓인 오래된 데이터 제거 (이전 세션의 잔여 데이터 방지)
+        if hasattr(mic, 'q'):
+            while not mic.q.empty():
+                try:
+                    mic.q.get_nowait()
+                except:
+                    break
+            print("🧹 큐 초기화 완료 (이전 데이터 제거)")
+        
         print("=" * 60)
         print(f"🎤 [단계 3-1] 음성 수집 시작")
         print(f"   수집 시간: {self.buffer_duration}초")
         print(f"   음성 소스: {type(mic).__name__}")
+        print(f"   샘플레이트: {self.rate} Hz")
         print("=" * 60)
         
         # 3~5초 동안 음성 수집
@@ -239,9 +249,35 @@ class GcpBufferedStt:
             traceback.print_exc()
             raise
 
+        # 오디오 길이 계산 (16비트 PCM: 2 bytes per sample)
+        # mic.read()는 이미 16000Hz로 리샘플링된 데이터를 반환하므로 self.rate 사용
+        audio_samples = len(audio_data) // 2  # 16비트 = 2 bytes per sample
+        audio_duration_sec = audio_samples / self.rate
+        
         print("=" * 60)
         print("📤 [단계 3-1] GCP STT 요청 전송 중...")
-        print(f"   오디오 크기: {len(audio_data)} bytes ({len(audio_data) / 2 / self.rate:.2f}초)")
+        print(f"   오디오 크기: {len(audio_data)} bytes")
+        print(f"   샘플 수: {audio_samples} samples")
+        print(f"   샘플레이트: {self.rate} Hz")
+        print(f"   계산된 길이: {audio_duration_sec:.2f}초")
+        print(f"   예상 길이: {target_duration:.2f}초")
+        
+        # 오디오 길이 검증 및 자동 조정
+        if abs(audio_duration_sec - target_duration) > 1.0:
+            print(f"   ⚠️ 경고: 오디오 길이가 예상과 다릅니다!")
+            print(f"      차이: {abs(audio_duration_sec - target_duration):.2f}초")
+            print(f"      가능한 원인: 마이크 샘플레이트 설정 오류 또는 큐에 데이터 과다 누적")
+            
+            # GCP STT 동기 API 제한: 1분(60초) 초과 시 오디오 자르기
+            MAX_DURATION_SEC = 60.0
+            if audio_duration_sec > MAX_DURATION_SEC:
+                print(f"   ✂️ 오디오 길이가 {MAX_DURATION_SEC}초를 초과합니다. 자동으로 자릅니다.")
+                max_samples = int(MAX_DURATION_SEC * self.rate * 2)  # 2 bytes per sample
+                audio_data = audio_data[:max_samples]
+                audio_samples = len(audio_data) // 2
+                audio_duration_sec = audio_samples / self.rate
+                print(f"   ✅ 오디오 자르기 완료: {audio_duration_sec:.2f}초 ({len(audio_data)} bytes)")
+        
         print("=" * 60)
         await wait_for_next_step_async("GCP STT 요청 전송 준비 완료", "3-1")
         
