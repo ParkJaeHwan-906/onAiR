@@ -142,21 +142,43 @@ function AppLayout() {
   useEffect(() => {
     if (!eventSource) return;
 
-    const handleMessage = (event: MessageEvent) => {
+    const dispatchEventPayload = (event: MessageEvent) => {
       try {
-        const data =
+        const parsed =
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        processEvent(data);
+
+        if (parsed?.type && parsed?.payload) {
+          processEvent(parsed.payload);
+        } else {
+          processEvent(parsed);
+        }
       } catch (error) {
         console.error("SSE 데이터 파싱 실패", error);
       }
     };
 
     const previousHandler = eventSource.onmessage;
-    eventSource.onmessage = (event: MessageEvent) => {
+    const onMessage = (event: MessageEvent) => {
       if (previousHandler) previousHandler(event);
-      handleMessage(event);
+      dispatchEventPayload(event);
     };
+
+    eventSource.onmessage = onMessage;
+
+    const namedEvents = [
+      "taskAssign",
+      "taskCancel",
+      "taskEnd",
+      "callRequest",
+      "callResponse",
+      "rtcCanceled",
+    ];
+
+    const registeredHandlers = namedEvents.map((type) => {
+      const handler = (event: MessageEvent) => dispatchEventPayload(event);
+      eventSource.addEventListener(type, handler);
+      return { type, handler };
+    });
 
     return () => {
       if (previousHandler) {
@@ -164,8 +186,52 @@ function AppLayout() {
       } else {
         eventSource.onmessage = null;
       }
+
+      registeredHandlers.forEach(({ type, handler }) => {
+        eventSource.removeEventListener(type, handler);
+      });
     };
   }, [eventSource, processEvent]);
+
+  useEffect(() => {
+    const handleIncomingCall = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      processEvent(detail);
+    };
+
+    const handleCallResponse = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      processEvent(detail);
+    };
+
+    const handleRtcCanceled = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      processEvent(detail);
+    };
+
+    window.addEventListener("incomingCall", handleIncomingCall as EventListener);
+    window.addEventListener("callResponse", handleCallResponse as EventListener);
+    window.addEventListener("rtcCanceled", handleRtcCanceled as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        "incomingCall",
+        handleIncomingCall as EventListener
+      );
+      window.removeEventListener(
+        "callResponse",
+        handleCallResponse as EventListener
+      );
+      window.removeEventListener(
+        "rtcCanceled",
+        handleRtcCanceled as EventListener
+      );
+    };
+  }, [processEvent]);
+
 
   useEffect(() => {
     if (!myInfo || pendingEventsRef.current.length === 0) return;
