@@ -126,7 +126,12 @@ class WakewordDetector:
                         buffer.clear()
         
         try:
-            with sd.InputStream(callback=callback, channels=1, samplerate=SAMPLE_RATE):
+            with sd.InputStream(
+            callback=callback,
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            device='hw:CARD=sndrpigooglevoi,DEV=0'  # ← 마이크 장치 지정!
+            ):
                 print("🎧 Wakeword 감지 대기 중... (onAir)")
                 while self.is_running:
                     time.sleep(0.1)
