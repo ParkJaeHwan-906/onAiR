@@ -207,7 +207,7 @@ async def process_frame(frame_bgr, sid=None):
             mean_score = np.mean(match_scores)
         else:
             mean_score = 0.0
-        # print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
+        print(f"✅ Patch refine: {len(prev_valid_refined)} pts | meanNCC={mean_score:.3f}")
 
     prev_valid = np.array(prev_valid_refined, dtype=np.float32).reshape(-1,1,2)
     next_valid = np.array(next_valid_refined, dtype=np.float32).reshape(-1,1,2)
