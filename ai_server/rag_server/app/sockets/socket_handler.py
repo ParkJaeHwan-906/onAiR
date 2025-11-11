@@ -1192,9 +1192,12 @@ async def handle_ar_marker(sid, data):
     marker_idx = len(ar_markers) + 1
     marker_info = {
         "idx": marker_idx,
-        "point": world_point,
-        "size": round(rel_size, 3),
-        "tpl": patch 
+        "info": {
+            "x": round(wx, 3),
+            "y": round(wy, 3),
+            "size": round(rel_size, 3),
+            "tpl": patch
+        }
     }
     ar_markers.append(marker_info)
 
