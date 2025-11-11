@@ -5,13 +5,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TaskResponse(
     val action: Int,
-    val actionStatus: String,
-    val equipmentId: Int,
+    val actionStatus: String?,
+    val equipmentId: Long,
     val equipmentName: String,
-    val id: Int,
+    val id: Long,
     val lastUpdateTime: String,
     val request: String,
-    val solution: String,
-    val userAccountId: Int,
+    val solution: String?,
+    val userAccountId: Long,
     val userName: String
 )

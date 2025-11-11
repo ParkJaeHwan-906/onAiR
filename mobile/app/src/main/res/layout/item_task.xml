@@ -5,7 +5,8 @@
     android:orientation="horizontal"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="2dp">
+    android:paddingBottom="10dp"
+    android:paddingTop="8dp">
     <CheckBox
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -37,7 +38,7 @@
         android:paddingBottom="2dp"
         android:textColor="@color/colorPrimary"
         android:layout_marginTop="5dp"
-        android:layout_marginBottom="3dp"
+        android:layout_marginBottom="5dp"
         app:layout_constraintStart_toEndOf="@id/task_done_check" />
 
     <TextView
@@ -49,6 +50,6 @@
         app:layout_constraintStart_toEndOf="@id/equipment_name"
         app:layout_constraintBaseline_toBaselineOf="@id/equipment_name"
         android:layout_marginTop="5dp"
-        android:layout_marginStart="5dp"/>
+        android:layout_marginStart="5dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

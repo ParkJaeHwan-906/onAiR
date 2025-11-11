@@ -83,6 +83,7 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
+    implementation libs.androidx.fragment.ktx
 
     // WebSocket 서버 (라즈베리파이로부터 STT 텍스트 수신)
     implementation libs.java.websocket
@@ -109,6 +110,6 @@ dependencies {
     implementation libs.retrofit2.kotlinx.serialization.converter
     implementation libs.androidx.core.splashscreen
     implementation libs.logging.interceptor
-    testImplementation libs.okhttp.sse
+    implementation(libs.okhttp.eventsource)
 
 }

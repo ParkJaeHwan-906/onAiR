@@ -1,6 +1,8 @@
 // import { VideoTrack } from "@livekit/components-react"
+import { useTracks, VideoTrack } from "@livekit/components-react";
 import type { DrawingLine } from "../../types/DrawingLine";
 import { OverlayCanvas } from "./OverlayCanvas";
+import { Track } from "livekit-client";
 
 interface VideoProps {
   handleSerialize: (lines: DrawingLine[]) => void;
@@ -12,6 +14,11 @@ export const VideoCanvas = ({
   penColor,
   currentTool,
 }: VideoProps) => {
+  const cameraTracks = useTracks([Track.Source.Camera])
+  if (cameraTracks.length === 0) {
+    return <div>Loading...</div>
+  }
+  const androidTrackRef = cameraTracks[0]
   return (
     <div
       style={{
@@ -33,8 +40,11 @@ export const VideoCanvas = ({
           zIndex: 1,
         }}
       >
-        {/* <VideoTrack /> */}
-        <p style={{ color: "white" }}>(Video)</p>
+        <VideoTrack
+          trackRef={androidTrackRef}
+          style={{ width: "100%", height: "100%" }}
+        />
+        {/* <p style={{ color: "white" }}>(Video)</p> */}
       </div>
       <div
         style={{

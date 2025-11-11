@@ -1,17 +1,15 @@
 package com.onair.mobile.communicate.data
 
-import android.health.connect.datatypes.units.BloodGlucose
 import android.util.Log
 import com.onair.mobile.communicate.PreferenceUtil
-import com.onair.mobile.communicate.data.api.ApiResponse
 import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.api.dto.ApiResponse
 import com.onair.mobile.communicate.data.api.dto.LoginRequest
-import com.onair.mobile.communicate.data.api.dto.LoginResponse
 import com.onair.mobile.communicate.data.api.dto.RefreshRequest
+import com.onair.mobile.communicate.data.api.dto.TokenData
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.http.Tag
 import java.lang.Exception
 
 class AuthRepository(
@@ -35,15 +33,16 @@ class AuthRepository(
 //        }
 //    }
     fun login(email: String, password : String, onResult: (Result<Unit>) -> Unit) {
-        apiService.login(LoginRequest(email, password)).enqueue(object : Callback<LoginResponse> {
+        apiService.login(LoginRequest(email, password)).enqueue(object : Callback<ApiResponse<TokenData>> {
             override fun onResponse(
-                call: Call<LoginResponse?>,
-                response: Response<LoginResponse?>
+                call: Call<ApiResponse<TokenData>?>,
+                response: Response<ApiResponse<TokenData>?>
             ) {
-                if (response.isSuccessful) {
-                    val accessToken = response.body()?.accessToken
-                    val refreshToken = response.body()?.refreshToken
-                    if (!accessToken.isNullOrEmpty()) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val data = response.body()?.data
+                    if (data != null) {
+                        val accessToken = data.accessToken
+                        val refreshToken = data.refreshToken
                         dataStore.setAccessToken(accessToken.toString())
                         dataStore.setRefreshToken(refreshToken.toString())
                         onResult(Result.success(Unit))
@@ -57,7 +56,7 @@ class AuthRepository(
             }
 
             override fun onFailure(
-                call: Call<LoginResponse?>,
+                call: Call<ApiResponse<TokenData>?>,
                 t: Throwable
             ) {
                 Log.e("ticket", t.message.toString())
@@ -70,22 +69,24 @@ class AuthRepository(
         return dataStore.getRefreshToken()
     }
     fun getAccessToken(): String {
-        return dataStore.getRefreshToken()
+        return dataStore.getAccessToken()
     }
     fun refreshAccessToken(refreshToken : String, onResult: (Result<Unit>) -> Unit) {
-        apiService.refresh(RefreshRequest(refreshToken)).enqueue(object : Callback<LoginResponse>{
+        apiService.refresh(RefreshRequest(refreshToken)).enqueue(object : Callback<ApiResponse<TokenData>>{
             override fun onResponse(
-                call: Call<LoginResponse?>,
-                response: Response<LoginResponse?>
+                call: Call<ApiResponse<TokenData>?>,
+                response: Response<ApiResponse<TokenData>?>
             ) {
-                if (response.isSuccessful) {
-                    val accessToken = response.body()?.accessToken
-                    val refreshToken = response.body()?.refreshToken
-                    if (!accessToken.isNullOrEmpty()) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val data = response.body()?.data
+                    if (data != null) {
+                        val accessToken = data.accessToken
+                        val refreshToken = data.refreshToken
                         dataStore.setAccessToken(accessToken.toString())
                         dataStore.setRefreshToken(refreshToken.toString())
                         onResult(Result.success(Unit))
-                    }else {
+                    }
+                    else {
                         onResult(Result.failure(kotlin.Exception("토큰이 비어 있음")))
                     }
                 } else {
@@ -94,7 +95,7 @@ class AuthRepository(
             }
 
             override fun onFailure(
-                call: Call<LoginResponse?>,
+                call: Call<ApiResponse<TokenData>?>,
                 t: Throwable
             ) {
                 Log.e("ticket", t.message.toString())

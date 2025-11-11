@@ -22,7 +22,7 @@ class LoginActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContentView(binding.root)
 
-        val apiService = ApiClient().getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
         val repository = AuthRepository(apiService, PreferenceUtil(this))
         val viewModel = LoginViewModel(repository)
 

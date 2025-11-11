@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="TextDefault">
+        <item name="fontFamily">@font/pretendard_regular</item>
+        <item name="color">@color/black</item>
+    </style>
+    <style name="button.login_button" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/colorPrimary</item>
+        <item name="round">12dp</item>
+    </style>
+
+    <style name="Base.Widget.Material3.BottomNavigationView" parent="Widget.MaterialComponents.BottomNavigationView" tools:ignore="PrivateResource">
+        <item name="android:background">@macro/m3_comp_nav_bar_container_color</item>
+        <item name="backgroundTint">@null</item>
+        <item name="elevation">@dimen/m3_comp_nav_bar_container_elevation</item>
+        <item name="itemActiveIndicatorStyle">@style/Widget.Material3.BottomNavigationView.ActiveIndicator</item>
+        <item name="itemTextAppearanceInactive">@macro/m3_comp_nav_bar_item_horizontal_label_text_font</item>
+        <item name="itemTextAppearanceActive">@macro/m3_comp_nav_bar_item_horizontal_label_text_font</item>
+        <item name="itemRippleColor">@color/m3_navigation_bar_ripple_color_selector</item>
+        <item name="itemIconSize">@dimen/m3_comp_nav_bar_item_icon_size</item>
+        <item name="itemIconTint">@color/m3_navigation_bar_item_with_indicator_icon_tint</item>
+        <item name="itemTextColor">@color/m3_navigation_bar_item_with_indicator_label_tint</item>
+        <item name="itemPaddingTop">@dimen/m3_bottom_nav_item_padding_top</item>
+        <item name="itemPaddingBottom">@dimen/m3_bottom_nav_item_padding_bottom</item>
+        <item name="android:minHeight">@dimen/m3_bottom_nav_min_height</item>
+        <item name="materialThemeOverlay">@style/ThemeOverlay.Material3.BottomNavigationView</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.M3.Comp.NavBar.Container.Shape</item>
+        <item name="activeIndicatorLabelPadding">@dimen/m3_navigation_item_active_indicator_label_padding</item>
+        <item name="iconLabelHorizontalSpacing">@dimen/m3_navigation_item_active_indicator_label_padding</item>
+    </style>
+    <style name="CustomBottomNavigationView" parent="Base.Widget.Material3.BottomNavigationView">
+        <item name="background">@color/colorSurface</item>
+        <item name="itemIconTint">@color/colorPrimary</item>
+        <item name="itemTextColor">@color/colorPrimary</item>
+        <item name="backgroundTint">@color/colorSurface</item>
+        <item name="itemRippleColor">@color/colorPrimary</item>
+    </style>
+    <style name="CustomTabLayout" parent="Widget.Material3.TabLayout.Secondary">
+<!--        <item name="tabTextColor">@color/colorPrimary</item>-->
+    </style>
+</resources>
