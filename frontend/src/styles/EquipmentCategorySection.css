@@ -4,19 +4,20 @@
   height: 100%;
   border-radius: 16px;
   padding: 25px;
-  background-color: #FFFFFF;
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.4);
+  background-color: var(--color-surface-base);
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  font-family: 'NotoSansKR';
+  font-family: var(--font-family-base);
   box-sizing: border-box;
   overflow: hidden;
+  color: var(--color-text-primary);
 }
 
 .section-header {
-  font-size: 20px;
+  font-size: var(--font-size-title);
   font-weight: 800;
-  color: #2E2E2E;
+  color: var(--color-text-primary);
   margin-bottom: 20px;
 }
 
@@ -32,15 +33,15 @@
   padding: 0 16px;
   border-radius: 16px;
   border: none;
-  background-color: #ECEDF1;
-  font-size: 14px;
+  background-color: #ecedf1;
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
-  color: #2E2E2E;
-  font-family: 'NotoSansKR';
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
 }
 
 .category-input::placeholder {
-  color: #9CA3AF;
+  color: var(--color-text-muted);
 }
 
 .category-add-button {
@@ -48,13 +49,13 @@
   height: 40px;
   border-radius: 16px;
   border: none;
-  background-color: #3B4A6B;
-  color: #FFFFFF;
-  font-size: 14px;
+  background-color: #3b4a6b;
+  color: #ffffff;
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  font-family: 'NotoSansKR';
+  font-family: var(--font-family-base);
 }
 
 .category-add-button:hover:not(:disabled) {
@@ -87,27 +88,26 @@
 }
 
 .category-list::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
+  background: #d1d5db;
   border-radius: 3px;
 }
 
 .category-list::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: #9ca3af;
 }
 
 .category-item {
   padding: 12px 16px;
   border-radius: 12px;
-  background-color: #F9FAFB;
-  font-size: 14px;
-  font-weight: 500;
-  color: #2E2E2E;
+  background-color: #f9fafb;
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 .empty-message {
   padding: 20px;
   text-align: center;
-  color: #9CA3AF;
-  font-size: 14px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-md);
 }
-

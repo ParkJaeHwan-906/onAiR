@@ -12,12 +12,12 @@ MAX_AGE = 30
 # intrinsics 로드
 def _load_K():
     # app/ar/motion_core.py 기준 ../data/K.npy
-    here = os.path.dirname(__file__)
-    k_path = os.path.join(here, "..", "data", "K.npy")
-    if os.path.exists(k_path):
-        return np.load(k_path).astype(np.float32)
+    # here = os.path.dirname(__file__)
+    # k_path = os.path.join(here, "..", "data", "K.npy")
+    # if os.path.exists(k_path):
+    #     return np.load(k_path).astype(np.float32)
     # fallback (640x480 가정)
-    fx, fy, cx, cy = 800, 800, 320, 240
+    fx, fy, cx, cy = 942.34, 940.92, 315.93, 223.13
     return np.array([[fx, 0, cx],
                      [0, fy, cy],
                      [0, 0, 1]], dtype=np.float32)
@@ -431,3 +431,99 @@ def refine_patch_position(gray_now, u_pred, v_pred, tpl, search_r=14):
     u_ref = (x0c + dx) + half_t
     v_ref = (y0c + dy) + half_t
     return (float(u_ref), float(v_ref), float(max_val))
+
+def update_marker_position(marker_u, marker_v, frame_shape=(640,480)):
+    """
+    📍 Optical Flow + Essential Matrix 기반 마커 좌표 업데이트
+    -------------------------------------------------------------
+    이 함수는 클라이언트 뷰파인더(0~968, 0~857) 상의 클릭 좌표 (u,v)를
+    최신 프레임의 카메라 움직임에 맞춰 보정해주는 역할을 한다.
+
+    입력:
+        marker_u, marker_v : float
+            클라이언트에서 들어온 마커의 초기 클릭 좌표 (뷰파인더 기준)
+        frame_shape : tuple(int, int)
+            (frame_width, frame_height) 형태. 기본 640x480.
+
+    반환:
+        (u_new, v_new, z_new)
+            u_new, v_new : Optical Flow 기반으로 이동 보정된 뷰파인더 좌표
+            z_new         : Essential Matrix 기반 상대 깊이 값
+    -------------------------------------------------------------
+    처리 흐름:
+      1️⃣ 전 프레임 대비 Optical Flow 인라이어(전역 이동) 이용 → 2D 이동행렬 추정
+      2️⃣ 어파인 변환을 역적용하여 카메라 이동에 따라 마커 보정
+      3️⃣ Essential Matrix 기반의 상대 깊이(z) 추정
+      4️⃣ 결과를 뷰파인더 해상도(0~968,0~857)로 매핑
+    -------------------------------------------------------------
+    주의:
+      - y 축은 OpenCV 이미지 좌표계와 동일하게 아래로 증가.
+      - 따라서 별도의 반전 처리는 필요하지 않음.
+    """
+
+    # ==========================================================
+    # 🔧 (1) Optical Flow 인라이어 불러오기
+    # ==========================================================
+    from app.ar.motion_core import last_inlier_prev, last_inlier_next, last_parallax_med, K
+
+    if last_inlier_prev is None or last_inlier_next is None or len(last_inlier_prev) < 8:
+        # Optical Flow 결과가 충분하지 않으면 이동 보정 생략
+        return marker_u, marker_v, 0.0
+
+    # ==========================================================
+    # 🔧 (2) Affine Transform (전역 2D 이동 추정)
+    # ----------------------------------------------------------
+    #   카메라가 오른쪽으로 움직였다면, 화면의 마커는 왼쪽으로 이동해야 함.
+    #   따라서 전역 이동행렬 H를 계산하고, 역변환 H_inv를 적용한다.
+    # ==========================================================
+    H, inliers = cv2.estimateAffine2D(last_inlier_prev, last_inlier_next, ransacReprojThreshold=2.0)
+    if H is None:
+        return marker_u, marker_v, 0.0
+
+    # Affine → Homography (3x3)로 확장 후 역행렬 계산
+    try:
+        H_inv = np.linalg.inv(np.vstack([H, [0, 0, 1]]))[:2, :]
+    except np.linalg.LinAlgError:
+        H_inv = np.eye(2, 3, dtype=np.float32)
+
+    # ==========================================================
+    # 🔧 (3) 뷰파인더 좌표 → 프레임 좌표로 스케일 변환
+    # ==========================================================
+    frame_w, frame_h = frame_shape
+    view_w, view_h = 968, 857
+
+    u_frame = marker_u * (frame_w / view_w)
+    v_frame = marker_v * (frame_h / view_h)
+
+    # ==========================================================
+    # 🔧 (4) 역 Affine 변환 적용 (카메라 이동 반영)
+    # ==========================================================
+    p = np.array([[u_frame, v_frame, 1]], dtype=np.float32).T
+    p_new = H_inv @ p
+    u_frame_new, v_frame_new = float(p_new[0, 0]), float(p_new[1, 0])
+
+    # ==========================================================
+    # 🔧 (5) Essential Matrix 기반 깊이 추정
+    # ----------------------------------------------------------
+    #   motion_core 내부의 last_parallax_med (중앙 시차값)을 이용해
+    #   z를 "상대 깊이" 로 표현.
+    #   - 시차(parallax)가 작을수록 멀리 있음 → z 작게
+    #   - 시차가 크면 가까이 있음 → z 크게
+    # ==========================================================
+    rel_z = 1.0 / (last_parallax_med + 1e-6)
+    z_new = float(rel_z)
+
+    # ==========================================================
+    # 🔧 (6) 프레임 좌표 → 뷰파인더 좌표로 재변환
+    # ==========================================================
+    u_new = u_frame_new * (view_w / frame_w)
+    v_new = v_frame_new * (view_h / frame_h)
+
+    # # 화면 경계 보정
+    # u_new = max(0, min(view_w, u_new))
+    # v_new = max(0, min(view_h, v_new))
+
+    # ==========================================================
+    # 🔧 (7) 반환
+    # ==========================================================
+    return float(u_new), float(v_new), float(z_new)

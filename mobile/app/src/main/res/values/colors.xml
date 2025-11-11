@@ -2,4 +2,15 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="colorPrimary">#FF3B4A6B</color>
+    <color name="colorSurface">#FFF5F6F8</color>
+    <color name="colorError">#FCDADA</color>
+    <color name="colorOnError">#EF4444</color>
+    <color name="colorNormal">#FFF2CF</color>
+    <color name="colorOnNormal">#FFBC11</color>
+    <color name="colorTrivial">#DAE4FE</color>
+    <color name="colorOnTrivial">#1E40AF</color>
+
+    <color name="colorChat">#ECEDF1</color>
+    <color name="colorOnChat">#637BC6</color>
 </resources>

@@ -100,6 +100,7 @@ class CallViewModel(
                 when (it) {
                     is RoomEvent.DataReceived -> {
                         val jsonString = it.data.toString(Charsets.UTF_8)
+                        Log.d("data receive", jsonString)
                         _dataReceived.emit(jsonString)
                     }
                     is RoomEvent.FailedToConnect -> {
@@ -128,15 +129,6 @@ class CallViewModel(
                 Log.e("connectToRoom", "연결 중 오류 발생"+e.message.toString())
             }
         }
-//        try {
-//            room.connect(
-//                url = url,
-//                token = token,
-//            )
-//            _enhancedNsEnabled.postValue(room.audioProcessorIsEnabled)
-//            _enableAudioProcessor.postValue(true)
-//        }
-
     }
 
     override fun onCleared() {
