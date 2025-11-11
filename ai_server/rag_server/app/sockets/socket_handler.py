@@ -1034,7 +1034,6 @@ async def handle_clarify_response(sid, data):
 # ========================================
 # Raspberry Pi 비디오 프레임 처리
 # ========================================
-
 @sio.on("video_frame")
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
@@ -1048,60 +1047,67 @@ async def handle_video_frame(sid, data):
         print("⚠️ Failed to decode frame")
         return
 
-    # 1) 모션 계산
+    # 1️⃣ 모션 계산 (Optical Flow + Essential)
     result = await motion_core.process_frame(frame, sid=sid)
-    # 로그는 필요시만
-    # if result["status"] == "ok":
-    #     x, y, z = result["x"], result["y"], result["z"]
+    if result["status"] not in ("ok", "init"):
+        # 모션 추정 불가한 경우 스킵
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        return
 
-    # 2) AR 마커 업데이트 (새 포맷: {idx, info:{x,y,size}})
+    # 2️⃣ AR 마커 업데이트 (Affine + Depth 기반)
     if ar_markers:
-        R, t = motion_core.get_pose()
         updated_markers = []
 
         for m in ar_markers:
             info = m.get("info", {})
-            wx, wy = float(info.get("x", 0.0)), float(info.get("y", 0.0))
-            wz = 0.0
-            world_point = np.array([[wx], [wy], [wz]], dtype=np.float32)
+            u = float(info.get("x", 0.0))
+            v = float(info.get("y", 0.0))
 
-            base_size = float(info.get("size", 1.0))
+            # === 📍 Optical Flow + Essential 기반 위치/깊이 보정 ===
+            u_new, v_new, z_new = motion_core.update_marker_position(u, v)
 
-            cam_point = R @ (world_point - t)
-            if cam_point[2, 0] <= 0:
-                continue
+            # === 📏 깊이에 따른 크기 계산 (z 클수록 가까움 → 커짐) ===
+            base_size = 30.0
+            scale_factor = 20.0
+            size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
 
-            uv = motion_core.K @ cam_point
-            u_pred = float(uv[0, 0] / uv[2, 0])
-            v_pred = float(uv[1, 0] / uv[2, 0])
-            proj_size = base_size / cam_point[2, 0]
-
-            # === 🎯 패치 매칭 기반 보정 ===
+            # === 🎯 패치 매칭 기반 보정 (선택) ===
             tpl = info.get("tpl", None)
             if tpl is not None and tpl.size > 0:
                 gray_now = motion_core.get_latest_gray()
                 if gray_now is not None:
                     u_ref, v_ref, score = motion_core.refine_patch_position(
-                        gray_now, u_pred, v_pred, tpl, search_r=14
+                        gray_now, u_new, v_new, tpl, search_r=14
                     )
-                    if score >= 0.75:  # 신뢰도 기준
-                        u_pred, v_pred = u_ref, v_ref
-                        info["tpl"] = cv2.addWeighted(tpl, 0.9,
-                            motion_core.extract_patch_from_current_gray(u_pred, v_pred, 10), 0.1, 0)
+                    if score >= 0.75:
+                        u_new, v_new = u_ref, v_ref
+                        # 템플릿 최신화
+                        new_patch = motion_core.extract_patch_from_current_gray(u_new, v_new, 10)
+                        if new_patch is not None:
+                            info["tpl"] = cv2.addWeighted(tpl, 0.9, new_patch, 0.1, 0)
 
             updated_markers.append({
                 "idx": m["idx"],
-                "info": {"x": round(u_pred, 2), "y": round(v_pred, 2), "size": round(proj_size, 3), "tpl": info.get("tpl", None)}
+                "info": {
+                    "x": round(u_new, 2),
+                    "y": round(v_new, 2),
+                    "z": round(z_new, 3),
+                    "size": round(size_px, 3),
+                    "tpl": info.get("tpl", None)
+                }
             })
 
-        if updated_markers:
-            # 프레임 기준으로 리스트 갱신
-            # ar_markers[:] = updated_markers
-            await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+        # === ✅ 전역 마커 리스트 갱신 ===
+        ar_markers[:] = updated_markers
 
-    # 3) 프레임 브로드캐스트 (PC 디스플레이용)
+        # === 🛰️ 클라이언트로 전송 ===
+        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+
+    # 3️⃣ 프레임 브로드캐스트 (PC 디스플레이용)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+
 
 # ========================================
 # Clarify 입력 수신 (모바일 → FastAPI)
@@ -1177,58 +1183,26 @@ async def handle_ar_marker(sid, data):
     marker_x = data.get("marker_x")
     marker_y = data.get("marker_y")
 
-    if marker_x is None or marker_y is None:
-        print("⚠️ Invalid marker data")
-        return
+    # === 1️⃣ Optical Flow + Essential 기반 좌표/깊이 업데이트 ===
+    u_new, v_new, z_new = motion_core.update_marker_position(marker_x, marker_y)
 
-    # === 1️⃣ 상대 size 계산 ===
-    rel_size = motion_core.relative_size_at(marker_x, marker_y)
-    if rel_size is None:
-        rel_size = 1.0  # fallback 값
+    # === 2️⃣ 크기 계산 (z 클수록 커짐)
+    base_size = 30.0
+    scale_factor = 10.0
+    size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
 
-    # === 2️⃣ 픽셀 → 월드 좌표 변환 (plane_z=0 기준)
-    world_point = motion_core.pixel_to_world_on_plane(marker_x, marker_y, plane_z=0.0)
-    if world_point is None:
-        wx, wy, wz = 0.0, 0.0, 0.0
-    else:
-        wx, wy, wz = world_point
-
-    # === 🎯 클릭 시 패치 저장 ===
-    patch = motion_core.extract_patch_from_current_gray(marker_x, marker_y, half_size=10)
-    if patch is None:
-        print("⚠️ Patch extraction failed.")
-    else:
-        print(f"🎯 Patch saved: shape={patch.shape}")
-
-    # === 3️⃣ 전역 리스트에 저장 ===
-    marker_idx = len(ar_markers) + 1
-    # marker_info = {
-    #     "idx": marker_idx,
-    #     "info": {
-    #         "x": round(wx, 3),
-    #         "y": round(wy, 3),
-    #         "size": round(rel_size, 3),
-    #         "tpl": patch
-    #     }
-    # }
+    # === 3️⃣ 마커 저장 ===
     marker_info = {
-        "idx": marker_idx,
+        "idx": len(ar_markers) + 1,
         "info": {
-            "x": marker_x,
-            "y": marker_y,
-            "size": 30.0,
-            "tpl": patch
+            "x": u_new,
+            "y": v_new,
+            "z": z_new,
+            "size": round(size_px, 2),
         }
     }
     ar_markers.append(marker_info)
 
-    # === 4️⃣ 콘솔 로그 출력 ===
-    print(
-        f"📍 [NEW MARKER] idx={marker_idx} | pixel=({marker_x:.1f}, {marker_y:.1f}) "
-        f"→ world=({wx:.3f}, {wy:.3f}, {wz:.3f}) | size={rel_size:.3f}"
-    )
-
-    # === 5️⃣ 클라이언트로 전송 ===
+    # === 4️⃣ 로그 및 전송 ===
+    print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    print(f"✅ AR 마커 정보 전송 완료: idx={marker_idx}, data={ar_markers}")
-
