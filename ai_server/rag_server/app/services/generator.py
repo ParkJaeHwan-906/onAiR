@@ -2,18 +2,17 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 from app.core.config import settings
+from app.services.gms_client import call_gemini_via_gms, call_openai_via_gms
 
 import json
 
-# ✅ GMS 통합키 하나로 gemini & gpt-4o 둘 다 사용
-import google.generativeai as genai
-
-# API 키 설정 (None 체크)
+# ✅ GMS API 키 확인
 if settings.GMS_API_KEY:
-    genai.configure(api_key=settings.GMS_API_KEY)
     print(f"✅ [Generator] GMS_API_KEY 설정 완료: {settings.GMS_API_KEY[:10]}...")
+    gms_api_key = settings.GMS_API_KEY
 else:
     print("⚠️ [Generator] GMS_API_KEY가 설정되지 않았습니다.")
+    gms_api_key = None
 
 
 # ==============================
@@ -30,11 +29,16 @@ def llm_self_check(query: str, snippets: List[str]) -> bool:
         f"Query: {query}\n\nSnippets:\n- " + "\n- ".join(snippets[:5])
     )
 
+    if not gms_api_key:
+        return True  # API 키가 없으면 기본값으로 True 반환
+    
     try:
         print(f"🔵 [Self-Check] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
-        model = genai.GenerativeModel(settings.GMS_MODEL_GATE)  # gemini-1.5-flash
-        resp = model.generate_content(prompt)
-        text = (resp.text or "").strip().upper()
+        text = call_gemini_via_gms(
+            model=settings.GMS_MODEL_GATE,
+            prompt=prompt,
+            api_key=gms_api_key
+        ).strip().upper()
         result = text.startswith("Y")
         print(f"✅ [Self-Check] Gemini-Flash API 호출 성공: {result} (응답: {text[:50]})")
         return result
@@ -151,11 +155,25 @@ def llm_generate_answer(query: str, snippets: List[str], hits: List[Dict[str, An
 - TTS로 재생되므로 자연스럽고 이해하기 쉬운 표현 사용
 """
 
+    if not gms_api_key:
+        # Fallback: 기존 방식
+        fallback_answer = synthesize_answer(query, hits or [{"source": {"content": s}} for s in snippets])["answer"]
+        tts_text = format_for_tts(fallback_answer)
+        return {
+            "summary": f"'{query}'에 대한 점검 및 조치 가이드",
+            "answer": fallback_answer,
+            "tts_text": tts_text,
+            "citations": citations,
+            "query": query
+        }
+    
     try:
         print(f"🔵 [Generator] GPT-4o API 호출 시작 (모델: {settings.GMS_MODEL_GENERATOR})")
-        model = genai.GenerativeModel(settings.GMS_MODEL_GENERATOR)  # gpt-4o
-        resp = model.generate_content(prompt)
-        text = resp.text or ""
+        text = call_openai_via_gms(
+            model=settings.GMS_MODEL_GENERATOR,
+            prompt=prompt,
+            api_key=gms_api_key
+        )
         print(f"✅ [Generator] GPT-4o API 호출 성공 (응답 길이: {len(text)} bytes)")
         
         # JSON 블록 제거
@@ -321,11 +339,17 @@ def llm_self_score(query: str, answer: str, snippets: List[str]) -> Dict[str, An
   "comment": "간단한 평가 코멘트"
 }}
 """
+    if not gms_api_key:
+        return {"score": 0.0, "reason": "GMS API 키가 설정되지 않았습니다."}
+    
     try:
         print(f"🔵 [Self-Score] GPT-4o API 호출 시작 (모델: {settings.GMS_MODEL_GENERATOR})")
-        model = genai.GenerativeModel(settings.GMS_MODEL_GENERATOR)
-        resp = model.generate_content(prompt)
-        result = json.loads(resp.text)
+        text = call_openai_via_gms(
+            model=settings.GMS_MODEL_GENERATOR,
+            prompt=prompt,
+            api_key=gms_api_key
+        )
+        result = json.loads(text)
         print(f"✅ [Self-Score] GPT-4o API 호출 성공: score={result.get('score', 0.0):.2f}")
         return result
     except Exception as e:
