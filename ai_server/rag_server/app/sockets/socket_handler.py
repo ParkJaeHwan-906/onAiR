@@ -136,10 +136,10 @@ async def wait_for_next_step(step_name: str, step_number: str = ""):
 def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
     if sio is None:
-        print("❌ ERROR: sio 인스턴스가 None입니다!")
+        # print("❌ ERROR: sio 인스턴스가 None입니다!")
         return
     
-    print(f"🔍 Socket.IO 서버 인스턴스 확인: {sio}")
+    # print(f"🔍 Socket.IO 서버 인스턴스 확인: {sio}")
     
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
     sio.on("connect")(handle_connect)
@@ -162,11 +162,11 @@ def init_socketio():
     # CV device_monitor 백그라운드 태스크 시작
     try:
         asyncio.create_task(background_device_detector())
-        print("✅ CV device_monitor 백그라운드 태스크 시작됨")
+        # print("✅ CV device_monitor 백그라운드 태스크 시작됨")
     except Exception as e:
         print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
     
-    print("✅ Socket.IO 이벤트 핸들러 등록 완료")
+    # print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -239,7 +239,7 @@ async def handle_connect(sid, environ):
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
-        print(f"🔍 [DEBUG] handle_connect 성공, 연결 허용")
+        # print(f"🔍 [DEBUG] handle_connect 성공, 연결 허용")
         return True
     except Exception as e:
         print(f"❌ Connection error for {sid}: {e}")
@@ -1487,7 +1487,7 @@ async def handle_audio_frame(sid, data):
         return
 
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
-    print("[DEBUG] 오디오 프레임 수신됨")
+    # print("[DEBUG] 오디오 프레임 수신됨")
     await broadcast_to("pc", "audio_frame", data)
 
 # 모바일에서 '통신 요청중입니다' 음성 종료 이벤트 전달
@@ -1496,7 +1496,7 @@ async def handle_start_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
     """
-    print("[DEBUG] intent_audio_completed 이벤트 발생")
+    # print("[DEBUG] intent_audio_completed 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
@@ -1510,13 +1510,13 @@ async def accept_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
     """
-    print("[DEBUG] accept_communication 이벤트 발생")
+    # print("[DEBUG] accept_communication 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
 
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
-    print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
+    # print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
     await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 종료 이벤트 전달
@@ -1525,7 +1525,7 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
-    print("[DEBUG] communication_close 이벤트 발생")
+    # print("[DEBUG] communication_close 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
@@ -1602,7 +1602,7 @@ async def handle_ar_marker(sid, data):
     """
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
-        print("⚠️ Unknown sender")
+        # print("⚠️ Unknown sender")
         return
 
     marker_x = data.get("marker_x")
@@ -1629,5 +1629,5 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker_info)
 
     # === 4️⃣ 로그 및 전송 ===
-    print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
+    # print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
