@@ -9,9 +9,9 @@ from typing import List, Dict, Any
 from loguru import logger
 
 
-from cv.sub_anomaly.fan_belt_anomaly import analyze_fan_belt
-from cv.sub_anomaly.gauge_anomaly import analyze_gauge
-from cv.sub_anomaly.panel_anomaly import analyze_panel
+from app.services.cv.sub_anomaly.fan_belt_anomaly import analyze_fan_belt
+from app.services.cv.sub_anomaly.gauge_anomaly import analyze_gauge
+from app.services.cv.sub_anomaly.panel_anomaly import analyze_panel
 
 
 async def run_anomaly_detection(frames: List, modules: List[Dict[str, Any]] = None) -> Dict[str, Any]:
