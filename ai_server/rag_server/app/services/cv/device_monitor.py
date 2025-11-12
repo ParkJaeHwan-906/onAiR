@@ -9,7 +9,7 @@ import torch
 import numpy as np
 import cv2
 from app.services.cv.redis_util import get_latest_frames, get_redis
-from app.services.cv.yolo_utils import load_yolo_model, yolo_infer
+# from app.services.cv.yolo_utils import load_yolo_model, yolo_infer
 
 # 현재 감지된 장비 타입 (다른 서비스에서 참조)
 current_device_type: str = "unknown"
@@ -26,7 +26,8 @@ async def background_device_detector():
 
     # YOLO 모델 로드 (한 번만)
     if _yolo_device_model is None:
-        _yolo_device_model = load_yolo_model("/app/app/models/device_best.pt")
+        print("⚠️ [device_monitor] 테스트 모드: YOLO 장비 모델 로드를 생략합니다.")
+        _yolo_device_model = False
 
     print("✅ [device_monitor] 장비 모니터링 시작됨 (주기: 2초)")
 
@@ -46,12 +47,15 @@ async def background_device_detector():
                 continue
 
             # 3️⃣ YOLO로 장비 타입 탐지
-            device_label = yolo_infer(_yolo_device_model, sharpest_frame)
-            if device_label:
-                current_device_type = device_label
-                print(f"🔍 [device_monitor] 감지된 장비: {device_label}")
+            if not _yolo_device_model:
+                print("⏭️ [device_monitor] 테스트 모드: YOLO 장비 탐지를 스킵합니다.")
             else:
-                print("⚠️ [device_monitor] 장비 탐지 실패, 이전 상태 유지")
+                device_label = yolo_infer(_yolo_device_model, sharpest_frame)
+                if device_label:
+                    current_device_type = device_label
+                    print(f"🔍 [device_monitor] 감지된 장비: {device_label}")
+                else:
+                    print("⚠️ [device_monitor] 장비 탐지 실패, 이전 상태 유지")
 
         except Exception as e:
             print(f"❌ [device_monitor] 오류 발생: {e}")
