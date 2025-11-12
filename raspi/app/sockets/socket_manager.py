@@ -178,7 +178,7 @@ def connect():
     print("✅ Connected to EC2 server")
     sio.emit("register_device", {"device": "raspi"})
 
-    # 연결 시 자동 스트리밍 시작
+    # 연결 시 비디오만 자동 스트리밍 시작 (오디오는 서버 이벤트로 시작)
     is_streaming = True
     camera.start_streaming()
 

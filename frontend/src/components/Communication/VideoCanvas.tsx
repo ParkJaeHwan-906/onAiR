@@ -17,9 +17,47 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   // 1. useState 제거 -> useRef로 변경
   const imgRef = useRef<HTMLImageElement>(null);
 
+  // 오디오 재생을 위한 ref
+  const audioContextRef = useRef<AudioContext | null>(null);
+
   // 연결 상태만 최소한으로 관리 (UI 표시용)
   const [isConnected, setIsConnected] = useState(false);
 
+
+  // 오디오 재생용 useEffect
+  useEffect(() => {
+    if (!socket) return;
+
+    // 1️⃣ AudioContext 생성 (오디오 처리를 담당하는 컨텍스트)
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
+
+    // AudioWorklet 모듈 등록
+    audioContext.audioWorklet.addModule("/audio-processor.js").then(() => {
+      const workletNode = new AudioWorkletNode(audioContext, "audio-processor");
+      workletNode.connect(audioContext.destination);
+
+      // 소켓 이벤트 수신
+      const handleAudioFrame = (data: ArrayBuffer) => {
+        console.log("[DEBUG] 오디오 프레임 수신")
+        const floatData = new Float32Array(data);
+        // AudioWorklet으로 전달
+        workletNode.port.postMessage({type: "audio_frame", frame: floatData});
+      };
+
+      socket.on("audio_frame", handleAudioFrame); // 이벤트 리스너 등록
+
+      // 6️⃣ cleanup: 컴포넌트 언마운트 시 연결 해제 및 메모리 정리
+      return () => {
+        socket.off("audio_frame", handleAudioFrame);
+        workletNode.disconnect();
+        audioContext.close();
+      };
+    });
+  }, [socket]);
+
+
+  // 비디오 재생용 useEffect
   useEffect(() => {
     if (!socket) return;
 

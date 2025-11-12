@@ -5,6 +5,7 @@ import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
 import { sendConnectionResponse } from "../../api/webrtc";
 import { useNavigate } from "react-router-dom";
 import type { Work } from "../../types/work";
+import { useSocket } from "../../utils/socketContext";
 
 const backColors = ["#F4C0C0", "#F9E9B5", "#B5BFE0", "#B6E7C8"];
 const fontColors = ["#EF4444", "#FFBC11", "#1E40AF", "#22C55E"];
@@ -25,6 +26,7 @@ function HomeBig({
   isRequestList = false,
 }: HomeBigProps) {
   const navigate = useNavigate();
+  const socket = useSocket(); // 컴포넌트 최상위에서 Hook 호출
 
   // Zustand store 구독 - requests만 구독하여 리렌더링 트리거
   const allRequests = useWebRtcRequestStore((state) => state.requests);
@@ -94,6 +96,12 @@ function HomeBig({
       // 수락한 경우에만 토큰을 받고 CommunicationPage로 이동
       if (acceptConnection && res.data?.accessToken) {
         updateRequestStatus(senderAccountId, true, res.data.accessToken);
+
+        // 소켓으로 통신 요청 수락 이벤트 전송
+        if (socket) {
+          socket.emit('accept_communication', null);
+        }
+        
 
         // 요청 목록에서 상대방 정보 찾기
         const requests = useWebRtcRequestStore.getState().requests;
