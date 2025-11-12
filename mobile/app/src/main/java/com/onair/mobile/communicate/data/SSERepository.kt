@@ -40,22 +40,32 @@ class SSERepository(
     ) {
         val data = messageEvent?.data ?: return
         Log.d("SSE", data)
-        val json = try {
-            JSONObject(data)
-        } catch (e: Exception) {
-            Log.e("SSE", "JSON 파싱 실패: ${e.message}")
-            return
-            TODO("Json 말고 Data class로 변환 고려")
-        }
-        when (event) {
-            "callRequest" -> _eventFlow.tryEmit(SseEvent.CallRequest(json))
-            "taskAssign" -> _eventFlow.tryEmit(SseEvent.TaskAssign(json))
-            "taskCancel" -> _eventFlow.tryEmit(SseEvent.TaskCancel(json))
-            else -> {
-                Log.w("SSE", "알 수 없는 이벤트 수신: $event")
+        
+        // timestamp, connected 같은 문자열은 JSON이 아니므로 스킵
+        if (data.trim().startsWith("{") && data.trim().endsWith("}")) {
+            val json = try {
+                JSONObject(data)
+            } catch (e: Exception) {
+                Log.e("SSE", "JSON 파싱 실패: ${e.message}")
+                return
             }
+            when (event) {
+                "callRequest" -> _eventFlow.tryEmit(SseEvent.CallRequest(json))
+                "taskAssign" -> _eventFlow.tryEmit(SseEvent.TaskAssign(json))
+                "taskCancel" -> _eventFlow.tryEmit(SseEvent.TaskCancel(json))
+                "rtcCanceled" -> {
+                    // rtcCanceled 이벤트는 처리하되 로그만 남김
+                    Log.d("SSE", "이벤트 rtcCanceled 수신 $data")
+                }
+                else -> {
+                    Log.w("SSE", "알 수 없는 이벤트 수신: $event")
+                }
+            }
+            Log.d("SSE", "이벤트 $event 수신 ${messageEvent?.data}")
+        } else {
+            // JSON이 아닌 문자열 데이터 (timestamp, connected 등)는 무시
+            Log.d("SSE", "문자열 데이터 수신 (JSON 아님): $data")
         }
-        Log.d("SSE", "이벤트 $event 수신 ${messageEvent?.data}")
     }
 
     override fun onComment(comment: String?) {

@@ -64,6 +64,7 @@ class MainActivitySttServer : AppCompatActivity() {
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
+        private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
     }
     
@@ -342,12 +343,15 @@ class MainActivitySttServer : AppCompatActivity() {
                         // 1. UI 업데이트: "통신 중..." 화면 표시
                         updateIntentUI(IntentType.OPERATOR, "통신 중...")
                         
-                        // 2. 오디오 재생: "통신이 시작됩니다."
+                        // 2. 로컬 음성 파일 재생: "통신 연결을 시작합니다."
+                        Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
+                        addLog("🔊 OPERATOR 음성 파일 재생: $OPERATOR_AUDIO_FILE")
+                        
                         lifecycleScope.launch {
-                            ttsRepository.speakText("통신이 시작됩니다.") {
+                            mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
                                 // 재생 완료 콜백
-                                Log.i(TAG, "✅ OPERATOR TTS 재생 완료")
-                                addLog("✅ OPERATOR TTS 재생 완료")
+                                Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
+                                addLog("✅ OPERATOR 음성 파일 재생 완료")
                                 
                                 // FastAPI 서버로 재생 완료 이벤트 전송
                                 val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")

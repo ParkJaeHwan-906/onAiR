@@ -12,6 +12,10 @@ import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
 import java.net.URISyntaxException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과 및 Clarify 응답을 수신
@@ -87,8 +91,10 @@ class SocketIoSttClient(
             // 연결 이벤트
             socket?.on(Socket.EVENT_CONNECT) {
                 isConnected = true
+                Log.i(TAG, "=".repeat(60))
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공: $serverUrl (경로: /ws)")
                 Log.i(TAG, "   Socket ID: ${socket?.id()}")
+                Log.i(TAG, "=".repeat(60))
                 
                 // 디바이스 등록
                 registerDevice()
@@ -302,8 +308,19 @@ class SocketIoSttClient(
             
             // 연결 시도
             Log.i(TAG, "🔌 Socket.IO 연결 시작...")
+            Log.i(TAG, "   현재 Socket 상태: ${if (socket?.connected() == true) "연결됨" else "연결 안 됨"}")
             socket?.connect()
             Log.i(TAG, "✅ Socket.IO connect() 호출 완료 (연결 대기 중...)")
+            
+            // 연결 상태 주기적 확인 (5초 후)
+            CoroutineScope(Dispatchers.IO).launch {
+                delay(5000)
+                val connected = socket?.connected() == true
+                Log.i(TAG, "🔍 Socket.IO 연결 상태 확인 (5초 후): ${if (connected) "✅ 연결됨" else "❌ 연결 안 됨"}")
+                if (!connected) {
+                    Log.w(TAG, "⚠️ Socket.IO 연결이 안 되어 있습니다. 이벤트를 수신할 수 없습니다.")
+                }
+            }
             
         } catch (e: URISyntaxException) {
             Log.e(TAG, "❌ Socket.IO URL 파싱 오류: ${e.message}")
