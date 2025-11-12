@@ -28,6 +28,8 @@ interface ClientToServerEvents {
   register_device: (data: { device: 'pc' | 'mobile' | 'raspi' }) => void;
   ping: (data: { data: string }) => void;
   video_stream: (data: { state: 'on' | 'off' }) => void;
+  communication_close: (data: null) => void;
+  accept_communication: (data: null) => void;
   'video-frame': (data: { frame: string }) => void;
   'audio-frame': (data: { frame: string }) => void;
   'ar-marker': (data: { marker_x: number; marker_y: number }) => void;
