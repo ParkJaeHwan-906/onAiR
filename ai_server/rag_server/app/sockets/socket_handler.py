@@ -200,8 +200,8 @@ async def broadcast_to(device_types, event: str, payload: dict):
     for sid, dev in targets:
         if dev in device_types:
             try:
-                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                # print(f"   Payload: {str(payload)[:100]}...")
+                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
                 # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
@@ -1428,12 +1428,12 @@ async def handle_video_frame(sid, data):
         return
 
     # timestamp (ms) → YYYYMMDD HH:MM:SS
-    if timestamp:
-        ts_str = datetime.fromtimestamp(timestamp / 1000).strftime("%Y%m%d %H:%M:%S")
-    else:
-        ts_str = datetime.now().strftime("%Y%m%d %H:%M:%S")
+    # if timestamp:
+    #     ts_str = datetime.fromtimestamp(timestamp / 1000).strftime("%Y%m%d %H:%M:%S")
+    # else:
+    #     ts_str = datetime.now().strftime("%Y%m%d %H:%M:%S")
 
-    print(f"🖼️ Frame received [{ts_str}] from {sender_device}")
+    # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ Redis sliding window 저장 ---
     try:
@@ -1483,7 +1483,7 @@ async def handle_video_frame(sid, data):
 async def handle_audio_frame(sid, data):
     """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown":
+    if sender_device == "unknown" or not data:
         return
 
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
@@ -1516,6 +1516,7 @@ async def accept_communication(sid, data):
         return
 
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
+    print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
     await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 종료 이벤트 전달
