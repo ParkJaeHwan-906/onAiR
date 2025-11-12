@@ -8,14 +8,18 @@
 import os
 import cv2
 import numpy as np
-# from ultralytics import YOLO
+from ultralytics import YOLO
 from loguru import logger
+
+from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
 # ---------------------------------------------------------
 # 경로 설정
 # ---------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "../../../models/module_best.pt")
+
+_yolo_gauge_model = None
 
 # ---------------------------------------------------------
 # 하이퍼파라미터
@@ -83,7 +87,10 @@ def judge_abnormal(sensor_type: str, value: float):
 # ---------------------------------------------------------
 # 메인 분석 함수
 # ---------------------------------------------------------
-async def analyze_gauge(frames: list[np.ndarray]):
+async def analyze_gauge(
+    frames: list[np.ndarray],
+    yolo_ctx: YOLOContext | None = None,
+):
     """
     게이지 이상 탐지
     - 가장 선명한 1장만 YOLO에 입력
@@ -110,58 +117,10 @@ async def analyze_gauge(frames: list[np.ndarray]):
         # 2️⃣ 가장 선명한 프레임 선택
         sharpest_frame, best_score = max(valid_frames, key=lambda x: x[1])
 
-        logger.warning("⚠️ [gauge] 테스트 모드: YOLO 추론 과정 생략")
-        # model = YOLO(MODEL_PATH)
-        # results = model.predict(sharpest_frame, conf=0.5, device=\"cpu\", verbose=False)
-
-        # outputs = []
-        # for r in results[0].boxes:
-        #     cls = model.names[int(r.cls)]
-        #     if cls not in (\"thermometer\", \"pressure_gauge\"):
-        #         continue
-
-        #     x1, y1, x2, y2 = map(int, r.xyxy[0])
-        #     crop = sharpest_frame[y1:y2, x1:x2]
-        #     if crop.size == 0:
-        #         continue
-
-        #     h, w = crop.shape[:2]
-        #     if max(h, w) < 120:
-        #         continue
-
-        #     angle, _ = detect_gauge_value_fast(crop)
-        #     if angle is not None:
-        #         outputs.append((cls, angle))
-
-        # if not outputs:
-        #     return {
-        #         \"type\": \"gauge\",
-        #         \"status\": \"low_confidence\",
-        #         \"message\": \"게이지 탐지 실패 또는 각도 검출 불가\"
-        #     }
-
-        # result_by_type = {}
-        # for cls in set(c for c, _ in outputs):
-        #     angles = [a for c, a in outputs if c == cls]
-        #     mean_angle = np.mean(angles)
-        #     ratio = (mean_angle - 230) / 90
-        #     value = np.clip(ratio * (100 if cls == \"thermometer\" else 2), 0, None)
-        #     msg, status = judge_abnormal(cls, value)
-        #     result_by_type[cls] = {
-        #         \"angle\": round(mean_angle, 2),
-        #         \"value\": round(value, 2),
-        #         \"status\": status,
-        #         \"message\": msg
-        #     }
-
-        # logger.info(f\"[gauge] Sharpness={best_score:.2f}, 결과={result_by_type}\")
-        return {
-            "type": "gauge",
-            "status": "disabled",
-            "sharpness": best_score,
-            "results": {},
-            "message": "YOLO 추론이 테스트 모드로 비활성화되었습니다"
-        }
+        if yolo_ctx is None:
+            async with acquire_yolo_context() as ctx:
+                return await _analyze_with_context(ctx, sharpest_frame, best_score)
+        return await _analyze_with_context(yolo_ctx, sharpest_frame, best_score)
 
     except Exception as e:
         logger.exception(f"[gauge] 분석 중 오류: {e}")
@@ -170,3 +129,74 @@ async def analyze_gauge(frames: list[np.ndarray]):
             "status": "error",
             "message": str(e)
         }
+
+
+async def _analyze_with_context(
+    ctx: YOLOContext,
+    sharpest_frame: np.ndarray,
+    best_score: float,
+):
+    model = _get_gauge_model()
+    results = await ctx.run(model.predict, sharpest_frame, conf=0.5, device="cpu", verbose=False)
+
+    outputs = []
+    first_result = results[0] if results else None
+    if first_result:
+        for r in first_result.boxes:
+            cls = model.names[int(r.cls)]
+            if cls not in ("thermometer", "pressure_gauge"):
+                continue
+
+            x1, y1, x2, y2 = map(int, r.xyxy[0])
+            crop = sharpest_frame[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+
+            h, w = crop.shape[:2]
+            if max(h, w) < 120:
+                continue
+
+            angle, _ = detect_gauge_value_fast(crop)
+            if angle is not None:
+                outputs.append((cls, angle))
+
+    if not outputs:
+        return {
+            "type": "gauge",
+            "status": "low_confidence",
+            "sharpness": best_score,
+            "results": {},
+            "message": "게이지 탐지 실패 또는 각도 검출 불가",
+        }
+
+    result_by_type = {}
+    for cls in set(c for c, _ in outputs):
+        angles = [a for c, a in outputs if c == cls]
+        mean_angle = np.mean(angles)
+        ratio = (mean_angle - 230) / 90
+        value = np.clip(ratio * (100 if cls == "thermometer" else 2), 0, None)
+        msg, status = judge_abnormal(cls, value)
+        result_by_type[cls] = {
+            "angle": round(mean_angle, 2),
+            "value": round(value, 2),
+            "status": status,
+            "message": msg,
+        }
+
+    logger.info(f"[gauge] Sharpness={best_score:.2f}, 결과={result_by_type}")
+    return {
+        "type": "gauge",
+        "status": "done",
+        "sharpness": best_score,
+        "results": result_by_type,
+    }
+
+
+def _get_gauge_model():
+    global _yolo_gauge_model
+    if _yolo_gauge_model is None:
+        logger.info("📦 [gauge] YOLO 모델 로드 중...")
+        _yolo_gauge_model = YOLO(MODEL_PATH)
+        _yolo_gauge_model.fuse()
+        logger.info("✅ [gauge] YOLO 모델 로드 완료")
+    return _yolo_gauge_model
