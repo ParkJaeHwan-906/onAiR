@@ -331,6 +331,14 @@ class WorkingActivity : AppCompatActivity() {
                         mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
+                            
+                            // FastAPI 서버로 재생 완료 이벤트 전송
+                            val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
+                            if (success) {
+                                Log.i(TAG, "📤 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 완료")
+                            } else {
+                                Log.e(TAG, "❌ 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 실패")
+                            }
                         }
                         
                         lifecycleScope.launch {

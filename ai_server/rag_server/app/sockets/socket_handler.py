@@ -364,12 +364,17 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 60)
             
             # Redis에서 최근 프레임들 가져오기 (최대 20프레임)
+            print("=" * 60)
+            print("📸 [단계 9-1] Redis에서 최근 프레임 가져오기 시작")
+            print("=" * 60)
             redis = await get_redis()
             frames = await get_latest_frames(redis, limit=20)
-            print(f"📸 Redis에서 가져온 프레임 수: {len(frames)}장")
+            print(f"✅ Redis에서 가져온 프레임 수: {len(frames)}장")
             
             if not frames:
-                print("⚠️ CV 분석할 프레임이 없습니다.")
+                print("=" * 60)
+                print("⚠️ [단계 9-1 완료] CV 분석할 프레임이 없습니다.")
+                print("=" * 60)
                 cv_result = {
                     "detected": False,
                     "device_type": "unknown",
@@ -378,9 +383,43 @@ async def handle_intent_audio_completed(sid, data):
                     "message": "분석할 프레임이 없습니다."
                 }
             else:
+                print("=" * 60)
+                print(f"✅ [단계 9-1 완료] Redis에서 {len(frames)}장의 프레임을 성공적으로 가져왔습니다.")
+                print(f"   프레임 크기: {frames[0].shape if frames else 'N/A'}")
+                print("=" * 60)
+                await wait_for_next_step("Redis 프레임 가져오기 완료", "9-1")
+                
+                # CV 모델 실행
+                print("=" * 60)
+                print("🤖 [단계 9-2] CV 모델 파이프라인 실행 시작")
+                print(f"   입력 프레임 수: {len(frames)}장")
+                print("=" * 60)
                 cv_result = await run_cv_model(frames)
+                
+                # CV 결과 상세 출력
+                print("=" * 60)
+                print("📊 [단계 9-2 완료] CV 모델 실행 결과")
+                print(f"   탐지 여부: {cv_result.get('detected', False)}")
+                print(f"   장비 타입: {cv_result.get('device_type', 'unknown')}")
+                print(f"   탐지된 모듈 수: {len(cv_result.get('modules', []))}")
+                if cv_result.get('modules'):
+                    module_names = [m.get('label', 'unknown') for m in cv_result.get('modules', [])]
+                    print(f"   모듈 목록: {', '.join(module_names)}")
+                anomalies = cv_result.get('anomalies', {})
+                if anomalies:
+                    anomaly_status = anomalies.get('status', 'unknown')
+                    print(f"   이상 탐지 상태: {anomaly_status}")
+                    if isinstance(anomalies.get('results'), dict):
+                        anomaly_results = anomalies.get('results', {})
+                        print(f"   이상 탐지 모듈 수: {len(anomaly_results)}개")
+                        for module_name, module_result in anomaly_results.items():
+                            if isinstance(module_result, dict):
+                                module_status = module_result.get('status', 'unknown')
+                                module_msg = module_result.get('message', '')
+                                print(f"     - {module_name}: {module_status} ({module_msg})")
+                print(f"   메시지: {cv_result.get('message', '')}")
+                print("=" * 60)
             
-            print("=" * 60)
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
             if not cv_result.get("detected", False):
@@ -546,6 +585,13 @@ async def handle_intent_audio_completed(sid, data):
             await broadcast_to("raspi", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
             })
+    elif intent == "OPERATOR":
+        # OPERATOR인 경우 별도 처리 없음 (모바일에서 WebRTC 연결 요청 처리)
+        print("=" * 60)
+        print(f"✅ [단계 8-1 완료] OPERATOR Intent 음성 파일 재생 완료 확인")
+        print("   OPERATOR는 CV 로직을 실행하지 않습니다.")
+        print("   모바일에서 WebRTC 연결 요청을 처리합니다.")
+        print("=" * 60)
     else:
         print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
 
@@ -629,11 +675,23 @@ async def handle_stt_result(sid, data):
     print("=" * 60)
     print(f"📝 [단계 6] FastAPI 서버: STT 결과 수신 [raspi]")
     print(f"   타입: {stt_type}, 텍스트: {stt_text[:50]}...")
+    print(f"   Session ID: {session_id}")
+    print(f"   Confidence: {confidence}")
     print("=" * 60)
     await wait_for_next_step("STT 결과 수신 완료", "6")
     
     # 버퍼링 STT (type="final"이고 session_id가 없음)
     if stt_type == "final" and not session_id:
+        print("=" * 60)
+        print("✅ 버퍼링 STT 확인: type=final, session_id=None")
+        print(f"   텍스트: '{stt_text[:50]}...'")
+        print("=" * 60)
+        
+        # STT 텍스트가 비어있으면 처리 불가
+        if not stt_text:
+            print("⚠️ STT 텍스트가 비어있습니다. Intent 분류를 수행할 수 없습니다.")
+            return
+        
         # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
         try:
             print("=" * 60)
