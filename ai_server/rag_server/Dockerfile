@@ -33,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip uninstall -y opencv-python && \
     pip install --no-cache-dir --force-reinstall opencv-python-headless==4.10.0.84
 
+# ✅ numpy 버전 강제 재설치 (FAISS 호환)
+RUN pip install --no-cache-dir --force-reinstall numpy==1.26.4
+
 # =============== Runtime Stage ===============
 FROM python:3.10-slim
 
