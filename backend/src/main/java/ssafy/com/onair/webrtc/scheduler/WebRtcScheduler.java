@@ -19,13 +19,13 @@ public class WebRtcScheduler {
     private final WebRtcManager webRtcManager;
     private final SseManager sseManager;
 
-    @Scheduled(fixedRate = 1000 * 60)       // 1분 간격으로 timeout
+    @Scheduled(fixedDelay = 1000 * 30)       // 1분 간격으로 timeout
     public void removeTimeOutRooms() {
         if(webRtcManager.getWaitingRoomList().isEmpty()) return;
         String[] roomNameList = webRtcManager.getWaitingRoomList().keySet().toArray(new String[0]);
         for(String roomName : roomNameList) {
             if (webRtcManager.getWaitingRoomList().get(roomName)
-                    .isAfter(LocalDateTime.now(Clock.system(ZoneId.of("Asia/Seoul"))))) {
+                    .isBefore(LocalDateTime.now())) {
                 try {
                     webRtcManager.getWaitingRoomList().remove(roomName);
                     StringTokenizer st = new StringTokenizer(roomName);
