@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.app.Activity
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -11,14 +12,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReusableComposition
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -26,6 +31,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.onair.mobile.R
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import org.json.JSONObject
 
@@ -58,6 +70,12 @@ class CallActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val windowInsetsController =
+            WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        Log.d("CALL", "Call Activity 호출")
         setContent {
             MaterialTheme {
                 CallScreen(viewModel)
@@ -82,7 +100,6 @@ fun CallScreen(viewModel: CallViewModel) {
         )
     }
 }
-
 @Composable
 fun WhiteboardCanvas(
     viewModel: CallViewModel,
@@ -96,6 +113,8 @@ fun WhiteboardCanvas(
 
     // ✅ "다시 그려!" 신호기
     var pathTrigger by remember { mutableIntStateOf(0) }
+
+    val context = LocalContext.current
 
     LaunchedEffect(viewModel) {
         viewModel.dataReceived.collect { jsonString ->
@@ -144,21 +163,32 @@ fun WhiteboardCanvas(
             }
         }
     }
-    Canvas(modifier = modifier) {
-        val trigger = pathTrigger
-        drawRect(Color.Black)
-        completedPaths.forEach { path ->
-            drawPath(
-                path = path,
-                color = Color.White,
-                style = Stroke(
-                    width = 1F,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round,
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = modifier) {
+            val trigger = pathTrigger
+            drawRect(Color.Black)
+            completedPaths.forEach { path ->
+                drawPath(
+                    path = path,
+                    color = Color.White,
+                    style = Stroke(
+                        width = 1F,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    )
                 )
-            )
+            }
         }
-
+        SmallFloatingActionButton(
+            onClick = { (context as? Activity)?.finish() },
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.secondary
+        ) {
+            Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
+        }
     }
-
 }

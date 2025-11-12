@@ -2,8 +2,10 @@ package com.onair.mobile.communicate.data.api
 
 import com.onair.mobile.communicate.data.api.dto.LoginRequest
 import com.onair.mobile.communicate.data.api.dto.ApiResponse
+import com.onair.mobile.communicate.data.api.dto.CallResponseRequestDto
 import com.onair.mobile.communicate.data.api.dto.RefreshRequest
 import com.onair.mobile.communicate.data.api.dto.EndTaskRequest
+import com.onair.mobile.communicate.data.api.dto.RtcResponse
 import com.onair.mobile.communicate.data.api.dto.TaskResponse
 import com.onair.mobile.communicate.data.api.dto.TokenData
 import retrofit2.Call
@@ -34,4 +36,9 @@ interface ApiService {
     fun endTask(
         @Body body: EndTaskRequest
     ): Call<ApiResponse<Boolean>>
+
+    @POST("webrtc/response")
+    fun responseCall(
+        @Body body: CallResponseRequestDto
+    ): Call<ApiResponse<RtcResponse>>
 }
