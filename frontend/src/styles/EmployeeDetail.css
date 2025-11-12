@@ -462,12 +462,22 @@ li + li .equipment-select-option {
   color: var(--color-text-primary);
 }
 
+/* timeout인 경우 다른 그림자 색상 */
+.connection-rejected-modal[data-cancel-reason="timeout"] {
+  box-shadow: 0 12px 32px rgba(217, 119, 6, 0.15);
+}
+
 .connection-rejected-icon {
   width: 60px;
   height: 60px;
   border-radius: 50%;
   background: linear-gradient(135deg, #f1d4db 0%, #f5bfcf 100%);
   position: relative;
+}
+
+/* timeout인 경우 다른 색상 */
+.connection-rejected-modal[data-cancel-reason="timeout"] .connection-rejected-icon {
+  background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
 }
 
 .connection-rejected-icon::before,
@@ -491,6 +501,23 @@ li + li .equipment-select-option {
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
+/* timeout인 경우 아이콘을 시계 모양으로 변경 */
+.connection-rejected-modal[data-cancel-reason="timeout"] .connection-rejected-icon::before {
+  width: 3px;
+  height: 18px;
+  background-color: #d97706;
+  border-radius: 2px;
+  transform: translate(-50%, -50%) translateY(-6px);
+}
+
+.connection-rejected-modal[data-cancel-reason="timeout"] .connection-rejected-icon::after {
+  width: 14px;
+  height: 3px;
+  background-color: #d97706;
+  border-radius: 2px;
+  transform: translate(-50%, -50%) translateX(2px);
+}
+
 .connection-rejected-title {
   font-size: var(--font-size-heading-lg);
   font-weight: 700;
@@ -504,6 +531,7 @@ li + li .equipment-select-option {
   font-size: var(--font-size-body-md);
   line-height: 1.6;
   color: var(--color-text-secondary);
+  white-space: normal;
 }
 
 .connection-rejected-request {
@@ -515,12 +543,23 @@ li + li .equipment-select-option {
   padding: 16px;
 }
 
+/* timeout인 경우 다른 배경색 */
+.connection-rejected-modal[data-cancel-reason="timeout"] .connection-rejected-request {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
 .connection-rejected-label {
   display: block;
   font-size: 13px;
   font-weight: 600;
   color: #c63654;
   margin-bottom: 8px;
+}
+
+/* timeout인 경우 다른 라벨 색상 */
+.connection-rejected-modal[data-cancel-reason="timeout"] .connection-rejected-label {
+  color: #d97706;
 }
 
 .connection-rejected-request-text {

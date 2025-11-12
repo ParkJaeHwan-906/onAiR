@@ -154,6 +154,8 @@ function HomeBig({
         return "수락";
       case "rejected":
         return "거절";
+      case "timeout":
+        return "만료됨";
       case "completed":
         return "완료";
       default:
@@ -170,6 +172,8 @@ function HomeBig({
         return { bg: "#B6E7C8", color: "#22C55E" };
       case "rejected":
         return { bg: "#F4C0C0", color: "#EF4444" };
+      case "timeout":
+        return { bg: "#FDE68A", color: "#D97706" }; // 주황색 계열
       case "completed":
         return { bg: "#E0E7FF", color: "#6366F1" };
       default:
