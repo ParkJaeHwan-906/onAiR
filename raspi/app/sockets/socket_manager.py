@@ -38,8 +38,8 @@ class CameraService:
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameRate" : 13},
-            transform=Transform(rotation=270)
+            controls={"FrameRate": 13},
+            transform=Transform(rotation=270)  # 반시계 방향 회전
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
@@ -77,6 +77,7 @@ class AudioService:
         self.rate = rate
         self.chunk = chunk
         self.is_streaming = False
+        self.stream = None  # 스트림 객체 저장용
     
     def start_streaming(self):
         if not self.is_streaming:
@@ -85,7 +86,19 @@ class AudioService:
             threading.Thread(target=self.stream_audio, daemon=True).start()
     
     def stop_streaming(self):
-        self.is_streaming = False
+        """오디오 스트리밍 종료"""
+        if self.is_streaming:
+            print("🛑 Stopping microphone stream...")
+            self.is_streaming = False
+            # 스트림이 열려있으면 명시적으로 닫기
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except Exception as e:
+                    print(f"⚠️ Stream close error: {e}")
+                finally:
+                    self.stream = None
 
     def stream_audio(self):
         def callback(indata, frames, time_info, status):
@@ -97,15 +110,29 @@ class AudioService:
                 except Exception as e:
                     print("⚠️ Audio emit error:", e)
 
-        with sd.InputStream(
-            channels=1,
-            samplerate=self.rate,
-            blocksize=self.chunk,
-            callback=callback
-        ):
+        try:
+            self.stream = sd.InputStream(
+                channels=1,
+                samplerate=self.rate,
+                blocksize=self.chunk,
+                callback=callback
+            )
+            self.stream.start()
+            # 스트리밍이 활성화된 동안 대기
             while self.is_streaming:
                 time.sleep(0.05)
-
+        except Exception as e:
+            print(f"⚠️ Audio stream error: {e}")
+        finally:
+            # 스트림 정리
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except:
+                    pass
+                self.stream = None
+            print("🔇 Microphone stream closed")
 
 # ===== 글로벌 인스턴스 =====
 camera = CameraService()
@@ -125,12 +152,16 @@ def stream_loop():
         frame = camera.get_frame()
         if frame:
             try:
-                sio.emit("video_frame", frame)
+                timestamp = int(time.time() * 1000)
+                sio.emit(
+                    "video_frame",
+                    {"timestamp": timestamp, "frame": frame}
+                )
             except Exception as e:
                 print("⚠️ Emit failed:", e)
                 stop_streaming_safe()
                 break
-        time.sleep(0.05)  # 약 20fps
+        time.sleep(0.05)
     print("🔚 Video Stream thread exiting")
 
 # ===== 안전한 종료 함수 =====
@@ -150,7 +181,16 @@ def connect():
     # 연결 시 자동 스트리밍 시작
     is_streaming = True
     camera.start_streaming()
-    audio.start_streaming()
+
+@sio.event
+def handle_audio_stream(data):
+    """서버에서 오디오 스트리밍 시작 이벤트 수신"""
+    if data.get("start", False):
+        print("🎙️ Audio streaming start signal received from server")
+        audio.start_streaming()
+    else:
+        print("🛑 Audio streaming stop signal received from server")
+        audio.stop_streaming()
 
 @sio.event
 def disconnect():
