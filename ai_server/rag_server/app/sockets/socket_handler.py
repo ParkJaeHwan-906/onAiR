@@ -1496,8 +1496,9 @@ async def handle_start_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
     """
+    print("[DEBUG] intent_audio_completed 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown" or not data:
+    if sender_device == "unknown":
         return
 
     # === raspi로 "andle_audio_stream" 이벤트 전송 ===
@@ -1509,8 +1510,9 @@ async def accept_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
     """
+    print("[DEBUG] accept_communication 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown" or not data:
+    if sender_device == "unknown":
         return
 
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
@@ -1522,8 +1524,9 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
+    print("[DEBUG] communication_close 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown" or not data:
+    if sender_device == "unknown":
         return
 
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
