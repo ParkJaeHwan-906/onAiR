@@ -184,44 +184,44 @@ async def broadcast_to(device_types, event: str, payload: dict):
     sent_count = 0
     
     # 디버깅: 현재 device_map 상태 출력
-    print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
-    print(f"   현재 device_map: {dict(device_map)}")
-    print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    # print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+    # print(f"   현재 device_map: {dict(device_map)}")
+    # print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
     
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
-        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                print(f"   Payload: {str(payload)[:100]}...")
+                # # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    if sent_count == 0:
-        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    else:
-        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    # if sent_count == 0:
+        # print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    # else:
+        # print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -1451,14 +1451,6 @@ async def handle_video_frame(sid, data):
     if not frame_bytes:
         print("⚠️ Empty frame data received")
         return
-    
-    try:
-        frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        # 90도 시계 방향 회전이 필요하다면:
-        # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-    except Exception as e:
-        print(f"⚠️ Frame rotation error: {e}")
-        # 회전 실패 시 원본 프레임으로 계속 진행
 
     # --- ② JPEG → OpenCV 이미지 디코딩 ---
     try:
@@ -1467,6 +1459,11 @@ async def handle_video_frame(sid, data):
         if frame is None:
             print("⚠️ Failed to decode frame bytes")
             return
+        try:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        except Exception as e:
+            print(f"⚠️ Frame rotation error: {e}")
+    # 회전 실패 시 원본 프레임으로 계속 진행
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
