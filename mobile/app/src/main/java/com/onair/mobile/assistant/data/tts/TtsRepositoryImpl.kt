@@ -31,19 +31,20 @@ class TtsRepositoryImpl(
             .create(TtsApi::class.java)
     }
     
-    override suspend fun playAudio(base64Audio: String, mimeType: String?) {
+    override suspend fun playAudio(base64Audio: String, mimeType: String?, onCompletion: (() -> Unit)?) {
         withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "🎵 오디오 재생 시작: mimeType=$mimeType")
-                mediaPlayerController.playBase64Audio(base64Audio, mimeType)
+                mediaPlayerController.playBase64Audio(base64Audio, mimeType, onCompletion)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 오디오 재생 실패: ${e.message}")
                 e.printStackTrace()
+                onCompletion?.invoke()  // 오류 발생 시에도 콜백 호출
             }
         }
     }
     
-    override suspend fun speakText(text: String, voiceName: String?, languageCode: String?) {
+    override suspend fun speakText(text: String, voiceName: String?, languageCode: String?, onCompletion: (() -> Unit)?) {
         withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "🗣️ TTS 요청: text=$text")
@@ -58,11 +59,12 @@ class TtsRepositoryImpl(
                 
                 Log.d(TAG, "✅ TTS 응답 수신: mimeType=${response.mime_type}, length=${response.text_length}")
                 
-                // 오디오 재생
-                playAudio(response.audio_content, response.mime_type)
+                // 오디오 재생 (완료 콜백 포함)
+                playAudio(response.audio_content, response.mime_type, onCompletion)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ TTS 생성 실패: ${e.message}")
                 e.printStackTrace()
+                onCompletion?.invoke()  // 오류 발생 시에도 콜백 호출
             }
         }
     }
