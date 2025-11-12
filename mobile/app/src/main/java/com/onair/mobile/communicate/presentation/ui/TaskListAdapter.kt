@@ -34,6 +34,9 @@ class TaskListAdapter(
         binding.root.setOnClickListener {
             onItemClick(task)
         }
+        binding.taskDoneCheck.setOnClickListener {
+
+        }
     }
 }
 class TaskDiffCallback : DiffUtil.ItemCallback<TaskResponse>() {
