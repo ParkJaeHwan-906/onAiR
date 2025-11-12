@@ -19,8 +19,9 @@ interface TtsRepository {
      * @param text TTS로 변환할 텍스트
      * @param voiceName 음성 이름 (선택사항)
      * @param languageCode 언어 코드 (선택사항, 기본값: "ko-KR")
+     * @param onCompletion 재생 완료 콜백 (선택사항)
      */
-    suspend fun speakText(text: String, voiceName: String? = null, languageCode: String? = "ko-KR")
+    suspend fun speakText(text: String, voiceName: String? = null, languageCode: String? = "ko-KR", onCompletion: (() -> Unit)? = null)
     
     /**
      * 오디오 재생 중지
