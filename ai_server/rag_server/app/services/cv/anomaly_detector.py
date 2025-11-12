@@ -12,9 +12,14 @@ from loguru import logger
 from app.services.cv.sub_anomaly.fan_belt_anomaly import analyze_fan_belt
 from app.services.cv.sub_anomaly.gauge_anomaly import analyze_gauge
 from app.services.cv.sub_anomaly.panel_anomaly import analyze_panel
+from app.services.cv.yolo_executor import YOLOContext
 
 
-async def run_anomaly_detection(frames: List, modules: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def run_anomaly_detection(
+    frames: List,
+    modules: List[Dict[str, Any]] | None = None,
+    yolo_ctx: YOLOContext | None = None,
+) -> Dict[str, Any]:
     """
     fan/belt + gauge + panel 병렬 실행 후 결과 통합
     - fan/belt: Optical Flow 기반 (20프레임 이상 필요)
@@ -47,11 +52,11 @@ async def run_anomaly_detection(frames: List, modules: List[Dict[str, Any]] = No
         # ------------------------------------------
         tasks = []
         if "fan" in target_types or "belt" in target_types:
-            tasks.append(analyze_fan_belt(frames))
+            tasks.append(analyze_fan_belt(frames, yolo_ctx=yolo_ctx))
         if "gauge" in target_types:
-            tasks.append(analyze_gauge(frames))
+            tasks.append(analyze_gauge(frames, yolo_ctx=yolo_ctx))
         if "panel" in target_types:
-            tasks.append(analyze_panel(frames))
+            tasks.append(analyze_panel(frames, yolo_ctx=yolo_ctx))
 
         if not tasks:
             logger.warning("[anomaly_detector] 실행할 분석 모듈 없음.")
