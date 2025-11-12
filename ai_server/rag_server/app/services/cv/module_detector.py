@@ -8,6 +8,8 @@ import asyncio
 # import torch
 # from ultralytics import YOLO
 from loguru import logger
+import numpy as np 
+
 
 # YOLO 모델 캐시
 _yolo_module_model = None
