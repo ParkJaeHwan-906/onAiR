@@ -7,7 +7,7 @@ Fan/Belt 이상 탐지 (Optical Flow + YOLO)
 import cv2
 import numpy as np
 from collections import deque, Counter
-from ultralytics import YOLO
+# from ultralytics import YOLO
 import asyncio
 from loguru import logger
 import os
@@ -86,90 +86,15 @@ async def analyze_fan_belt(frames):
             }
 
         logger.info(f"[fan_belt] 입력 프레임 수: {len(frames)}")
-        model = YOLO(MODEL_PATH)
+        logger.warning("⚠️ [fan_belt] 테스트 모드: YOLO 기반 팬/벨트 탐지 생략")
+        # model = YOLO(MODEL_PATH)
 
-        prev_gray = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-        belts = {}
-        frame_idx = 1
-
-        for i in range(1, len(frames)):
-            gray = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
-            mag = estimate_motion(prev_gray, gray)
-            prev_gray = gray
-
-            # YOLO 탐지 (belt/fan)
-            results = await asyncio.to_thread(model.predict, frames[i], conf=0.45, verbose=False)
-            belt_boxes = []
-            for r in results:
-                for box in r.boxes:
-                    cls = model.names[int(box.cls)]
-                    if "belt" in cls.lower() or "fan" in cls.lower():
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        belt_boxes.append((cls, (x1, y1, x2, y2)))
-
-            if not belt_boxes:
-                frame_idx += 1
-                continue
-
-            for (cls, (x1, y1, x2, y2)) in belt_boxes:
-                roi_prev = prev_gray[y1:y2, x1:x2]
-                roi_gray = gray[y1:y2, x1:x2]
-                if roi_prev.size == 0 or roi_gray.size == 0:
-                    continue
-
-                mag_roi = mag[y1:y2, x1:x2]
-                mag_valid = mag_roi[mag_roi > MAG_THRESH]
-                mag_mean = np.mean(mag_valid) if mag_valid.size > 0 else 0
-
-                bid = f"{cls}_{i}"
-                if bid not in belts:
-                    belts[bid] = {
-                        "mag_buf": deque(maxlen=SMOOTH_WINDOW),
-                        "trend_buf": deque(maxlen=TREND_WINDOW),
-                        "state_hist": deque(maxlen=STATE_SMOOTH),
-                        "prev_state": "E_NORMAL",
-                        "results": []
-                    }
-
-                b = belts[bid]
-                b["mag_buf"].append(mag_mean)
-                smooth_mag = np.mean(b["mag_buf"])
-                std_motion = np.std(b["mag_buf"])
-                b["trend_buf"].append(smooth_mag)
-                avg_mag = np.mean(b["trend_buf"])
-                ratio = smooth_mag / (avg_mag + 1e-5)
-                delta = smooth_mag - avg_mag
-
-                if frame_idx <= INIT_IGNORE:
-                    state = "E_NORMAL"
-                else:
-                    raw = classify_state(smooth_mag, avg_mag, ratio, delta, b["prev_state"], std_motion)
-                    b["state_hist"].append(raw)
-                    state = max(Counter(b["state_hist"]), key=lambda k: Counter(b["state_hist"])[k])
-
-                b["prev_state"] = state
-                b["results"].append(state)
-            frame_idx += 1
-
-        if not belts:
-            return {"type": "fan_belt", "status": "not_found", "message": "팬/벨트 미검출"}
-
-        # -------------------------------
-        # 상태 요약
-        # -------------------------------
-        summary = {}
-        for bid, b in belts.items():
-            cnt = Counter(b["results"])
-            total = max(len(b["results"]), 1)
-            n, s, a, v, st = [cnt.get(k, 0)/total*100 for k in
-                              ["E_NORMAL", "E_BELT_SLOWDOWN", "E_BELT_ACCELERATE", "E_BELT_VIBRATION", "E_BELT_STOP"]]
-            dom = max(cnt, key=cnt.get)
-            if (n <= 20 and abs(s - a) <= 20) or v >= 25:
-                dom = "E_BELT_VIBRATION"
-            summary[bid] = dict(normal=n, slow=s, accel=a, vib=v, stop=st, result=dom)
-
-        logger.info(f"[fan_belt] 결과 요약: {summary}")
-        return {"type": "fan_belt", "status": "done", "results": summary}
+        # 이하 YOLO 기반 이상 탐지 로직은 테스트 모드에서 비활성화
+        return {
+            "type": "fan_belt",
+            "status": "disabled",
+            "message": "YOLO 기반 팬/벨트 분석이 테스트 모드로 비활성화되었습니다"
+        }
 
     except Exception as e:
         logger.exception(f"[fan_belt] 분석 중 오류: {e}")

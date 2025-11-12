@@ -5,9 +5,8 @@
 """
 
 import asyncio
-import torch
-from ultralytics import YOLO
-import numpy as np
+# import torch
+# from ultralytics import YOLO
 from loguru import logger
 
 # YOLO 모델 캐시
@@ -18,10 +17,12 @@ def get_module_model():
     """YOLO 모듈 탐지 모델 (lazy load, 단일 인스턴스)"""
     global _yolo_module_model
     if _yolo_module_model is None:
-        logger.info("📦 [module_detector] YOLO 모델 로드 중...")
-        _yolo_module_model = YOLO("/app/models/module_best.pt")
-        _yolo_module_model.fuse()  # CPU 최적화
-        logger.info("✅ [module_detector] YOLO 모델 로드 완료")
+        logger.warning("⚠️ [module_detector] 테스트 모드: YOLO 로드 과정 비활성화")
+        # logger.info("📦 [module_detector] YOLO 모델 로드 중...")
+        # _yolo_module_model = YOLO("/app/models/module_best.pt")
+        # _yolo_module_model.fuse()  # CPU 최적화
+        # logger.info("✅ [module_detector] YOLO 모델 로드 완료")
+        _yolo_module_model = False  # 테스트용 플래그
     return _yolo_module_model
 
 
@@ -37,27 +38,31 @@ async def detect_modules_from_recent_frames(frames: list[np.ndarray]):
         return []
 
     model = get_module_model()
+    if not model:
+        logger.info("⏭️ [module_detector] 테스트 모드로 인해 YOLO 탐지 스킵")
+        return []
 
     # YOLO는 내부적으로 GIL을 잠그므로, 비동기화하려면 to_thread 사용이 필수
-    tasks = [
-        asyncio.to_thread(model.predict, f, imgsz=640, conf=0.35, verbose=False)
-        for f in frames
-    ]
-    results_batches = await asyncio.gather(*tasks)
+    # tasks = [
+    #     asyncio.to_thread(model.predict, f, imgsz=640, conf=0.35, verbose=False)
+    #     for f in frames
+    # ]
+    # results_batches = await asyncio.gather(*tasks)
 
-    detections = []
-    for results in results_batches:
-        for res in results:
-            boxes = res.boxes
-            for box in boxes:
-                label = model.names[int(box.cls)]
-                conf = float(box.conf)
-                detections.append({"label": label, "confidence": conf})
+    # detections = []
+    # for results in results_batches:
+    #     for res in results:
+    #         boxes = res.boxes
+    #         for box in boxes:
+    #             label = model.names[int(box.cls)]
+    #             conf = float(box.conf)
+    #             detections.append({"label": label, "confidence": conf})
 
-    # 중복 제거 및 최고 신뢰도 선택
-    filtered = _filter_top_detections(detections)
-    logger.info(f"🔍 [module_detector] 탐지된 모듈 수: {len(filtered)}개")
-    return filtered
+    # # 중복 제거 및 최고 신뢰도 선택
+    # filtered = _filter_top_detections(detections)
+    # logger.info(f"🔍 [module_detector] 탐지된 모듈 수: {len(filtered)}개")
+    # return filtered
+    return []
 
 
 def _filter_top_detections(detections, min_conf=0.4):
