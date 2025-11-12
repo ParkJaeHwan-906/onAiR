@@ -447,7 +447,7 @@ class SocketIoSttClient(
     }
     
     /**
-     * 모바일 음성 파일 재생 완료 이벤트 전송
+     * 모바일 음성 파일 재생 완료 이벤트 전송 (Wakeword용)
      * 
      * @return 전송 성공 여부
      */
@@ -463,10 +463,96 @@ class SocketIoSttClient(
             }
             
             socket?.emit("wakeword_audio_completed", payload)
-            Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송")
+            Log.i(TAG, "📤 모바일 Wakeword 음성 파일 재생 완료 이벤트 전송")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            Log.e(TAG, "❌ 모바일 Wakeword 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * Intent 결과에 따른 음성 파일 재생 완료 이벤트 전송 (AI_SUPPORTER용)
+     * 
+     * @param intent Intent 타입 ("AI_SUPPORTER" | "OPERATOR")
+     * @return 전송 성공 여부
+     */
+    fun sendIntentAudioCompleted(intent: String): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("intent", intent)
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("intent_audio_completed", payload)
+            Log.i(TAG, "📤 모바일 Intent 음성 파일 재생 완료 이벤트 전송: intent=$intent")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 Intent 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * CV 탐지 실패 음성 파일 재생 완료 이벤트 전송
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendCvDetectionFailedAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "cv_detection_failed")
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * Clarify Q&A 턴 TTS 재생 완료 이벤트 전송
+     * 
+     * @param sessionId Clarify 세션 ID
+     * @param turnId Clarify 턴 ID
+     * @return 전송 성공 여부
+     */
+    fun sendClarifyQaTurnAudioCompleted(sessionId: String, turnId: Int): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "clarify_qa_turn")
+                put("session_id", sessionId)
+                put("turn_id", turnId)
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송: session_id=$sessionId, turn_id=$turnId")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
             e.printStackTrace()
             false
         }

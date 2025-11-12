@@ -50,6 +50,9 @@ device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 # Clarify 세션 추적 (session_id → 현재 Clarify 턴 정보)
 clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, history, ... } }
 
+# Intent 결과 저장 (CV 로직 실행 대기용)
+pending_intents: Dict[str, str] = {}  # { session_id 또는 임시 키: "AI_SUPPORTER" | "OPERATOR" }
+
 
 # ========================================
 # 🐛 단계별 수동 실행 모드 (디버깅용)
@@ -144,6 +147,8 @@ def init_socketio():
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
     sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
+    sio.on("intent_audio_completed")(handle_intent_audio_completed)  # 모바일에서 Intent 음성 파일 재생 완료 이벤트 수신 (AI_SUPPORTER용)
+    sio.on("audio_playback_completed")(handle_audio_playback_completed)  # 모바일에서 오디오 재생 완료 이벤트 수신 (CV 탐지 실패, Clarify Q&A 턴 등)
     sio.on("start_clarify_session")(handle_start_clarify_session)
     sio.on("end_clarify_session")(handle_end_clarify_session)
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
@@ -331,6 +336,272 @@ async def handle_wakeword_audio_completed(sid, data):
     await wait_for_next_step("라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료", "2-2-1")
 
 
+async def handle_intent_audio_completed(sid, data):
+    """
+    모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
+    AI_SUPPORTER인 경우 CV 로직 실행
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ Intent 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    intent = data.get("intent", "").upper()
+    
+    print("=" * 60)
+    print(f"📝 [단계 8-1] FastAPI 서버: 모바일 Intent 음성 파일 재생 완료 이벤트 수신 [mobile]")
+    print(f"   Intent: {intent}")
+    print("=" * 60)
+    await wait_for_next_step("모바일 Intent 음성 파일 재생 완료 이벤트 수신 완료", "8-1")
+    
+    # AI_SUPPORTER인 경우 CV 모델 실행
+    if intent == "AI_SUPPORTER":
+        try:
+            print("=" * 60)
+            print("🔍 [단계 9] CV 모델 실행 시작")
+            print("=" * 60)
+            
+            # Redis에서 최근 프레임들 가져오기 (최대 20프레임)
+            redis = await get_redis()
+            frames = await get_latest_frames(redis, limit=20)
+            print(f"📸 Redis에서 가져온 프레임 수: {len(frames)}장")
+            
+            if not frames:
+                print("⚠️ CV 분석할 프레임이 없습니다.")
+                cv_result = {
+                    "detected": False,
+                    "device_type": "unknown",
+                    "modules": [],
+                    "anomalies": [],
+                    "message": "분석할 프레임이 없습니다."
+                }
+            else:
+                cv_result = await run_cv_model(frames)
+            
+            print("=" * 60)
+            await wait_for_next_step("CV 모델 실행 완료", "9")
+            
+            if not cv_result.get("detected", False):
+                # CV 모델이 오류를 탐지하지 못한 경우
+                print("=" * 60)
+                print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                print("=" * 60)
+                await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
+                
+                # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                print("=" * 60)
+                print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
+                print("=" * 60)
+                await broadcast_to("mobile", "cv_detection_failed", {
+                    "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+                })
+                print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
+                await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
+                
+                print("=" * 60)
+                print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                print("=" * 60)
+                await broadcast_to("raspi", "cv_detection_failed", {
+                    "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                })
+                print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                print("=" * 60)
+                await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
+                
+                # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
+                # (라즈베리파이에서 이 이벤트를 받아서 처리)
+            else:
+                # CV 모델이 오류를 탐지한 경우
+                print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
+                print("=" * 60)
+                await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+                
+                # CV 탐지 결과를 기반으로 RAG 쿼리 생성
+                device_type = cv_result.get("device_type", "unknown")
+                anomalies = cv_result.get("anomalies", {})
+                modules = cv_result.get("modules", [])
+                
+                # 오류 내용을 쿼리로 변환
+                query_parts = []
+                if device_type and device_type != "unknown":
+                    query_parts.append(f"{device_type}에서")
+                
+                if anomalies and isinstance(anomalies, dict):
+                    anomaly_status = anomalies.get("status", "")
+                    if anomaly_status == "anomaly_detected":
+                        results = anomalies.get("results", {})
+                        detected_modules = []
+                        for module_name, module_result in results.items():
+                            if isinstance(module_result, dict) and module_result.get("status") == "anomaly":
+                                detected_modules.append(module_name)
+                        if detected_modules:
+                            query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+                    else:
+                        query_parts.append("이상이 탐지되었습니다")
+                else:
+                    query_parts.append("이상이 탐지되었습니다")
+                
+                query = " ".join(query_parts) if query_parts else "CV 모델에서 이상이 탐지되었습니다"
+                
+                print("=" * 60)
+                print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
+                print(f"   Query: {query}")
+                print("=" * 60)
+                await wait_for_next_step("RAG 쿼리 생성 완료", "10")
+                
+                # RAG 검색 (Hybrid Retrieve + Rerank)
+                print("=" * 60)
+                print(f"📚 [단계 11] RAG 검색 시작 (Hybrid Retrieve + Rerank)")
+                print("=" * 60)
+                try:
+                    from app.core.config import settings
+                    base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
+                    hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
+                    used_hits = hits[:5]
+                    
+                    if not used_hits:
+                        print("⚠️ RAG 검색 결과가 없습니다.")
+                        answer_text = f"{query}에 대한 관련 문서를 찾을 수 없습니다."
+                        structured_answer = {
+                            "summary": answer_text,
+                            "tts_text": answer_text,
+                            "citations": []
+                        }
+                    else:
+                        print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+                        await wait_for_next_step("RAG 검색 완료", "11")
+                        
+                        # GPT-4o로 최종 답변 생성
+                        print("=" * 60)
+                        print(f"🤖 [단계 12] GPT-4o로 최종 답변 생성 시작")
+                        print("=" * 60)
+                        snippets = [h["source"]["content"] for h in used_hits]
+                        answer_result = llm_generate_answer(query, snippets, used_hits)
+                        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+                        structured_answer = answer_result
+                        print(f"✅ 최종 답변 생성 완료: {answer_text[:50]}...")
+                        await wait_for_next_step("최종 답변 생성 완료 (GPT-4o)", "12")
+                except Exception as e:
+                    print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    answer_text = f"{query}에 대한 답변을 생성하는 중 오류가 발생했습니다."
+                    structured_answer = {
+                        "summary": answer_text,
+                        "tts_text": answer_text,
+                        "citations": []
+                    }
+                
+                # TTS 변환
+                print("=" * 60)
+                print(f"🔊 [단계 13] 최종 답변 TTS 변환 시작")
+                print("=" * 60)
+                try:
+                    tts_result = text_to_speech(answer_text)
+                    audio_content = tts_result.get("audio_content")
+                    audio_encoding = tts_result.get("mime_type")
+                    print(f"✅ 최종 답변 TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
+                except Exception as e:
+                    print(f"⚠️ TTS 생성 실패: {e}")
+                    audio_content = None
+                    audio_encoding = None
+                await wait_for_next_step("최종 답변 TTS 변환 완료", "13")
+                
+                # 모바일로 최종 답변 전송 (텍스트 + TTS 음성 파일)
+                print("=" * 60)
+                print(f"📤 [단계 14] 모바일로 최종 답변 전송 시작")
+                print("=" * 60)
+                await broadcast_to("mobile", "final_answer", {
+                    "session_id": None,  # CV 탐지 성공은 세션이 없음
+                    "turn_id": 1,
+                    "status": "completed",
+                    "answer": answer_text,
+                    "structured_answer": structured_answer,
+                    "audio_content": audio_content,
+                    "audio_encoding": audio_encoding,
+                    "citations": structured_answer.get("citations", []),
+                    "cv_detection_result": {
+                        "device_type": device_type,
+                        "modules": modules,
+                        "anomalies": anomalies,
+                        "message": cv_result.get('message', '')
+                    }
+                })
+                print("✅ 모바일로 최종 답변 전송 완료")
+                print("=" * 60)
+                await wait_for_next_step("모바일로 최종 답변 전송 완료", "14")
+                
+                # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
+                await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
+        except Exception as e:
+            print(f"❌ CV 모델 실행 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            # CV 모델 오류 시에도 탐지 실패로 처리
+            await broadcast_to("mobile", "cv_detection_failed", {
+                "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
+            })
+            await broadcast_to("raspi", "cv_detection_failed", {
+                "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+            })
+    else:
+        print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
+
+
+async def handle_audio_playback_completed(sid, data):
+    """
+    모바일로부터 오디오 재생 완료 이벤트 수신
+    - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+    - type="clarify_qa_turn": Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
+    """
+    sender_device = device_map.get(sid, "unknown")
+    
+    # 모바일에서만 받음
+    if sender_device != "mobile":
+        print(f"⚠️ 오디오 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        return
+    
+    audio_type = data.get("type", "")
+    session_id = data.get("session_id")
+    turn_id = data.get("turn_id")
+    
+    print("=" * 60)
+    print(f"📝 FastAPI 서버: 모바일 오디오 재생 완료 이벤트 수신 [mobile]")
+    print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
+    print("=" * 60)
+    await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
+    
+    if audio_type == "cv_detection_failed":
+        # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+        print("=" * 60)
+        print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
+        print("=" * 60)
+        
+        # 세션 ID 생성 (Clarify 세션용)
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        await broadcast_to("raspi", "start_streaming_stt", {
+            "session_id": session_id,
+            "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
+        })
+        print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
+        await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        
+    elif audio_type == "clarify_qa_turn":
+        # Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
+        # (이미 라즈베리파이에서 Streaming STT가 실행 중이므로 별도 처리 불필요)
+        print("=" * 60)
+        print(f"✅ Clarify Q&A 턴 TTS 재생 완료: session_id={session_id}, turn_id={turn_id}")
+        print("   다음 Streaming STT 질문을 대기 중입니다.")
+        print("=" * 60)
+        await wait_for_next_step("Clarify Q&A 턴 TTS 재생 완료 처리", "12-3")
+    else:
+        print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
+
+
 # ========================================
 # STT 이벤트 핸들러 (버퍼링 + Streaming)
 # ========================================
@@ -412,91 +683,14 @@ async def handle_stt_result(sid, data):
             print("=" * 60)
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
-            # AI_SUPPORTER 분기인 경우 모바일에서 음성 파일 재생 완료 대기 후 CV 모델 실행
+            # AI_SUPPORTER인 경우 모바일에서 intent_audio_completed 이벤트를 기다림
+            # CV 로직은 handle_intent_audio_completed에서 실행됨
             if intent == "AI_SUPPORTER":
-                # 모바일에서 음성 파일 재생 완료 대기 (최대 10초)
-                # 주의: 모바일에서 음성 파일 재생 완료 이벤트를 별도로 전송하지 않으므로,
-                # 음성 파일 길이를 고려하여 대기 시간 설정
                 print("=" * 60)
-                print("⏳ [단계 8-1] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 중...")
+                print("⏳ [단계 8-1] 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 대기 중...")
                 print("   💡 모바일에서 'AI_Supporter 기능을 시작합니다. 오류 탐지.' 재생 중...")
+                print("   💡 재생 완료 시 intent_audio_completed 이벤트를 통해 CV 로직이 실행됩니다.")
                 print("=" * 60)
-                await asyncio.sleep(5)  # 음성 파일 재생 시간 대기 (약 5초)
-                print("=" * 60)
-                print("✅ [단계 8-1 완료] 모바일 AI_SUPPORTER 음성 파일 재생 완료 대기 종료")
-                print("=" * 60)
-                await wait_for_next_step("모바일 AI_SUPPORTER 음성 파일 재생 완료 대기", "8-1")
-                
-                # CV 모델 실행
-                try:
-                    print("=" * 60)
-                    print("🔍 [단계 9] CV 모델 실행 시작")
-                    print("=" * 60)
-                    
-                    # Redis에서 최근 프레임들 가져오기 (최대 20프레임)
-                    redis = await get_redis()
-                    frames = await get_latest_frames(redis, limit=20)
-                    print(f"📸 Redis에서 가져온 프레임 수: {len(frames)}장")
-                    
-                    if not frames:
-                        print("⚠️ CV 분석할 프레임이 없습니다.")
-                        cv_result = {
-                            "detected": False,
-                            "device_type": "unknown",
-                            "modules": [],
-                            "anomalies": [],
-                            "message": "분석할 프레임이 없습니다."
-                        }
-                    else:
-                        cv_result = await run_cv_model(frames)
-                    
-                    print("=" * 60)
-                    await wait_for_next_step("CV 모델 실행 완료", "9")
-                    
-                    if not cv_result.get("detected", False):
-                        # CV 모델이 오류를 탐지하지 못한 경우
-                        print("=" * 60)
-                        print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
-                        print("=" * 60)
-                        await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
-                        
-                        # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
-                        print("=" * 60)
-                        print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("mobile", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
-                        })
-                        print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
-                        await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
-                        
-                        print("=" * 60)
-                        print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
-                        print("=" * 60)
-                        await broadcast_to("raspi", "cv_detection_failed", {
-                            "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-                        })
-                        print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
-                        print("=" * 60)
-                        await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
-                        
-                        # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
-                        # (라즈베리파이에서 이 이벤트를 받아서 처리)
-                    else:
-                        # CV 모델이 오류를 탐지한 경우
-                        print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
-                        print("=" * 60)
-                        await broadcast_to("mobile", "cv_detection_success", cv_result.get('message', ''))
-                        await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
-                except Exception as e:
-                    print(f"❌ CV 모델 실행 오류: {e}")
-                    # CV 모델 오류 시에도 탐지 실패로 처리
-                    await broadcast_to("mobile", "cv_detection_failed", {
-                        "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
-                    })
-                    await broadcast_to("raspi", "cv_detection_failed", {
-                        "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-                    })
                     
         except Exception as e:
             print(f"❌ 버퍼링 STT 처리 오류: {e}")
