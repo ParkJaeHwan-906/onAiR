@@ -31,14 +31,15 @@ class TtsRepositoryImpl(
             .create(TtsApi::class.java)
     }
     
-    override suspend fun playAudio(base64Audio: String, mimeType: String?) {
+    override suspend fun playAudio(base64Audio: String, mimeType: String?, onCompletion: (() -> Unit)?) {
         withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "🎵 오디오 재생 시작: mimeType=$mimeType")
-                mediaPlayerController.playBase64Audio(base64Audio, mimeType)
+                mediaPlayerController.playBase64Audio(base64Audio, mimeType, onCompletion)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 오디오 재생 실패: ${e.message}")
                 e.printStackTrace()
+                onCompletion?.invoke()  // 오류 발생 시에도 콜백 호출
             }
         }
     }
