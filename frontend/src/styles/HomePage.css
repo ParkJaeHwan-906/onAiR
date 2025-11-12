@@ -1,18 +1,36 @@
 .home-wrapper {
   box-sizing: border-box;
-  width: 1664px;
-  height: 1011px;
-  background-color: #f5f6f8;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-surface-subtle);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 24px 0;
+  align-items: stretch;
+  gap: clamp(10px, 1vw, 14px);
+  padding: clamp(0px, 1vw, 2px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .component-wrapper {
+  width: 100%;
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: clamp(10px, 1vw, 14px);
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.component-wrapper:first-child {
+  flex: 0 1 auto;
+  min-height: clamp(160px, 18vh, 220px);
+}
+
+.component-wrapper:last-child {
+  flex: 1 1 auto;
+  min-height: 0;
 }

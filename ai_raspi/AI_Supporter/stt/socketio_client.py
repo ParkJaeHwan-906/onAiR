@@ -45,7 +45,6 @@ class SocketIOClient:
         
         # 자동 재연결 설정
         # SSL 검증은 기본값 사용 (인증서 검증 활성화)
-        # 실제 인증서 문제는 서버 측에서 해결해야 함
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
             reconnection_attempts=5,  # 최대 5회 재시도
@@ -234,6 +233,74 @@ class SocketIOClient:
         async def handle_pong(data):
             """서버로부터 pong 응답 수신"""
             logger.debug(f"🏓 Pong 수신: {data}")
+        
+        @self.sio.on("service_completed")
+        async def handle_service_completed(data):
+            """서비스 완료 이벤트 수신 (GPT-4o 답변 생성 및 TTS 완료 후)"""
+            session_id = data.get("session_id", "")
+            status = data.get("status", "")
+            logger.info("=" * 60)
+            logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신 (FastAPI 서버)")
+            logger.info(f"   Session ID: {session_id}, Status: {status}")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 서비스 완료 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 [서비스 완료] 브리지 서버로 서비스 완료 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('service_completed', {
+                            "session_id": session_id,
+                            "status": status
+                        })
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [서비스 완료] 브리지 서버로 서비스 완료 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [서비스 완료 실패] 브리지 서버로 서비스 완료 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                logger.warning("=" * 60)
+        
+        @self.sio.on("wakeword_audio_completed")
+        async def handle_wakeword_audio_completed(data):
+            """모바일 음성 파일 재생 완료 이벤트 수신 (FastAPI 서버에서 전송)"""
+            logger.info("=" * 60)
+            logger.info(f"📥 [모바일 음성 재생 완료] wakeword_audio_completed 이벤트 수신 (FastAPI 서버)")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 모바일 음성 파일 재생 완료 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 [모바일 음성 재생 완료] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('wakeword_audio_completed', {})
+                        logger.info("=" * 60)
+                        logger.info(f"✅ [모바일 음성 재생 완료] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ [모바일 음성 재생 완료 실패] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
+                logger.warning("=" * 60)
     
     def _check_server_certificate(self):
         """
@@ -281,7 +348,13 @@ class SocketIOClient:
         try:
             logger.info(f"🔌 Socket.IO 서버 연결 시도: {self.server_url} (경로: /ws)")
             # Socket.IO 경로는 /ws로 설정 (FastAPI 서버에 통합된 Socket.IO 서버)
-            await self.sio.connect(self.server_url, socketio_path="/ws", wait_timeout=10)
+            # SSL 인증서 검증 활성화 (기본값)
+            await self.sio.connect(
+                self.server_url,
+                socketio_path="/ws",
+                wait_timeout=10,
+                transports=["polling", "websocket"]  # Polling 우선, WebSocket fallback
+            )
             # connect 이벤트에서 connected가 True로 설정됨
             return self.connected
         except ssl.SSLCertVerificationError as e:
@@ -364,6 +437,32 @@ class SocketIOClient:
             stt_data["session_id"] = session_id
         
         return await self.emit_stt_result(stt_data)
+    
+    async def emit_wakeword_detected(self):
+        """
+        Wakeword 감지 이벤트를 Socket.IO 서버로 전송합니다.
+        
+        Returns:
+            bool: 전송 성공 여부
+        """
+        if not self.connected:
+            logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 재연결 시도...")
+            # 재연결 시도
+            await self.connect()
+            
+            if not self.connected:
+                logger.error("❌ 재연결 실패, Wakeword 감지 이벤트 전송 불가")
+                return False
+        
+        try:
+            await self.sio.emit("wakeword_detected", {})
+            logger.info("📤 Wakeword 감지 이벤트 전송 완료")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Wakeword 감지 이벤트 전송 오류: {e}")
+            # 전송 실패 시 연결 상태 리셋
+            self.connected = False
+            return False
     
     def is_connected(self):
         """연결 상태 확인"""

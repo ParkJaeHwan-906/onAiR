@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import '../../styles/EquipmentCategorySection.css';
+import { useState, useEffect } from "react";
+import "../../styles/EquipmentCategorySection.css";
 import {
   getEquipmentCategoryList,
   registEquipmentCategory,
-} from '../../api/equipment';
+} from "../../api/equipment";
 
 interface Category {
   id: number;
@@ -14,9 +14,11 @@ interface EquipmentCategorySectionProps {
   onCategoryAdded?: () => void;
 }
 
-function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionProps) {
+function EquipmentCategorySection({
+  onCategoryAdded,
+}: EquipmentCategorySectionProps) {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [newCategory, setNewCategory] = useState('');
+  const [newCategory, setNewCategory] = useState("");
   const [loading, setLoading] = useState(false);
 
   const fetchCategories = async () => {
@@ -26,7 +28,7 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
         setCategories(res.data);
       }
     } catch (error) {
-      console.error('카테고리 목록 조회 실패:', error);
+      console.error("카테고리 목록 조회 실패:", error);
     }
   };
 
@@ -36,7 +38,7 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
 
   const handleAddCategory = async () => {
     if (!newCategory.trim()) {
-      alert('카테고리 이름을 입력해주세요.');
+      alert("카테고리 이름을 입력해주세요.");
       return;
     }
 
@@ -44,18 +46,18 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
       setLoading(true);
       const res = await registEquipmentCategory(newCategory.trim());
       if (res.success) {
-        setNewCategory('');
+        setNewCategory("");
         await fetchCategories();
         if (onCategoryAdded) {
           onCategoryAdded();
         }
-        alert('카테고리가 등록되었습니다.');
+        alert("카테고리가 등록되었습니다.");
       } else {
-        alert(res.message || '카테고리 등록에 실패했습니다.');
+        alert(res.message || "카테고리 등록에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error('카테고리 등록 실패:', error);
-      alert(error.response?.data?.message || '카테고리 등록에 실패했습니다.');
+      console.error("카테고리 등록 실패:", error);
+      alert(error.response?.data?.message || "카테고리 등록에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -71,8 +73,8 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
           placeholder="카테고리 이름을 입력하세요"
           value={newCategory}
           onChange={(e) => setNewCategory(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
               handleAddCategory();
             }
           }}
@@ -82,7 +84,7 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
           onClick={handleAddCategory}
           disabled={loading}
         >
-          {loading ? '등록 중...' : '추가'}
+          {loading ? "등록 중..." : "추가"}
         </button>
       </div>
       <div className="category-list">
@@ -101,4 +103,3 @@ function EquipmentCategorySection({ onCategoryAdded }: EquipmentCategorySectionP
 }
 
 export default EquipmentCategorySection;
-

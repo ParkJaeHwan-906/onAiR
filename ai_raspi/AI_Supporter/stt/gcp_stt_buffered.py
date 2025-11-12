@@ -15,6 +15,9 @@ import numpy as np
 # 🐛 단계별 수동 실행 모드 (디버깅용) - 비동기 버전
 # ========================================
 
+# 자동 모드 플래그 (전역 변수, main_py310.py와 공유)
+auto_mode_enabled_async = False
+
 async def wait_for_next_step_async(step_name: str, step_number: str = ""):
     """
     단계별 수동 실행 모드: 다음 단계로 진행하기 전 대기 (비동기 버전)
@@ -24,7 +27,7 @@ async def wait_for_next_step_async(step_name: str, step_number: str = ""):
         step_number: 단계 번호 (예: "3-1", "3-2")
     
     사용법:
-        - DEBUG_STEP_BY_STEP=True일 때: /tmp/next_step_raspi 파일이 생성될 때까지 대기
+        - DEBUG_STEP_BY_STEP=True일 때: Enter 키 입력 대기
         - DEBUG_STEP_BY_STEP=False일 때: 바로 진행 (0.5초 딜레이만)
     """
     if not settings.DEBUG_STEP_BY_STEP:
@@ -32,61 +35,51 @@ async def wait_for_next_step_async(step_name: str, step_number: str = ""):
         await asyncio.sleep(0.5)
         return
     
-    # 수동 모드: 파일 트리거 대기
-    trigger_file = settings.DEBUG_STEP_TRIGGER_FILE
-    timeout = settings.DEBUG_STEP_WAIT_TIMEOUT
+    # 자동 모드가 활성화되었으면 바로 진행
+    global auto_mode_enabled_async
+    if auto_mode_enabled_async:
+        await asyncio.sleep(0.2)
+        return
     
+    # 수동 모드: 키보드 입력(Enter) 대기
+    # 비동기 함수에서는 별도 스레드에서 input() 호출
     print("=" * 80)
     print(f"⏸️  [단계 {step_number}] {step_name} 완료")
-    print(f"   다음 단계로 진행하려면 다음 명령을 실행하세요:")
-    print(f"   $ touch {trigger_file}")
-    print(f"   또는 자동으로 진행하려면: $ echo 'auto' > {trigger_file}")
-    print(f"   (최대 {timeout}초 대기)")
+    print(f"   다음 단계로 진행하려면 Enter 키를 누르세요")
+    print(f"   (또는 자동 모드를 원하면 'auto'를 입력하고 Enter)")
     print("=" * 80)
     
-    # 기존 트리거 파일 삭제 (이전 단계에서 남아있을 수 있음)
-    if os.path.exists(trigger_file):
+    # 별도 스레드에서 키보드 입력 받기
+    import threading
+    user_input_result = [None]  # 스레드 간 통신을 위한 리스트
+    
+    def get_input():
         try:
-            os.remove(trigger_file)
-        except:
-            pass
+            result = input("   👆 Enter 키를 눌러 다음 단계 진행... ")
+            user_input_result[0] = result
+        except (EOFError, KeyboardInterrupt):
+            user_input_result[0] = ""
+        except Exception as e:
+            print(f"⚠️ 입력 처리 오류: {e}")
+            user_input_result[0] = ""
     
-    # 파일이 생성될 때까지 대기
-    start_time = time.time()
-    check_interval = 0.5  # 0.5초마다 확인
+    input_thread = threading.Thread(target=get_input, daemon=True)
+    input_thread.start()
     
-    while True:
-        if os.path.exists(trigger_file):
-            # 파일 내용 확인 (auto 모드 체크)
-            try:
-                with open(trigger_file, 'r') as f:
-                    content = f.read().strip()
-                if content == "auto":
-                    # 자동 모드: 이후 단계도 자동 진행
-                    print(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
-                    os.remove(trigger_file)
-                    return
-            except:
-                pass
-            
-            # 수동 모드: 파일 삭제 후 진행
-            try:
-                os.remove(trigger_file)
-            except:
-                pass
-            print(f"✅ 다음 단계 진행: {step_name}")
-            print("=" * 80)
-            await asyncio.sleep(0.2)  # 파일 삭제 후 짧은 딜레이
-            return
-        
-        # 타임아웃 체크
-        elapsed = time.time() - start_time
-        if elapsed >= timeout:
-            print(f"⚠️ 타임아웃 ({timeout}초) - 자동으로 다음 단계 진행")
-            print("=" * 80)
-            return
-        
-        await asyncio.sleep(check_interval)
+    # 입력이 들어올 때까지 대기
+    while user_input_result[0] is None:
+        await asyncio.sleep(0.1)
+        if not input_thread.is_alive():
+            break
+    
+    user_input = user_input_result[0] or ""
+    if user_input.strip().lower() == "auto":
+        print(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
+        auto_mode_enabled_async = True
+    else:
+        print(f"✅ 다음 단계 진행: {step_name}")
+    
+    print("=" * 80)
 
 class GcpBufferedStt:
     def __init__(self):
@@ -170,10 +163,20 @@ class GcpBufferedStt:
         # 마이크 안정화 대기 (0.1초)
         await asyncio.sleep(0.1)
         
+        # 큐에 쌓인 오래된 데이터 제거 (이전 세션의 잔여 데이터 방지)
+        if hasattr(mic, 'q'):
+            while not mic.q.empty():
+                try:
+                    mic.q.get_nowait()
+                except:
+                    break
+            print("🧹 큐 초기화 완료 (이전 데이터 제거)")
+        
         print("=" * 60)
         print(f"🎤 [단계 3-1] 음성 수집 시작")
         print(f"   수집 시간: {self.buffer_duration}초")
         print(f"   음성 소스: {type(mic).__name__}")
+        print(f"   샘플레이트: {self.rate} Hz")
         print("=" * 60)
         
         # 3~5초 동안 음성 수집
@@ -219,21 +222,62 @@ class GcpBufferedStt:
                 print("✅ 오디오 데이터가 정상적으로 읽혔습니다 (0이 아닌 데이터 포함)")
         
         # 볼륨 정규화 적용
-        audio_data = self._normalize_audio_volume(audio_data, target_level=0.8)
+        try:
+            print("🔧 볼륨 정규화 시작...")
+            audio_data = self._normalize_audio_volume(audio_data, target_level=0.8)
+            print(f"✅ 볼륨 정규화 완료 (최종 크기: {len(audio_data)} bytes)")
+        except Exception as e:
+            print(f"⚠️ 볼륨 정규화 오류 (계속 진행): {e}")
+            import traceback
+            traceback.print_exc()
         
         # GCP STT 요청
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=self.rate,
-            language_code=self.language,
-            enable_automatic_punctuation=True,
-        )
-        
-        audio = speech.RecognitionAudio(content=audio_data)
+        try:
+            print("🔧 GCP STT 설정 준비 중...")
+            config = speech.RecognitionConfig(
+                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=self.rate,
+                language_code=self.language,
+                enable_automatic_punctuation=True,
+            )
+            
+            audio = speech.RecognitionAudio(content=audio_data)
+            print("✅ GCP STT 설정 완료")
+        except Exception as e:
+            print(f"❌ GCP STT 설정 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
+        # 오디오 길이 계산 (16비트 PCM: 2 bytes per sample)
+        # mic.read()는 이미 16000Hz로 리샘플링된 데이터를 반환하므로 self.rate 사용
+        audio_samples = len(audio_data) // 2  # 16비트 = 2 bytes per sample
+        audio_duration_sec = audio_samples / self.rate
+        
         print("=" * 60)
         print("📤 [단계 3-1] GCP STT 요청 전송 중...")
-        print(f"   오디오 크기: {len(audio_data)} bytes ({len(audio_data) / 2 / self.rate:.2f}초)")
+        print(f"   오디오 크기: {len(audio_data)} bytes")
+        print(f"   샘플 수: {audio_samples} samples")
+        print(f"   샘플레이트: {self.rate} Hz")
+        print(f"   계산된 길이: {audio_duration_sec:.2f}초")
+        print(f"   예상 길이: {target_duration:.2f}초")
+        
+        # 오디오 길이 검증 및 자동 조정
+        if abs(audio_duration_sec - target_duration) > 1.0:
+            print(f"   ⚠️ 경고: 오디오 길이가 예상과 다릅니다!")
+            print(f"      차이: {abs(audio_duration_sec - target_duration):.2f}초")
+            print(f"      가능한 원인: 마이크 샘플레이트 설정 오류 또는 큐에 데이터 과다 누적")
+            
+            # GCP STT 동기 API 제한: 1분(60초) 초과 시 오디오 자르기
+            MAX_DURATION_SEC = 60.0
+            if audio_duration_sec > MAX_DURATION_SEC:
+                print(f"   ✂️ 오디오 길이가 {MAX_DURATION_SEC}초를 초과합니다. 자동으로 자릅니다.")
+                max_samples = int(MAX_DURATION_SEC * self.rate * 2)  # 2 bytes per sample
+                audio_data = audio_data[:max_samples]
+                audio_samples = len(audio_data) // 2
+                audio_duration_sec = audio_samples / self.rate
+                print(f"   ✅ 오디오 자르기 완료: {audio_duration_sec:.2f}초 ({len(audio_data)} bytes)")
+        
         print("=" * 60)
         await wait_for_next_step_async("GCP STT 요청 전송 준비 완료", "3-1")
         

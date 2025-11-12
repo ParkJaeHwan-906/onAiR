@@ -16,6 +16,12 @@ function AppLayout() {
   const updateSentRequestStatus = useWebRtcRequestStore(
     (state) => state.updateSentRequestStatus
   );
+  const cancelSentRequestByTimeout = useWebRtcRequestStore(
+    (state) => state.cancelSentRequestByTimeout
+  );
+  const cancelRequestByTimeout = useWebRtcRequestStore(
+    (state) => state.cancelRequestByTimeout
+  );
   const calculateTodayCount = useWebRtcRequestStore(
     (state) => state.calculateTodayCount
   );
@@ -142,21 +148,43 @@ function AppLayout() {
   useEffect(() => {
     if (!eventSource) return;
 
-    const handleMessage = (event: MessageEvent) => {
+    const dispatchEventPayload = (event: MessageEvent) => {
       try {
-        const data =
+        const parsed =
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        processEvent(data);
+
+        if (parsed?.type && parsed?.payload) {
+          processEvent(parsed.payload);
+        } else {
+          processEvent(parsed);
+        }
       } catch (error) {
-        console.error("❌ SSE 데이터 파싱 실패", error);
+        console.error("SSE 데이터 파싱 실패", error);
       }
     };
 
     const previousHandler = eventSource.onmessage;
-    eventSource.onmessage = (event: MessageEvent) => {
+    const onMessage = (event: MessageEvent) => {
       if (previousHandler) previousHandler(event);
-      handleMessage(event);
+      dispatchEventPayload(event);
     };
+
+    eventSource.onmessage = onMessage;
+
+    const namedEvents = [
+      "taskAssign",
+      "taskCancel",
+      "taskEnd",
+      "callRequest",
+      "callResponse",
+      "rtcCanceled",
+    ];
+
+    const registeredHandlers = namedEvents.map((type) => {
+      const handler = (event: MessageEvent) => dispatchEventPayload(event);
+      eventSource.addEventListener(type, handler);
+      return { type, handler };
+    });
 
     return () => {
       if (previousHandler) {
@@ -164,8 +192,79 @@ function AppLayout() {
       } else {
         eventSource.onmessage = null;
       }
+
+      registeredHandlers.forEach(({ type, handler }) => {
+        eventSource.removeEventListener(type, handler);
+      });
     };
   }, [eventSource, processEvent]);
+
+  useEffect(() => {
+    const handleIncomingCall = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      processEvent(detail);
+    };
+
+    const handleCallResponse = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      processEvent(detail);
+    };
+
+    const handleRtcCanceled = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      
+      // rtcCanceled 이벤트는 시간 초과로 인한 취소
+      console.log("rtcCanceled 이벤트 수신 - 시간 초과로 인한 취소:", detail);
+      
+      if (!myInfo) {
+        console.warn("myInfo가 없어 rtcCanceled 이벤트를 처리할 수 없습니다.");
+        return;
+      }
+      
+      // 관리자인 경우: 보낸 요청을 timeout으로 변경
+      if (myInfo.role === "관리자") {
+        cancelSentRequestByTimeout();
+      } else {
+        // 작업자인 경우: 받은 요청을 timeout으로 변경
+        // detail에서 requestUserAccountId 또는 senderAccountId를 확인
+        const senderAccountId = detail.requestUserAccountId || detail.senderAccountId;
+        if (senderAccountId) {
+          cancelRequestByTimeout(senderAccountId);
+        } else {
+          console.warn("rtcCanceled 이벤트에 senderAccountId가 없습니다:", detail);
+        }
+      }
+      calculateTodayCount();
+    };
+
+    window.addEventListener(
+      "incomingCall",
+      handleIncomingCall as EventListener
+    );
+    window.addEventListener(
+      "callResponse",
+      handleCallResponse as EventListener
+    );
+    window.addEventListener("rtcCanceled", handleRtcCanceled as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        "incomingCall",
+        handleIncomingCall as EventListener
+      );
+      window.removeEventListener(
+        "callResponse",
+        handleCallResponse as EventListener
+      );
+      window.removeEventListener(
+        "rtcCanceled",
+        handleRtcCanceled as EventListener
+      );
+    };
+  }, [processEvent, cancelSentRequestByTimeout, cancelRequestByTimeout, calculateTodayCount, myInfo]);
 
   useEffect(() => {
     if (!myInfo || pendingEventsRef.current.length === 0) return;
