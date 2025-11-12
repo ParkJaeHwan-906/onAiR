@@ -13,6 +13,7 @@ import numpy as np
 import asyncio
 import os
 import time
+from datetime import datetime
 from typing import Dict, Any, Optional
 from app.services.intent_service import classify_intent
 from app.services import memory
@@ -1426,7 +1427,13 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ Frame decode error: {e}")
         return
 
-    print(f"🖼️ Frame received [{timestamp}] from {sender_device}")
+    # timestamp (ms) → YYYYMMDD HH:MM:SS
+    if timestamp:
+        ts_str = datetime.fromtimestamp(timestamp / 1000).strftime("%Y%m%d %H:%M:%S")
+    else:
+        ts_str = datetime.now().strftime("%Y%m%d %H:%M:%S")
+
+    print(f"🖼️ Frame received [{ts_str}] from {sender_device}")
 
     # --- ③ Redis sliding window 저장 ---
     try:
