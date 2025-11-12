@@ -1,13 +1,14 @@
 
 # app/services/cv/redis_utils.py
-import aioredis, base64, numpy as np, cv2, json, asyncio
+from redis.asyncio import Redis
+import base64, numpy as np, cv2, json, asyncio
 from typing import List, Optional
 
 # Sliding window 크기 (20프레임)
 SLIDING_WINDOW_SIZE = 20
 
 async def get_redis():
-    return await aioredis.from_url("redis://redis:6379", decode_responses=False)
+    return Redis.from_url("redis://redis:6379", decode_responses=False)
 
 async def save_frame(redis, frame, ttl=10):
     """단일 프레임을 Redis에 저장 (최신 프레임)"""

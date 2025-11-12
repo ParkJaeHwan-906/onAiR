@@ -9,9 +9,9 @@ import torch
 from typing import Dict, Any, List
 from loguru import logger
 
-from cv.device_monitor import current_device_type
-from cv.module_detector import detect_modules_from_recent_frames
-from cv.anomaly_detector import run_anomaly_detection
+from app.services.cv.device_monitor import current_device_type
+from app.services.cv.module_detector import detect_modules_from_recent_frames
+from app.services.cv.anomaly_detector import run_anomaly_detection
 
 # PyTorch CPU 스레드 제한 (서버 안정화용)
 torch.set_num_threads(1)
