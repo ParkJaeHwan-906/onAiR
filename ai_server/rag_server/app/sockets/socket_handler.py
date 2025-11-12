@@ -154,7 +154,8 @@ def init_socketio():
     sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
     sio.on("clarify_input")(handle_clarify_input)  # 모바일에서 오는 Clarify 입력 수신 (Socket.IO를 통해)
     sio.on("control_raspi")(handle_control_raspi)  # 모바일에서 라즈베리파이 제어 명령
-    sio.on("video_frame")(handle_video_frame)  
+    sio.on("video_frame")(handle_video_frame)
+    sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     
     # CV device_monitor 백그라운드 태스크 시작
@@ -1417,6 +1418,18 @@ async def handle_video_frame(sid, data):
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
+# ========================================
+# Raspberry Pi 오디오 프레임 처리
+# ========================================
+@sio.on("audio_frame")
+async def handle_audio_frame(sid, data):
+    """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown" or not data:
+        return
+
+    # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
+    await broadcast_to("pc", "audio_frame", data)
 
 # ========================================
 # Clarify 입력 수신 (모바일 → FastAPI)
