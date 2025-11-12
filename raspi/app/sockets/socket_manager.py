@@ -11,9 +11,10 @@ from threading import Condition
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
+from libcamera import Transform
 
 # ===== Socket.IO 설정 =====
-SERVER_URL = "http://192.168.1.11:8000"   # EC2 서버 IP
+SERVER_URL = "https://onair.ai.kr"   # EC2 서버 IP
 SOCKET_PATH = "/ws"
 sio = socketio.Client(reconnection=True, reconnection_attempts=0)  # 무한 재연결
 
@@ -36,11 +37,13 @@ class CameraService:
     def __init__(self):
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
-            main={"size": (640, 480), "format": "RGB888"}
+            main={"size": (640, 480), "format": "RGB888"},
+            controls={"FrameRate": 13},
+            transform=Transform(rotation=270)  # 반시계 방향 회전
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
-        self.encoder = JpegEncoder(q=40)
+        self.encoder = JpegEncoder(q=45)
         self.file_output = FileOutput(self.output)
         self.is_streaming = False
 
@@ -131,7 +134,6 @@ class AudioService:
                 self.stream = None
             print("🔇 Microphone stream closed")
 
-
 # ===== 글로벌 인스턴스 =====
 camera = CameraService()
 audio = AudioService()
@@ -150,12 +152,16 @@ def stream_loop():
         frame = camera.get_frame()
         if frame:
             try:
-                sio.emit("video_frame", frame)
+                timestamp = int(time.time() * 1000)
+                sio.emit(
+                    "video_frame",
+                    {"timestamp": timestamp, "frame": frame}
+                )
             except Exception as e:
                 print("⚠️ Emit failed:", e)
                 stop_streaming_safe()
                 break
-        time.sleep(0.05)  # 약 20fps
+        time.sleep(0.05)
     print("🔚 Video Stream thread exiting")
 
 # ===== 안전한 종료 함수 =====
