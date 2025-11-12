@@ -25,14 +25,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SseManager {
     private final ConcurrentHashMap<Long, List<UserInfoDto>> companies = new ConcurrentHashMap<>();      // companyId, List<userAccountId>
     private final ConcurrentHashMap<Long, SseEmitter> emitters = new ConcurrentHashMap<>();             // userAccountId, SseEmitter
+    // 메시기 재전송을 위한 큐
+    private final Map<Long, List<SseMessageDto>> pendingMessages = new ConcurrentHashMap<>();           // userAccountId, List<SseMessageDto>
 
     public SseEmitter connSse(CustomUserDetails user) {     // 처음 연결 요청이 들어옴
         emitters.remove(user.getUserAccountId());                       // 기존 연결이 존재한다면 제거
         SseEmitter emitter = new SseEmitter(1000L*60*60);       // 1 시간의 timeout 을 잡는다.
         // sseEmitter complete 처리
         emitter.onCompletion(() -> {
-            emitters.remove(user.getUserAccountId());
-            companies.get(user.getCompanyId()).removeIf((u) -> Objects.equals(u.getUserAccountId(), user.getUserAccountId()));
+            // 재전송 로직을 위해, 삭제 처리 하지 않음
+//            emitters.remove(user.getUserAccountId());
+//            companies.get(user.getCompanyId()).removeIf((u) -> Objects.equals(u.getUserAccountId(), user.getUserAccountId()));
             log.info("Disconnect SSE [{}]", user.getUserInfo().getEmail());
         });
         // SseEmitter timeout 발생
@@ -41,13 +44,27 @@ public class SseManager {
         emitter.onError(throwable -> emitter.complete());
 
         emitters.put(user.getUserAccountId(), emitter);
-        companies.computeIfAbsent(user.getCompanyId(), (companyId) -> new ArrayList<>());
-        companies.get(user.getCompanyId()).add(user.getUserInfo());
+        companies.computeIfAbsent(user.getCompanyId(), k -> new ArrayList<>());
+        List<UserInfoDto> users = companies.get(user.getCompanyId());
+        if (users.stream().noneMatch(u -> u.getUserAccountId().equals(user.getUserAccountId()))) {
+            users.add(user.getUserInfo());
+        }
+
         sendSseMessage(emitter, SseMessageDto.builder()
                 .eventName("connect")
                 .data("connected")
                 .build());
         log.info("Connect SSE [{}]", user.getUserInfo().getEmail());
+
+        // 재접속 한 유저인지 확인
+        if (pendingMessages.containsKey(user.getUserAccountId())) {
+            List<SseMessageDto> queued = pendingMessages.remove(user.getUserAccountId());
+            for (SseMessageDto msg : queued) {
+                sendSseMessage(emitter, msg);
+            }
+            log.info("Re-sent {} pending messages to [{}]", queued.size(), user.getUserInfo().getEmail());
+        }
+
         return emitter;
     }
 
@@ -64,7 +81,16 @@ public class SseManager {
                             .comment("flush")
             );
         } catch (IOException e) {
+            // 재전송을 위해 연결이 끊긴 userAccountId 찾기
+            Long disConnectedUserAccountId = null;
+            for(Long userAccountId : this.emitters.keySet()) {
+                if(this.emitters.get(userAccountId).equals(emitter)) {
+                    disConnectedUserAccountId = userAccountId;
+                    break;
+                }
+            }
             emitter.complete();
+            retrySendMessage(disConnectedUserAccountId, request);
             throw new IllegalArgumentException("SSE 전송에 실패했습니다.");
         }
     }
@@ -159,15 +185,52 @@ public class SseManager {
 
     /**
      * SSE 연결 유지를 위해 모든 emitter에게 10초마다 heart beat 이벤트 전달
+     *
+     * 전달하지 못한 사용자 -> 연결이 끊긴 사용자 -> 제거 로직 추가
      */
-    @Scheduled(fixedRate = 10 * 1000)
-    public void sendHeartBeat(){
-        this.emitters.forEach((accountId, emitter) -> {
-            sendSseMessage(emitter, SseMessageDto.builder()
-                    .eventName("heart beat")
-                    .data("SSE 연결을 유지하기 위한 이벤트입니다. time stamp : " + LocalDateTime.now().toString())
-                    .build());
-            log.debug("send heartbeat to {}", accountId);
+    @Scheduled(fixedRate = 1000 * 10)
+    public void sendHeartBeat() {
+        List<Long> disconnected = new ArrayList<>();
+
+        emitters.forEach((accountId, emitter) -> {
+            try {
+                sendSseMessage(emitter, SseMessageDto.builder()
+                        .eventName("heart beat")
+                        .data("timestamp: " + LocalDateTime.now())
+                        .build());
+                log.debug("send heartbeat to {}", accountId);
+            } catch (Exception e) {
+                log.warn("Detected disconnected emitter: {}", accountId);
+                disconnected.add(accountId);
+            }
         });
+
+        // 한번에 사용자 제거
+        for (Long accountId : disconnected) {
+            emitters.remove(accountId);
+            companies.forEach((companyId, users) ->
+                    users.removeIf(u -> u.getUserAccountId().equals(accountId))
+            );
+        }
+    }
+
+    // 재전송 로직 추가
+    private void retrySendMessage(Long userAccountId, SseMessageDto request) {
+        if(userAccountId == null) {
+            log.error("Cannot Found User");
+            return;
+        }
+        pendingMessages.computeIfAbsent(userAccountId, k -> new ArrayList<>()).add(request);
+    }
+
+    // 버려지는 메시지 정리
+    @Scheduled(fixedRate = 1000 * 60 * 5)
+    private void gcMessage() {
+        List<Long> deleteTargetUserAccountId = new ArrayList<>();
+        for(Long userAccountId : this.pendingMessages.keySet()) {
+            if(!this.emitters.containsKey(userAccountId)) deleteTargetUserAccountId.add(userAccountId);
+        }
+
+        for(Long userAccountId : deleteTargetUserAccountId) this.pendingMessages.remove(userAccountId);
     }
 }
