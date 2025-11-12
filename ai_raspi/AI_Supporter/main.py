@@ -62,8 +62,9 @@ def run_socketio_client():
     
     # 브리지 클라이언트 초기화
     bridge_client = SttBridgeClient()
-    bridge_client.set_fastapi_socketio_client(socketio_client)
+    bridge_client.set_fastapi_socketio_client(socketio_client)  # FastAPI 클라이언트 주입
     manager.bridge_client = bridge_client  # manager에 브리지 클라이언트 등록
+    logger.info("✅ 브리지 클라이언트 초기화 완료")
     
     async def main_async():
         """비동기 메인 함수"""
