@@ -2,7 +2,6 @@
 CV 모델 서비스 - 모듈 → 이상 순으로 실행 (기기 정보는 device_monitor에서 참조)
 """
 
-import asyncio
 import cv2
 import numpy as np
 import torch
@@ -12,6 +11,12 @@ from loguru import logger
 from app.services.cv.device_monitor import current_device_type
 from app.services.cv.module_detector import detect_modules_from_recent_frames
 from app.services.cv.anomaly_detector import run_anomaly_detection
+from app.services.cv.yolo_executor import (
+    YOLOContext,
+    acquire_yolo_context,
+    pause_device_monitor,
+    resume_device_monitor,
+)
 
 # PyTorch CPU 스레드 제한 (서버 안정화용)
 torch.set_num_threads(1)
@@ -81,11 +86,16 @@ async def run_cv_model(frames: List[np.ndarray]) -> Dict[str, Any]:
         # AHU인 경우에만 모듈 탐지와 이상 탐지 수행
         if device_type.upper() == "AHU":
             print(f"🔍 [CV] {device_type} 감지됨 → 모듈 탐지 및 이상 탐지 수행")
-            print("⚠️ [CV] 테스트 모드: YOLO 기반 모듈/이상 탐지를 생략합니다.")
-            # modules = await detect_modules_from_recent_frames([sharp_frames[0]])  # 한 장만 사용
-            # anomalies = await run_anomaly_detection(sharp_frames, modules)
-            has_anomaly = False
-            msg = "YOLO 기반 CV 분석이 테스트 모드로 비활성화되었습니다."
+            pause_device_monitor()
+            try:
+                async with acquire_yolo_context() as yolo_ctx:
+                    modules, anomalies, has_anomaly, msg = await _run_cv_pipeline(
+                        sharp_frames,
+                        device_type,
+                        yolo_ctx,
+                    )
+            finally:
+                resume_device_monitor()
         else:
             # AHU가 아닌 경우 모듈 탐지와 이상 탐지 스킵
             logger.info(f"[CV] {device_type}는 AHU가 아니므로 모듈 탐지와 이상 탐지를 스킵합니다.")
@@ -113,3 +123,54 @@ async def run_cv_model(frames: List[np.ndarray]) -> Dict[str, Any]:
             "anomalies": [],
             "message": f"CV 파이프라인 오류: {e}",
         }
+
+
+async def _run_cv_pipeline(
+    frames: List[np.ndarray],
+    device_type: str,
+    yolo_ctx: YOLOContext,
+):
+    """
+    실제 YOLO 기반 모듈 탐지 및 이상 분석을 수행하는 보조 함수.
+    테스트 모드에서 YOLO가 비활성화된 경우를 포함해 공통 경로로 사용.
+    """
+    modules = await detect_modules_from_recent_frames([frames[0]], yolo_ctx=yolo_ctx)
+    if not modules:
+        logger.warning(f"[CV] {device_type} 내부 모듈 탐지 실패")
+        print(f"⚠️ [CV] {device_type} 내부 모듈 탐지 실패")
+        return modules, {}, False, f"{device_type} 내부 모듈 탐지 실패"
+
+    logger.info(f"[CV] 모듈 탐지 완료: {modules}")
+    module_names = [m.get("label", "unknown") for m in modules]
+    print(f"✅ [CV] 모듈 탐지 완료: {len(modules)}개 모듈 발견")
+    print(f"   탐지된 모듈: {', '.join(module_names)}")
+
+    anomalies = await run_anomaly_detection(frames, modules, yolo_ctx=yolo_ctx)
+
+    has_anomaly = False
+    msg = "탐지된 이상이 없습니다."
+    if anomalies and isinstance(anomalies, dict):
+        status = anomalies.get("status", "")
+        results = anomalies.get("results", {})
+        print(f"📊 [CV] 이상 탐지 결과 분석")
+        print(f"   전체 상태: {status}")
+        print(f"   결과 모듈 수: {len(results) if isinstance(results, dict) else 0}개")
+
+        if status == "anomaly_detected":
+            has_anomaly = True
+            msg = "이상이 감지되었습니다."
+            print("   ✅ 이상 탐지 성공 (status='anomaly_detected')")
+        elif isinstance(results, dict):
+            for module_name, module_result in results.items():
+                if isinstance(module_result, dict) and module_result.get("status") == "anomaly":
+                    has_anomaly = True
+                    msg = "이상이 감지되었습니다."
+                    print(f"   ✅ 이상 탐지 성공: {module_name} 모듈에서 이상 발견")
+                    break
+            if not has_anomaly:
+                print("   ℹ️ 모든 모듈 정상 상태")
+
+    logger.info(f"[CV] 이상 탐지 결과: {msg} (status={anomalies.get('status') if anomalies else 'None'})")
+    print(f"✅ [CV] 이상 탐지 완료: {msg}")
+
+    return modules, anomalies, has_anomaly, msg
