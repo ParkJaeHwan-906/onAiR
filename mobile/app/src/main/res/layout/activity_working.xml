@@ -44,11 +44,14 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
     <com.google.android.material.card.MaterialCardView
+        android:id="@+id/call_request_card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        android:maxWidth="250dp">
+        android:minWidth="220dp"
+        android:maxWidth="270dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -62,7 +65,7 @@
                 android:textAppearance="?attr/textAppearanceBodyLargeEmphasized"
                 android:layout_margin="5dp"/>
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="통신을 요청했습니다: 사유사유사유사유사유"
                 android:id="@+id/description"
@@ -81,13 +84,13 @@
                 <com.google.android.material.button.MaterialButton
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/accept_communication"
+                    android:id="@+id/accept_call"
                     style="?attr/borderlessButtonStyle"
                     android:text="수락" />
                 <com.google.android.material.button.MaterialButton
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/deny_communication"
+                    android:id="@+id/deny_call"
                     style="?attr/borderlessButtonStyle"
                     android:text="거절" />
             </LinearLayout>
