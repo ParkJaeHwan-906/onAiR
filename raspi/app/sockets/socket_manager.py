@@ -87,8 +87,8 @@ class AudioService:
     def stream_audio(self):
         def callback(indata, frames, time_info, status):
             if self.is_streaming:
-                # float32 -> int16 변환
-                audio_bytes = (indata * 32767).astype(np.int16).tobytes()
+                # float32 그대로 전송 (클라이언트에서 바로 사용 가능)
+                audio_bytes = indata.astype(np.float32).tobytes()
                 try:
                     sio.emit("audio_frame", audio_bytes)
                 except Exception as e:
