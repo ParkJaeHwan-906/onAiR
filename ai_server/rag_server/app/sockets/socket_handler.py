@@ -1451,6 +1451,14 @@ async def handle_video_frame(sid, data):
     if not frame_bytes:
         print("⚠️ Empty frame data received")
         return
+    
+    try:
+        frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        # 90도 시계 방향 회전이 필요하다면:
+        # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    except Exception as e:
+        print(f"⚠️ Frame rotation error: {e}")
+        # 회전 실패 시 원본 프레임으로 계속 진행
 
     # --- ② JPEG → OpenCV 이미지 디코딩 ---
     try:
