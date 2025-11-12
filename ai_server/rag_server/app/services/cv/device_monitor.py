@@ -8,8 +8,8 @@ import asyncio
 import torch
 import numpy as np
 import cv2
-from redis_util import get_latest_frames
-from yolo_utils import load_yolo_model, yolo_infer
+from .redis_util import get_latest_frames, get_redis
+from .yolo_utils import load_yolo_model, yolo_infer
 
 # 현재 감지된 장비 타입 (다른 서비스에서 참조)
 current_device_type: str = "unknown"
@@ -33,7 +33,8 @@ async def background_device_detector():
     while True:
         try:
             # 1️⃣ Redis에서 최근 프레임 5장 가져오기
-            frames = await get_latest_frames(limit=5)
+            redis = await get_redis()
+            frames = await get_latest_frames(redis, limit=5)
             if not frames:
                 await asyncio.sleep(2)
                 continue
