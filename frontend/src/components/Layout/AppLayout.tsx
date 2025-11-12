@@ -16,6 +16,12 @@ function AppLayout() {
   const updateSentRequestStatus = useWebRtcRequestStore(
     (state) => state.updateSentRequestStatus
   );
+  const cancelSentRequestByTimeout = useWebRtcRequestStore(
+    (state) => state.cancelSentRequestByTimeout
+  );
+  const cancelRequestByTimeout = useWebRtcRequestStore(
+    (state) => state.cancelRequestByTimeout
+  );
   const calculateTodayCount = useWebRtcRequestStore(
     (state) => state.calculateTodayCount
   );
@@ -209,11 +215,39 @@ function AppLayout() {
     const handleRtcCanceled = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!detail) return;
-      processEvent(detail);
+      
+      // rtcCanceled 이벤트는 시간 초과로 인한 취소
+      console.log("rtcCanceled 이벤트 수신 - 시간 초과로 인한 취소:", detail);
+      
+      if (!myInfo) {
+        console.warn("myInfo가 없어 rtcCanceled 이벤트를 처리할 수 없습니다.");
+        return;
+      }
+      
+      // 관리자인 경우: 보낸 요청을 timeout으로 변경
+      if (myInfo.role === "관리자") {
+        cancelSentRequestByTimeout();
+      } else {
+        // 작업자인 경우: 받은 요청을 timeout으로 변경
+        // detail에서 requestUserAccountId 또는 senderAccountId를 확인
+        const senderAccountId = detail.requestUserAccountId || detail.senderAccountId;
+        if (senderAccountId) {
+          cancelRequestByTimeout(senderAccountId);
+        } else {
+          console.warn("rtcCanceled 이벤트에 senderAccountId가 없습니다:", detail);
+        }
+      }
+      calculateTodayCount();
     };
 
-    window.addEventListener("incomingCall", handleIncomingCall as EventListener);
-    window.addEventListener("callResponse", handleCallResponse as EventListener);
+    window.addEventListener(
+      "incomingCall",
+      handleIncomingCall as EventListener
+    );
+    window.addEventListener(
+      "callResponse",
+      handleCallResponse as EventListener
+    );
     window.addEventListener("rtcCanceled", handleRtcCanceled as EventListener);
 
     return () => {
@@ -230,8 +264,7 @@ function AppLayout() {
         handleRtcCanceled as EventListener
       );
     };
-  }, [processEvent]);
-
+  }, [processEvent, cancelSentRequestByTimeout, cancelRequestByTimeout, calculateTodayCount, myInfo]);
 
   useEffect(() => {
     if (!myInfo || pendingEventsRef.current.length === 0) return;
