@@ -9,8 +9,9 @@ interface TtsRepository {
      * 
      * @param base64Audio Base64 인코딩된 오디오 데이터
      * @param mimeType MIME 타입 (예: "audio/mpeg")
+     * @param onCompletion 재생 완료 콜백 (선택사항)
      */
-    suspend fun playAudio(base64Audio: String, mimeType: String?)
+    suspend fun playAudio(base64Audio: String, mimeType: String?, onCompletion: (() -> Unit)? = null)
     
     /**
      * 텍스트를 TTS로 변환하여 재생
