@@ -184,44 +184,44 @@ async def broadcast_to(device_types, event: str, payload: dict):
     sent_count = 0
     
     # 디버깅: 현재 device_map 상태 출력
-    # print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
-    # print(f"   현재 device_map: {dict(device_map)}")
-    # print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
     
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
-        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
+        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                # print(f"   Payload: {str(payload)[:100]}...")
+                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    # if sent_count == 0:
-    #     print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    # else:
-    #     print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    if sent_count == 0:
+        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    else:
+        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -234,7 +234,11 @@ async def handle_connect(sid, environ):
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
-        print(f"✅ Client connected: {sid} (from {remote_addr}, user_agent={user_agent[:50]}...)")
+        print("=" * 60)
+        print(f"✅ [연결] Client connected: {sid[:15]}... (from {remote_addr})")
+        print(f"   User-Agent: {user_agent[:50]}...")
+        print(f"   현재 연결된 디바이스 수: {len(device_map)}")
+        print("=" * 60)
         
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
@@ -264,11 +268,11 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
     
-    # print("=" * 60)
-    # print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
-    # print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
-    # print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
-    # print("=" * 60)
+    print("=" * 60)
+    print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
+    print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
+    print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
+    print("=" * 60)
     
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -283,11 +287,19 @@ async def handle_wakeword_detected(sid, data):
     라즈베리파이로부터 Wakeword 감지 이벤트 수신
     모바일로 이벤트를 전송하여 음성 파일 재생 시작
     """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] wakeword_detected 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
     
     # 라즈베리파이에서만 받음
     if sender_device != "raspi":
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print(f"   현재 device_map: {dict(device_map)}")
         return
     
     print("=" * 60)
@@ -313,11 +325,19 @@ async def handle_wakeword_audio_completed(sid, data):
     모바일로부터 음성 파일 재생 완료 이벤트 수신
     라즈베리파이로 이벤트를 전송하여 버퍼링 STT 세션 시작
     """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] wakeword_audio_completed 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
     
     # 모바일에서만 받음
     if sender_device != "mobile":
         print(f"⚠️ 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print(f"   현재 device_map: {dict(device_map)}")
         return
     
     print("=" * 60)
@@ -343,11 +363,19 @@ async def handle_intent_audio_completed(sid, data):
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
     AI_SUPPORTER인 경우 CV 로직 실행
     """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] intent_audio_completed 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
     
     # 모바일에서만 받음
     if sender_device != "mobile":
         print(f"⚠️ Intent 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print(f"   현재 device_map: {dict(device_map)}")
         return
     
     intent = data.get("intent", "").upper()
@@ -662,11 +690,19 @@ async def handle_stt_result(sid, data):
     - 버퍼링 STT: type="final" → Gemini-Flash로 Intent 분류 → 모바일 전송
     - Streaming STT: type="interim" 또는 "final" → Redis 세션에 추가 → Clarify 처리
     """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] stt_result 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
     
     # 라즈베리파이에서만 받음
     if sender_device != "raspi":
         print(f"⚠️ STT 결과는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print(f"   현재 device_map: {dict(device_map)}")
         return
     
     stt_type = data.get("type", "unknown")
