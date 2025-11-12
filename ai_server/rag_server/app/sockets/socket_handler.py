@@ -1483,7 +1483,7 @@ async def handle_video_frame(sid, data):
 async def handle_audio_frame(sid, data):
     """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown" or not data:
+    if sender_device == "unknown":
         return
 
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
