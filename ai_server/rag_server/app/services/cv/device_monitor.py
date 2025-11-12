@@ -26,7 +26,7 @@ async def background_device_detector():
 
     # YOLO 모델 로드 (한 번만)
     if _yolo_device_model is None:
-        _yolo_device_model = load_yolo_model("/app/models/device_best.pt")
+        _yolo_device_model = load_yolo_model("/app/app/models/device_best.pt")
 
     print("✅ [device_monitor] 장비 모니터링 시작됨 (주기: 2초)")
 
