@@ -4,6 +4,8 @@ import io
 import time
 import threading
 import socketio
+import sounddevice as sd
+import numpy as np
 from datetime import datetime
 from threading import Condition
 from picamera2 import Picamera2
@@ -11,7 +13,7 @@ from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
 # ===== Socket.IO 설정 =====
-SERVER_URL = "http://192.168.1.11:8000"   # EC2 서버 IP
+SERVER_URL = "https://onair.ai.kr"   # EC2 서버 IP
 SOCKET_PATH = "/ws"
 sio = socketio.Client(reconnection=True, reconnection_attempts=0)  # 무한 재연결
 
@@ -34,7 +36,8 @@ class CameraService:
     def __init__(self):
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
-            main={"size": (640, 480), "format": "RGB888"}
+            main={"size": (640, 480), "format": "RGB888"},
+            controls={"FrameRate" : 13}
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
@@ -66,12 +69,49 @@ class CameraService:
             self.output.condition.wait()
             return self.output.frame
 
+# ===== 오디오 제어 클래스 =====
+class AudioService:
+    def __init__(self, rate=16000, chunk=1024):
+        self.rate = rate
+        self.chunk = chunk
+        self.is_streaming = False
+    
+    def start_streaming(self):
+        if not self.is_streaming:
+            print("🎙️ Starting microphone stream...")
+            self.is_streaming = True
+            threading.Thread(target=self.stream_audio, daemon=True).start()
+    
+    def stop_streaming(self):
+        self.is_streaming = False
+
+    def stream_audio(self):
+        def callback(indata, frames, time_info, status):
+            if self.is_streaming:
+                # float32 그대로 전송 (클라이언트에서 바로 사용 가능)
+                audio_bytes = indata.astype(np.float32).tobytes()
+                try:
+                    sio.emit("audio_frame", audio_bytes)
+                except Exception as e:
+                    print("⚠️ Audio emit error:", e)
+
+        with sd.InputStream(
+            channels=1,
+            samplerate=self.rate,
+            blocksize=self.chunk,
+            callback=callback
+        ):
+            while self.is_streaming:
+                time.sleep(0.05)
+
+
 # ===== 글로벌 인스턴스 =====
 camera = CameraService()
+audio = AudioService()
 is_streaming = False
 stop_signal = threading.Event()
 
-# ===== 스트리밍 스레드 =====
+# ===== 비디오 스트리밍 스레드 =====
 def stream_loop():
     global is_streaming
     print("🚀 Stream thread started")
@@ -89,13 +129,14 @@ def stream_loop():
                 stop_streaming_safe()
                 break
         time.sleep(0.05)  # 약 20fps
-    print("🔚 Stream thread exiting")
+    print("🔚 Video Stream thread exiting")
 
 # ===== 안전한 종료 함수 =====
 def stop_streaming_safe():
     global is_streaming
     is_streaming = False
     camera.stop_streaming()
+    audio.stop_streaming()
 
 # ===== Socket 이벤트 =====
 @sio.event
@@ -107,6 +148,7 @@ def connect():
     # 연결 시 자동 스트리밍 시작
     is_streaming = True
     camera.start_streaming()
+    audio.start_streaming()
 
 @sio.event
 def disconnect():
