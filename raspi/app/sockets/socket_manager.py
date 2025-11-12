@@ -11,6 +11,7 @@ from threading import Condition
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
+from libcamera import Transform
 
 # ===== Socket.IO 설정 =====
 SERVER_URL = "https://onair.ai.kr"   # EC2 서버 IP
@@ -37,11 +38,12 @@ class CameraService:
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameRate" : 13}
+            controls={"FrameRate" : 13},
+            transform=Transform(rotation=270)
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
-        self.encoder = JpegEncoder(q=40)
+        self.encoder = JpegEncoder(q=45)
         self.file_output = FileOutput(self.output)
         self.is_streaming = False
 
