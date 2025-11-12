@@ -84,13 +84,13 @@
                 <com.google.android.material.button.MaterialButton
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/accept_communication"
+                    android:id="@+id/accept_call"
                     style="?attr/borderlessButtonStyle"
                     android:text="수락" />
                 <com.google.android.material.button.MaterialButton
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/deny_communication"
+                    android:id="@+id/deny_call"
                     style="?attr/borderlessButtonStyle"
                     android:text="거절" />
             </LinearLayout>

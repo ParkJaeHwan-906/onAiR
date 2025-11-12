@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -15,6 +16,7 @@ import com.onair.mobile.OnairApp
 import com.onair.mobile.R
 import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
+import com.onair.mobile.communicate.data.WorkingRepository
 import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.ApiService
 import com.onair.mobile.communicate.data.sse.SseClient
@@ -28,8 +30,9 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
         val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
-        val repository = TaskRepository(apiService)
-        WorkingViewModel(repository)
+        val taskRepository = TaskRepository(apiService)
+        val workingRepository = WorkingRepository(apiService)
+        WorkingViewModel(taskRepository, workingRepository)
     }
     private val sseViewModel: CommunicationViewModel by lazy {
         (application as OnairApp).sseViewModel
@@ -43,6 +46,7 @@ class WorkingActivity : AppCompatActivity() {
         setContentView(binding.root)
         initView()
         observeViewModel()
+        goCall()
     }
 
     private fun initView() {
@@ -98,5 +102,30 @@ class WorkingActivity : AppCompatActivity() {
         binding.callRequestCard.visibility = View.VISIBLE
         val anim = AnimationUtils.loadAnimation(this, R.anim.cardview_slide)
         binding.callRequestCard.startAnimation(anim)
+
+        binding.acceptCall.setOnClickListener {
+            workingViewModel.responseCall(
+                data.getLong("senderAccountId"), data.getString("name"), true)
+        }
+        binding.denyCall.setOnClickListener {
+            workingViewModel.responseCall(
+                data.getLong("senderAccountId"), data.getString("name"), false)
+        }
+    }
+    private fun goCall() {
+        lifecycleScope.launch {
+            workingViewModel.liveKitToken.collect { token ->
+                Log.d("RTC", token)
+                if (!token.isNullOrBlank()) {
+                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+                        putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
+                        putExtra("token", token)
+                    }
+                    startActivity(intent)
+                }
+
+
+            }
+        }
     }
 }
