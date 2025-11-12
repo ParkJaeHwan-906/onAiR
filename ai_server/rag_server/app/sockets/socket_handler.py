@@ -23,6 +23,8 @@ from app.services.tts_service import text_to_speech
 from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
+from app.services.cv.redis_util import save_frame_to_sliding_window, get_latest_frames, get_redis
+from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -149,6 +151,13 @@ def init_socketio():
     sio.on("control_raspi")(handle_control_raspi)  # 모바일에서 라즈베리파이 제어 명령
     sio.on("video_frame")(handle_video_frame)  
     sio.on("ar-marker")(handle_ar_marker)
+    
+    # CV device_monitor 백그라운드 태스크 시작
+    try:
+        asyncio.create_task(background_device_detector())
+        print("✅ CV device_monitor 백그라운드 태스크 시작됨")
+    except Exception as e:
+        print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
     
     print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
@@ -423,11 +432,26 @@ async def handle_stt_result(sid, data):
                     print("=" * 60)
                     print("🔍 [단계 9] CV 모델 실행 시작")
                     print("=" * 60)
-                    print("⚠️ CV 모델 연결은 아직 구현되지 않았습니다. 비워둡니다.")
-                    print("=" * 60)
-                    await wait_for_next_step("CV 모델 실행 (비워둠)", "9")
                     
-                    cv_result = await run_cv_model()
+                    # Redis에서 최근 프레임들 가져오기 (최대 20프레임)
+                    redis = await get_redis()
+                    frames = await get_latest_frames(redis, limit=20)
+                    print(f"📸 Redis에서 가져온 프레임 수: {len(frames)}장")
+                    
+                    if not frames:
+                        print("⚠️ CV 분석할 프레임이 없습니다.")
+                        cv_result = {
+                            "detected": False,
+                            "device_type": "unknown",
+                            "modules": [],
+                            "anomalies": [],
+                            "message": "분석할 프레임이 없습니다."
+                        }
+                    else:
+                        cv_result = await run_cv_model(frames)
+                    
+                    print("=" * 60)
+                    await wait_for_next_step("CV 모델 실행 완료", "9")
                     
                     if not cv_result.get("detected", False):
                         # CV 모델이 오류를 탐지하지 못한 경우
@@ -1130,6 +1154,13 @@ async def handle_video_frame(sid, data):
     if frame is None:
         print("⚠️ Failed to decode frame")
         return
+
+    # 0️⃣ CV용 프레임을 Redis sliding window에 저장
+    try:
+        redis = await get_redis()
+        await save_frame_to_sliding_window(redis, frame, ttl=30)
+    except Exception as e:
+        print(f"⚠️ Redis 프레임 저장 오류: {e}")
 
     # 1️⃣ 모션 계산 (Optical Flow + Essential)
     result = await motion_core.process_frame(frame, sid=sid)

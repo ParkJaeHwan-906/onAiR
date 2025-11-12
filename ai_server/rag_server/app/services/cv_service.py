@@ -68,51 +68,62 @@ async def run_cv_model(frames: List[np.ndarray]) -> Dict[str, Any]:
         logger.info(f"[CV] Sharpness 상위 프레임 선택: {len(sharp_frames)}장")
 
         # ------------------------------------------
-        # ③ 모듈 탐지 (YOLO 1회 실행)
+        # ③ 모듈 탐지 및 이상 탐지 (AHU인 경우에만 수행)
         # ------------------------------------------
-        try:
-            modules = await detect_modules_from_recent_frames([sharp_frames[0]])  # 한 장만 사용
-            if not modules:
+        modules = []
+        anomalies = None
+        
+        # AHU인 경우에만 모듈 탐지와 이상 탐지 수행
+        if device_type.upper() == "AHU":
+            try:
+                modules = await detect_modules_from_recent_frames([sharp_frames[0]])  # 한 장만 사용
+                if not modules:
+                    logger.warning(f"[CV] {device_type} 내부 모듈 탐지 실패")
+                    return {
+                        "detected": False,
+                        "device_type": device_type,
+                        "modules": [],
+                        "anomalies": [],
+                        "message": f"{device_type} 내부 모듈 탐지 실패"
+                    }
+                logger.info(f"[CV] 모듈 탐지 완료: {modules}")
+            except Exception as e:
+                logger.exception(f"[CV] 모듈 탐지 중 오류: {e}")
                 return {
                     "detected": False,
                     "device_type": device_type,
                     "modules": [],
                     "anomalies": [],
-                    "message": f"{device_type} 내부 모듈 탐지 실패"
+                    "message": f"모듈 탐지 오류: {e}"
                 }
-            logger.info(f"[CV] 모듈 탐지 완료: {modules}")
-        except Exception as e:
-            logger.exception(f"[CV] 모듈 탐지 중 오류: {e}")
-            return {
-                "detected": False,
-                "device_type": device_type,
-                "modules": [],
-                "anomalies": [],
-                "message": f"모듈 탐지 오류: {e}"
-            }
 
-        # ------------------------------------------
-        # ④ 이상 탐지 (fan/belt/gauge/panel 병렬)
-        # ------------------------------------------
-        try:
-            anomalies = await run_anomaly_detection(sharp_frames, modules)
-            has_anomaly = bool(
-                anomalies
-                and isinstance(anomalies, dict)
-                and anomalies.get("status") != "error"
-            )
-            msg = "이상이 감지되었습니다." if has_anomaly else "탐지된 이상이 없습니다."
+            # ------------------------------------------
+            # ④ 이상 탐지 (fan/belt/gauge/panel 병렬)
+            # ------------------------------------------
+            try:
+                anomalies = await run_anomaly_detection(sharp_frames, modules)
+                has_anomaly = bool(
+                    anomalies
+                    and isinstance(anomalies, dict)
+                    and anomalies.get("status") != "error"
+                )
+                msg = "이상이 감지되었습니다." if has_anomaly else "탐지된 이상이 없습니다."
 
-            logger.info(f"[CV] 이상 탐지 결과: {msg}")
-        except Exception as e:
-            logger.exception(f"[CV] 이상 탐지 중 오류: {e}")
-            return {
-                "detected": False,
-                "device_type": device_type,
-                "modules": modules,
-                "anomalies": [],
-                "message": f"이상 탐지 오류: {e}",
-            }
+                logger.info(f"[CV] 이상 탐지 결과: {msg}")
+            except Exception as e:
+                logger.exception(f"[CV] 이상 탐지 중 오류: {e}")
+                return {
+                    "detected": False,
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": [],
+                    "message": f"이상 탐지 오류: {e}",
+                }
+        else:
+            # AHU가 아닌 경우 모듈 탐지와 이상 탐지 스킵
+            logger.info(f"[CV] {device_type}는 AHU가 아니므로 모듈 탐지와 이상 탐지를 스킵합니다.")
+            has_anomaly = False
+            msg = f"{device_type}는 CV 분석 대상이 아닙니다."
 
         # ------------------------------------------
         # ⑤ 최종 결과 반환
@@ -121,7 +132,7 @@ async def run_cv_model(frames: List[np.ndarray]) -> Dict[str, Any]:
             "detected": has_anomaly,
             "device_type": device_type,
             "modules": modules,
-            "anomalies": anomalies,
+            "anomalies": anomalies if anomalies else {},
             "message": msg,
         }
 
