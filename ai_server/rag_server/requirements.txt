@@ -88,7 +88,7 @@ pytz==2025.2
 python-multipart>=0.0.9
 
 
-ultralytics==8.2.73
+ultralytics==8.3.221
 numba==0.60.0
 pytesseract==0.3.10
 tqdm==4.67.1
