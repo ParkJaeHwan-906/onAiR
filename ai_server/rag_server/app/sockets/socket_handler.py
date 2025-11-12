@@ -1431,6 +1431,21 @@ async def handle_audio_frame(sid, data):
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
     await broadcast_to("pc", "audio_frame", data)
 
+# 모바일에서 '통신 요청중입니다' 음성 종료 이벤트 전달
+@sio.on("intent_audio_completed") 
+async def handle_start_communication(sid, data):
+    """
+    오퍼레이터 통신 시작 이벤트
+    """
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown" or not data:
+        return
+
+    # === raspi로 "audio streaming" 이벤트 전송 ===
+    await broadcast_to("raspi", "start_audio_stream", {"start" : True})
+    
+
+
 # ========================================
 # Clarify 입력 수신 (모바일 → FastAPI)
 # ========================================
