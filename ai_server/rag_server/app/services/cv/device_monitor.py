@@ -8,8 +8,8 @@ import asyncio
 import torch
 import numpy as np
 import cv2
-from .redis_util import get_latest_frames, get_redis
-from .yolo_utils import load_yolo_model, yolo_infer
+from app.services.cv.redis_util import get_latest_frames, get_redis
+from app.services.cv.yolo_utils import load_yolo_model, yolo_infer
 
 # 현재 감지된 장비 타입 (다른 서비스에서 참조)
 current_device_type: str = "unknown"
