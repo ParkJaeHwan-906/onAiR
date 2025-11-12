@@ -28,45 +28,85 @@ type ArMarker = {
     size: number;
   };
 };
+// stage size
+const STAGE_WIDTH = 968;
+const STAGE_HEIGHT = 857;
 
 // 카메라 화면 size (고정값)
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 480;
+// convert에 사용될 변수
+const scale = STAGE_HEIGHT / CAMERA_HEIGHT;
+const scaledCameraWidth = CAMERA_WIDTH * scale;
 
-export const OverlayCanvas = ({
-  penColor,
-  tool = "pen",
-}: CanvasProps) => {
-  const socket = useSocket();   // 연결되어있는 소켓 객체를 가져옴
+// convert stage -> camera
+const convertStageToCamera = (stageX: number, stageY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
 
-  const [lines, setLines] = useState<DrawingLine[]>([]);
+  const cameraX =
+    ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
+  const cameraY = (stageY / STAGE_HEIGHT) * CAMERA_HEIGHT;
+
+  return {
+    x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
+    y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY))),
+  };
+};
+
+// convert camera -> stage
+const convertCameraToStage = (cameraX: number, cameraY: number) => {
+  const horizontalCrop = (scaledCameraWidth - STAGE_WIDTH) / 2;
+
+  const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
+  const stageY = (cameraY / CAMERA_HEIGHT) * STAGE_HEIGHT;
+
+  return {
+    x: Math.round(stageX),
+    y: Math.round(stageY),
+  };
+};
+
+export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
+  const socket = useSocket();
+  const room = useRoomContext();
+
+  // 펜 선: opacity 값 포함
+  const [lines, setLines] = useState<{ line: DrawingLine; opacity: number }[]>(
+    []
+  );
+
+  // 도형 관련 (주석처리)
   const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
   const [currentShape, setCurrentShape] = useState<any | null>(null); // 드래그 중 도형
+
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(
     null
   );
   const isDrawing = useRef(false);
   const startPos = useRef<{ x: number; y: number } | null>(null);
-  const room = useRoomContext();
 
-  // overlay canvas 크기를 컨테이너에 맞게 동적으로 설정
+  // verlay canvas 크기 동적 설정
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 968, height: 857 });
 
   // 동적 scale 계산 (stageSize 변경 시에만 재계산)
-  const scale = useMemo(() => stageSize.height / CAMERA_HEIGHT, [stageSize.height]);
+  const scale = useMemo(
+    () => stageSize.height / CAMERA_HEIGHT,
+    [stageSize.height]
+  );
   const scaledCameraWidth = useMemo(() => CAMERA_WIDTH * scale, [scale]);
 
   // convert stage -> camera (동적 값 사용)
   const convertStageToCamera = useMemo(() => {
     return (stageX: number, stageY: number) => {
       const horizontalCrop = (scaledCameraWidth - stageSize.width) / 2;
-      const cameraX = ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
+      const cameraX =
+        ((stageX + horizontalCrop) / scaledCameraWidth) * CAMERA_WIDTH;
       const cameraY = (stageY / stageSize.height) * CAMERA_HEIGHT;
 
       return {
         x: Math.max(0, Math.min(CAMERA_WIDTH, Math.round(cameraX))),
-        y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY)))
+        y: Math.max(0, Math.min(CAMERA_HEIGHT, Math.round(cameraY))),
       };
     };
   }, [stageSize, scaledCameraWidth]);
@@ -75,12 +115,13 @@ export const OverlayCanvas = ({
   const convertCameraToStage = useMemo(() => {
     return (cameraX: number, cameraY: number) => {
       const horizontalCrop = (scaledCameraWidth - stageSize.width) / 2;
-      const stageX = (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
+      const stageX =
+        (cameraX / CAMERA_WIDTH) * scaledCameraWidth - horizontalCrop;
       const stageY = (cameraY / CAMERA_HEIGHT) * stageSize.height;
 
       return {
         x: Math.round(stageX),
-        y: Math.round(stageY)
+        y: Math.round(stageY),
       };
     };
   }, [stageSize, scaledCameraWidth]);
@@ -94,22 +135,15 @@ export const OverlayCanvas = ({
     };
 
     if (!containerRef.current) return;
-
-    // 초기 크기 설정
     updateSize();
-
-    // ResizeObserver로 크기 변화 감지
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(containerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
+    return () => resizeObserver.disconnect();
   }, []);
 
+  // LiveKit 데이터 전송
   const sendDrawingData = (data: object) => {
     if (!room) return;
-
     const jsonString = JSON.stringify(data);
     const byteArray = new TextEncoder().encode(jsonString);
     console.log(">>> [Web] SENDING DATA:", jsonString);
@@ -129,39 +163,47 @@ export const OverlayCanvas = ({
   useEffect(() => {
     if (!socket) return;
 
-      // ar-info 이벤트 listen
-      socket.on('ar-info', (data) => {
-        console.log('receive ar info', data);
-        
-        // { markers: [...] } 형태의 데이터 처리
-        const markersData = data as unknown as { markers: ArMarker[] };
-        if (Array.isArray(markersData.markers)) {
-          // 카메라 좌표를 Stage 좌표로 변환
-          const convertedMarkers = markersData.markers.map((marker: ArMarker) => {
-            const stagePos = convertCameraToStage(marker.info.x, marker.info.y);
-            return {
-              ...marker,
-              info: {
-                ...marker.info,
-                x: stagePos.x,
-                y: stagePos.y,
-                size: marker.info.size * scale // size도 스케일 적용
-              }
-            };
-          });
-          setArMarkers(convertedMarkers);
-          console.log('converted AR Markers : ', convertedMarkers);
-        } else {
-          console.warn('data.markers is not an array:', markersData.markers);
-          setArMarkers([]);
-        }
-      });
+    socket.on("ar-info", (data) => {
+      console.log("receive ar info", data);
+      const markersData = data as unknown as { markers: ArMarker[] };
+      if (Array.isArray(markersData.markers)) {
+        const convertedMarkers = markersData.markers.map((marker: ArMarker) => {
+          const stagePos = convertCameraToStage(marker.info.x, marker.info.y);
+          return {
+            ...marker,
+            info: {
+              ...marker.info,
+              x: stagePos.x,
+              y: stagePos.y,
+              size: marker.info.size * scale,
+            },
+          };
+        });
+        setArMarkers(convertedMarkers);
+      } else {
+        setArMarkers([]);
+      }
+    });
 
-      // cleanup
-      return () => {
-        socket.off('ar-info');
-      };
-  }, [socket, convertCameraToStage, scale]);
+    return () => {
+      socket.off("ar-info");
+    };
+  }, [socket]);
+
+  // ------------------------------- 펜 서서히 사라짐 -------------------------------
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLines((prev) =>
+        prev
+          .map((item) => ({
+            ...item,
+            opacity: Math.max(0, item.opacity - 0.05), // 점점 투명하게
+          }))
+          .filter((item) => item.opacity > 0)
+      );
+    }, 150);
+    return () => clearInterval(interval);
+  }, []);
 
   // ------------------------------- 마우스 클릭 시작 -------------------------------
   const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -170,37 +212,39 @@ export const OverlayCanvas = ({
 
     if (tool === "eraser") return;
 
-    // 펜 / 지우개 모드
+    // 펜
     if (tool === "pen") {
       isDrawing.current = true;
       setLines((prev) => [
         ...prev,
-        { tool, color: penColor, points: [pos.x, pos.y] },
+        { line: { tool, color: penColor, points: [pos.x, pos.y] }, opacity: 1 },
       ]);
       sendDrawingData({
         event: "draw-start",
         x: pos.x,
         y: pos.y,
       });
-    } else if (["circle", "square", "triangle"].includes(tool)) {
-      startPos.current = pos;
-      setCurrentShape({
-        type: tool,
-        startX: pos.x,
-        startY: pos.y,
-        endX: pos.x,
-        endY: pos.y,
-        color: penColor,
-      });
-    } else if (["arrow"].includes(tool)) {
-      startPos.current = pos;
-
-      // stage 좌표를 카메라 좌표로 변환
-      const cameraPos = convertStageToCamera(pos.x, pos.y);
-
-      console.log(`ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`);
-      socket.emit("ar-marker", {marker_x: cameraPos.x, marker_y: cameraPos.y});
     }
+
+    // 도형 (주석처리)
+    // else if (["circle", "square", "triangle"].includes(tool)) {
+    //   startPos.current = pos;
+    //   setCurrentShape({
+    //     type: tool,
+    //     startX: pos.x,
+    //     startY: pos.y,
+    //     endX: pos.x,
+    //     endY: pos.y,
+    //     color: penColor,
+    //   });
+    // } else if (["arrow"].includes(tool)) {
+    //   startPos.current = pos;
+    //   const cameraPos = convertStageToCamera(pos.x, pos.y);
+    //   socket.emit("ar-marker", {
+    //     marker_x: cameraPos.x,
+    //     marker_y: cameraPos.y,
+    //   });
+    // }
   };
 
   // ------------------------------- 마우스 이동 -------------------------------
@@ -218,25 +262,27 @@ export const OverlayCanvas = ({
       setLines((prevLines) => {
         const newLines = [...prevLines];
         const lastLine = { ...newLines[newLines.length - 1] };
-        lastLine.points = [...lastLine.points, pos.x, pos.y];
+        lastLine.line.points = [...lastLine.line.points, pos.x, pos.y];
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
       throttledSendDrawMove(pos.x, pos.y);
-    } else if (startPos.current && currentShape) {
-      setCurrentShape({
-        ...currentShape,
-        endX: pos.x,
-        endY: pos.y,
-      });
     }
+
+    // 도형 (주석처리)
+    // else if (startPos.current && currentShape) {
+    //   setCurrentShape({
+    //     ...currentShape,
+    //     endX: pos.x,
+    //     endY: pos.y,
+    //   });
+    // }
   };
 
   // ------------------------------- 마우스 클릭 끝 -------------------------------
   const handleMouseUp = () => {
     if (currentShape) {
-      // 드래그 종료 시 도형 목록에 추가
-      setShapes((prev) => [...prev, currentShape]);
+      // setShapes((prev) => [...prev, currentShape]);
       setCurrentShape(null);
     }
     isDrawing.current = false;
@@ -332,6 +378,7 @@ export const OverlayCanvas = ({
     }
   };
 
+  // ------------------------------- 렌더링 -------------------------------
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
       <Stage
@@ -345,48 +392,50 @@ export const OverlayCanvas = ({
         onTouchEnd={handleMouseUp}
       >
         <Layer>
-          {/* 펜 / 지우개 */}
-          {lines.map((line, i) => (
+          {/* 펜 (3초간 서서히 사라짐) */}
+          {lines.map((item, i) => (
             <Line
               key={`line-${i}`}
-              points={line.points}
-              stroke={line.color || penColor}
+              points={item.line.points}
+              stroke={item.line.color || penColor}
               strokeWidth={5}
               tension={0.5}
               lineCap="round"
               lineJoin="round"
+              shadowColor="red"
+              shadowBlur={20} // → 그림자 번짐
+              shadowOffsetX={5}
+              shadowOffsetY={5}
+              shadowOpacity={0.7}
+              opacity={item.opacity}
               globalCompositeOperation="source-over"
               hitStrokeWidth={15}
               onClick={() => handleDeleteLine(i)}
             />
           ))}
 
-          {/* 기존 도형 */}
-          {shapes.map((shape, i) => renderShape(shape, i))}
+          {/* 도형 (현재는 비활성화) */}
+          {/* {shapes.map((shape, i) => renderShape(shape, i))} */}
 
-          {/* 현재 드래그 중인 도형 (실시간 크기 변화) */}
-          {currentShape && renderShape(currentShape, -1)}
+          {/* AR 마커 유지 */}
+          {Array.isArray(arMarkers) &&
+            arMarkers.map((marker) => (
+              <Circle
+                key={marker.idx}
+                x={marker.info.x}
+                y={marker.info.y}
+                radius={marker.info.size}
+                fill="rgba(255, 0, 0, 0.3)"
+                stroke="#ff0000"
+                strokeWidth={2}
+                listening={tool === "eraser"}
+                onClick={() => {
+                  socket.emit("delete-marker", { idx: marker.idx });
+                }}
+              />
+            ))}
 
-          {/* AR 마커 렌더링 */}
-          {Array.isArray(arMarkers) && arMarkers.length > 0 && arMarkers.map((marker) => (
-            <Circle
-              key={marker.idx}
-              x={marker.info.x}
-              y={marker.info.y}
-              radius={marker.info.size}
-              fill="rgba(255, 0, 0, 0.3)" // 반투명 빨간색
-              stroke="#ff0000"
-              strokeWidth={2}
-              listening={tool === "eraser"} // eraser 선택 시 클릭 이벤트 활성화
-              onClick={() => {
-                console.log("AR 마커 클릭:", marker.idx);
-                // 마커 관련 동작
-                socket.emit("delete-marker", { idx: marker.idx });
-              }}
-            />
-          ))}
-
-          {/* 지우개 커서 */}
+          {/* 지우개 */}
           {tool === "eraser" && eraserPos && (
             <Circle
               x={eraserPos.x}
