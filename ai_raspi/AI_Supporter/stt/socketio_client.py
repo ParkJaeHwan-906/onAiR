@@ -109,13 +109,15 @@ class SocketIOClient:
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
         
-        @self.sio.on("cv_detection_failed")
-        async def handle_cv_detection_failed(data):
-            """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
+        @self.sio.on("start_streaming_stt")
+        async def handle_start_streaming_stt(data):
+            """Streaming STT 시작 신호 수신 (FastAPI 서버에서 전송)"""
+            session_id = data.get("session_id")
             message = data.get("message", "")
             logger.info("=" * 60)
-            logger.info(f"📩 [단계 11] 라즈베리파이(Python 3.13): cv_detection_failed 이벤트 수신")
-            logger.info(f"   메시지: {message}")
+            logger.info(f"📩 [단계 12] 라즈베리파이(Python 3.13): start_streaming_stt 이벤트 수신")
+            logger.info(f"   Session ID: {session_id}")
+            logger.info(f"   Message: {message}")
             logger.info("=" * 60)
             
             # 라즈베리파이: 마이크 ON + Streaming STT 즉시 시작
@@ -125,9 +127,10 @@ class SocketIOClient:
                 # STT 모드를 streaming으로 전환
                 self.manager.set_stt_mode("streaming")
                 
-                # 세션 ID 생성 (Clarify 세션용)
-                import uuid
-                session_id = str(uuid.uuid4())
+                # 세션 ID 사용 (없으면 생성)
+                if not session_id:
+                    import uuid
+                    session_id = str(uuid.uuid4())
                 
                 logger.info("=" * 60)
                 logger.info(f"📤 [단계 12-1] 브리지 서버로 Streaming STT 시작 명령 전송 준비")
@@ -135,7 +138,6 @@ class SocketIOClient:
                 logger.info("=" * 60)
                 
                 # 브리지 클라이언트를 통해 Python 3.10에 Streaming STT 시작 명령 전송
-                # 브리지 클라이언트는 manager를 통해 접근 가능
                 if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
                     success = self.manager.bridge_client.emit_start_streaming_stt(session_id)
                     if success:
@@ -152,6 +154,22 @@ class SocketIOClient:
                     logger.warning("=" * 60)
                     logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. Streaming STT 시작 명령을 전송할 수 없습니다.")
                     logger.warning("=" * 60)
+        
+        @self.sio.on("cv_detection_failed")
+        async def handle_cv_detection_failed(data):
+            """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
+            message = data.get("message", "")
+            logger.info("=" * 60)
+            logger.info(f"📩 [단계 11] 라즈베리파이(Python 3.13): cv_detection_failed 이벤트 수신")
+            logger.info(f"   메시지: {message}")
+            logger.info("=" * 60)
+            
+            # 주의: 모바일에서 음성 파일 재생 완료 이벤트를 받은 후에 start_streaming_stt 이벤트가 전송됨
+            # 따라서 여기서는 Streaming STT를 시작하지 않고, start_streaming_stt 이벤트를 기다림
+            logger.info("=" * 60)
+            logger.info("⏳ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 대기 중...")
+            logger.info("   start_streaming_stt 이벤트 수신 후 Streaming STT 세션을 시작합니다.")
+            logger.info("=" * 60)
         
         @self.sio.on("control_raspi")
         async def handle_control_raspi(data):

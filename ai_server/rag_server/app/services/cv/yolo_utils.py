@@ -10,11 +10,13 @@ import cv2
 import numpy as np
 from pathlib import Path
 from loguru import logger
+from ultralytics import YOLO
 
 
 def load_yolo_model(model_path: str):
     """
-    YOLOv11n 모델 로드 (CPU 전용)
+    YOLO 모델 로드 (CPU 전용)
+    ultralytics.YOLO()를 사용하여 커스텀 아키텍처 모델도 로드 가능
     """
     model_path = Path(model_path)
     if not model_path.exists():
@@ -22,14 +24,10 @@ def load_yolo_model(model_path: str):
 
     try:
         logger.info(f"📦 YOLO 모델 로드 중... ({model_path})")
-        model = torch.hub.load(
-            "ultralytics/yolov5", "custom", path=str(model_path), force_reload=False
-        )
-        model.conf = 0.75  # confidence threshold
-        model.iou = 0.45
-        model.max_det = 50
-        model.classes = None  # 전체 클래스 사용
-        model.to("cpu").eval()
+        # ultralytics.YOLO()를 사용하여 커스텀 모델 로드
+        # 이 방식은 커스텀 아키텍처(C3k2 등)를 포함한 모델도 로드 가능
+        model = YOLO(str(model_path))
+        model.fuse()  # CPU 최적화
         logger.info("✅ YOLO 모델 로드 완료 (CPU)")
         return model
     except Exception as e:
@@ -40,7 +38,7 @@ def yolo_infer(model, frame: np.ndarray, return_boxes=False):
     """
     YOLO 모델 추론 (단일 프레임)
     Args:
-        model: torch 모델 (load_yolo_model 반환)
+        model: YOLO 모델 (load_yolo_model 반환, ultralytics.YOLO 인스턴스)
         frame: np.ndarray (BGR)
         return_boxes: True일 경우 (label, conf, [x1, y1, x2, y2]) 반환
 
@@ -54,28 +52,44 @@ def yolo_infer(model, frame: np.ndarray, return_boxes=False):
         raise ValueError("유효하지 않은 프레임 입력")
 
     try:
-        # 이미지 전처리
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # ultralytics.YOLO()는 BGR 이미지를 직접 처리 가능
+        # 추론 (conf, iou 설정)
+        results = model.predict(
+            frame,
+            conf=0.75,
+            iou=0.45,
+            max_det=50,
+            device="cpu",
+            verbose=False
+        )
 
-        # 추론
-        results = model(img, size=640)
-        df = results.pandas().xyxy[0]
+        if not results or len(results) == 0:
+            return None if not return_boxes else []
 
-        if df.empty:
+        # 첫 번째 결과 사용
+        result = results[0]
+
+        if result.boxes is None or len(result.boxes) == 0:
             return None if not return_boxes else []
 
         if not return_boxes:
             # 가장 높은 confidence의 label 반환
-            top = df.iloc[df["confidence"].idxmax()]
-            return str(top["name"])
+            confidences = result.boxes.conf.cpu().numpy()
+            best_idx = confidences.argmax()
+            class_id = int(result.boxes.cls[best_idx])
+            label = result.names[class_id]
+            return label
         else:
             boxes = []
-            for _, row in df.iterrows():
+            for i in range(len(result.boxes)):
+                box = result.boxes.xyxy[i].cpu().numpy()
+                conf = float(result.boxes.conf[i].cpu().numpy())
+                class_id = int(result.boxes.cls[i].cpu().numpy())
+                label = result.names[class_id]
                 boxes.append({
-                    "label": str(row["name"]),
-                    "confidence": float(row["confidence"]),
-                    "box": [float(row["xmin"]), float(row["ymin"]),
-                            float(row["xmax"]), float(row["ymax"])]
+                    "label": label,
+                    "confidence": conf,
+                    "box": [float(box[0]), float(box[1]), float(box[2]), float(box[3])]
                 })
             return boxes
 
