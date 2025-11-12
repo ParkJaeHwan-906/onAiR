@@ -178,6 +178,7 @@ const ControlBar = ({
           onClick={() => {
             setOpenMenu("none");
             socket.emit("video_stream", { state: "on" });
+            socket.emit("communication_close", null);
             if (onEndCall) {
               onEndCall();
             }

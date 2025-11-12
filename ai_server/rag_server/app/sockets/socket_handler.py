@@ -1500,9 +1500,34 @@ async def handle_start_communication(sid, data):
     if sender_device == "unknown" or not data:
         return
 
-    # === raspi로 "audio streaming" 이벤트 전송 ===
-    await broadcast_to("raspi", "start_audio_stream", {"start" : True})
-    
+    # === raspi로 "andle_audio_stream" 이벤트 전송 ===
+    await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
+
+# 웹에서 통신 요청 수락 이벤트 전달
+@sio.on("accept_communication")
+async def accept_communication(sid, data):
+    """
+    오퍼레이터 통신 시작 이벤트
+    """
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown" or not data:
+        return
+
+    # === raspi로 "handle_audio_stream" 이벤트 전송 ===
+    await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
+
+# 웹에서 통신 종료 이벤트 전달
+@sio.on("communication_close")
+async def communication_close(sid, data):
+    """
+    오퍼레이터 통신 종료 이벤트
+    """
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown" or not data:
+        return
+
+    # === raspi로 "handle_audio_stream" 이벤트 전송 ===
+    await broadcast_to("raspi", "handle_audio_stream", {"start" : False})
 
 
 # ========================================

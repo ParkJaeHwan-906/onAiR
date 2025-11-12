@@ -177,7 +177,7 @@ def connect():
     camera.start_streaming()
 
 @sio.event
-def start_audio_stream(data):
+def handle_audio_stream(data):
     """서버에서 오디오 스트리밍 시작 이벤트 수신"""
     if data.get("start", False):
         print("🎙️ Audio streaming start signal received from server")
