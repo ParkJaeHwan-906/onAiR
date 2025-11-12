@@ -172,10 +172,19 @@ def connect():
     print("✅ Connected to EC2 server")
     sio.emit("register_device", {"device": "raspi"})
 
-    # 연결 시 자동 스트리밍 시작
+    # 연결 시 비디오만 자동 스트리밍 시작 (오디오는 서버 이벤트로 시작)
     is_streaming = True
     camera.start_streaming()
-    audio.start_streaming()
+
+@sio.event
+def start_audio_stream(data):
+    """서버에서 오디오 스트리밍 시작 이벤트 수신"""
+    if data.get("start", False):
+        print("🎙️ Audio streaming start signal received from server")
+        audio.start_streaming()
+    else:
+        print("🛑 Audio streaming stop signal received from server")
+        audio.stop_streaming()
 
 @sio.event
 def disconnect():
