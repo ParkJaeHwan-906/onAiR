@@ -40,8 +40,33 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const [currentRequestDescription, setCurrentRequestDescription] =
     useState("");
   const [isRejectedModalOpen, setIsRejectedModalOpen] = useState(false);
-  const [acknowledgedRejectedRequestId, setAcknowledgedRejectedRequestId] =
-    useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState<"rejected" | "timeout" | null>(null);
+
+  // acknowledged된 요청 ID를 localStorage에 저장하는 함수
+  const saveAcknowledgedRequestId = (requestId: string) => {
+    try {
+      const stored = localStorage.getItem("acknowledgedRejectedRequests");
+      const acknowledgedIds: string[] = stored ? JSON.parse(stored) : [];
+      if (!acknowledgedIds.includes(requestId)) {
+        acknowledgedIds.push(requestId);
+        localStorage.setItem("acknowledgedRejectedRequests", JSON.stringify(acknowledgedIds));
+      }
+    } catch (error) {
+      console.error("acknowledgedRejectedRequests 저장 실패:", error);
+    }
+  };
+
+  // acknowledged된 요청 ID인지 확인하는 함수
+  const isAcknowledged = (requestId: string | null): boolean => {
+    if (!requestId) return false;
+    try {
+      const stored = localStorage.getItem("acknowledgedRejectedRequests");
+      const acknowledgedIds = stored ? JSON.parse(stored) : [];
+      return acknowledgedIds.includes(requestId);
+    } catch {
+      return false;
+    }
+  };
 
   const activeRequest = useMemo(() => {
     if (!isAdmin || !employee) return null;
@@ -57,6 +82,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
 
   const isPendingRequest = activeRequest?.status === "pending";
   const isRejectedRequest = activeRequest?.status === "rejected";
+  const isTimeoutRequest = activeRequest?.status === "timeout";
   const activeRequestId = activeRequest?.id ?? null;
 
   const pendingWorkerName =
@@ -78,7 +104,6 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
         activeRequest.requestTime
       ).getTime();
       setCurrentRequestDescription(activeRequest.description ?? "");
-      setAcknowledgedRejectedRequestId(null);
       if (!hasDismissedPending) {
         setIsPendingModalOpen(true);
       }
@@ -91,7 +116,22 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       setPendingElapsed(0);
       setCurrentRequestDescription(activeRequest.description ?? "");
       setIsPendingModalOpen(false);
-      if (acknowledgedRejectedRequestId !== activeRequestId) {
+      setCancelReason("rejected");
+      if (!isAcknowledged(activeRequestId)) {
+        setIsRejectedModalOpen(true);
+      } else {
+        setIsRejectedModalOpen(false);
+      }
+      return;
+    }
+
+    if (isTimeoutRequest && activeRequest) {
+      pendingFallbackStartRef.current = null;
+      setPendingElapsed(0);
+      setCurrentRequestDescription(activeRequest.description ?? "");
+      setIsPendingModalOpen(false);
+      setCancelReason("timeout");
+      if (!isAcknowledged(activeRequestId)) {
         setIsRejectedModalOpen(true);
       } else {
         setIsRejectedModalOpen(false);
@@ -105,14 +145,15 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
     setPendingElapsed(0);
     pendingFallbackStartRef.current = null;
     setCurrentRequestDescription("");
+    setCancelReason(null);
   }, [
     isAdmin,
     isPendingRequest,
     isRejectedRequest,
+    isTimeoutRequest,
     activeRequest,
     activeRequestId,
     hasDismissedPending,
-    acknowledgedRejectedRequestId,
   ]);
 
   useEffect(() => {
@@ -272,7 +313,6 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       setHasDismissedPending(false);
       setPendingElapsed(0);
       setIsPendingModalOpen(true);
-      setAcknowledgedRejectedRequestId(null);
       setIsRejectedModalOpen(false);
       // 요청만 보내고 응답을 기다림 (SSE로 토큰을 받을 예정)
       // 백엔드에서 작업자에게 SSE로 전달되며, 작업자는 HomePage의 요청 목록에서 확인 가능
@@ -290,9 +330,9 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       return;
     }
     if (
-      isRejectedRequest &&
+      (isRejectedRequest || isTimeoutRequest) &&
       activeRequestId &&
-      acknowledgedRejectedRequestId !== activeRequestId
+      !isAcknowledged(activeRequestId)
     ) {
       setIsRejectedModalOpen(true);
       return;
@@ -308,8 +348,9 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
   const handleRejectedModalClose = () => {
     setIsRejectedModalOpen(false);
     if (activeRequestId) {
-      setAcknowledgedRejectedRequestId(activeRequestId);
+      saveAcknowledgedRequestId(activeRequestId);
     }
+    setCancelReason(null);
   };
 
   if (!employee) {
@@ -463,9 +504,9 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             data-status={
               isPendingRequest
                 ? "pending"
-                : isRejectedRequest &&
+                : (isRejectedRequest || isTimeoutRequest) &&
                   activeRequestId &&
-                  acknowledgedRejectedRequestId !== activeRequestId
+                  !isAcknowledged(activeRequestId)
                 ? "rejected"
                 : "idle"
             }
@@ -473,10 +514,12 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
           >
             {isPendingRequest
               ? "응답 대기 중..."
-              : isRejectedRequest &&
+              : (isRejectedRequest || isTimeoutRequest) &&
                 activeRequestId &&
-                acknowledgedRejectedRequestId !== activeRequestId
-              ? "요청이 거절되었습니다"
+                !isAcknowledged(activeRequestId)
+              ? isTimeoutRequest
+                ? "요청 시간이 초과되었습니다"
+                : "요청이 거절되었습니다"
               : "연결 요청"}
           </button>
 
@@ -573,17 +616,33 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
             onClose={handleRejectedModalClose}
             contentClassName="modal-content--compact"
           >
-            <div className="connection-rejected-modal">
+            <div 
+              className="connection-rejected-modal"
+              data-cancel-reason={cancelReason}
+            >
               <div
                 className="connection-rejected-icon"
                 aria-hidden="true"
               ></div>
               <h3 className="connection-rejected-title">
-                작업자가 연결 요청을 거절했습니다
+                {cancelReason === "timeout"
+                  ? "연결 요청 시간이 초과되었습니다"
+                  : "작업자가 연결 요청을 거절했습니다"}
               </h3>
               <p className="connection-rejected-sub">
-                {pendingWorkerName}님이 해당 요청에 응답하지 않았습니다.
-                필요하다면 다시 요청을 보내주세요.
+                {cancelReason === "timeout" ? (
+                  <>
+                    {pendingWorkerName}님의 응답을 1분 동안 받지 못했습니다.
+                    <br />
+                    필요하시다면 다시 요청을 보내주세요.
+                  </>
+                ) : (
+                  <>
+                    {pendingWorkerName}님이 해당 요청에 응답하지 않았습니다.
+                    <br />
+                    필요하시다면 다시 요청을 보내주세요.
+                  </>
+                )}
               </p>
               {currentRequestDescription && (
                 <div className="connection-rejected-request">

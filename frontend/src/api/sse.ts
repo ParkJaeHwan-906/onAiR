@@ -2,9 +2,9 @@ import { EventSourcePolyfill } from "event-source-polyfill";
 import { api } from "./axiosInstance";
 
 // 재연결 설정
-const MAX_RECONNECT_ATTEMPTS = 10; // 최대 재연결 시도 횟수
-const INITIAL_RECONNECT_DELAY = 1000; // 초기 재연결 지연 시간 (1초)
-const MAX_RECONNECT_DELAY = 30000; // 최대 재연결 지연 시간 (30초)
+const MAX_RECONNECT_ATTEMPTS = 10;
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
 // SSE 연결 함수 (재연결 로직 포함)
 export const connectSSE = (
@@ -13,18 +13,14 @@ export const connectSSE = (
   onError?: (error: any) => void
 ) => {
   const token = localStorage.getItem("accessToken");
-
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
   let reconnectAttempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let eventSource: any | null = null;
-  let isManualClose = false; // 수동 종료 여부
+  let isManualClose = false;
 
   const connect = (): any | null => {
-    // 이미 연결되어 있으면 재연결하지 않음
     if (
       eventSource &&
       eventSource.readyState !== EventSource.CLOSED &&
@@ -33,164 +29,107 @@ export const connectSSE = (
       return eventSource;
     }
 
-    // 이전 연결이 있으면 정리
     if (eventSource) {
       try {
         eventSource.close();
-      } catch (e) {
-        // 이미 닫혀있을 수 있음
-      }
+      } catch {}
     }
 
-    // 최대 재연결 시도 횟수 초과
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      if (onError) {
-        onError(new Error("SSE 재연결 실패: 최대 시도 횟수 초과"));
-      }
+      onError?.(new Error("SSE 재연결 실패: 최대 시도 횟수 초과"));
       return null;
     }
 
-    // sse 객체 생성
     const sseUrl = `${api.defaults.baseURL}/sse/stream`;
-    console.log("토큰 존재:", !!token);
+    console.log("SSE 연결 시도 중... (토큰 존재:", !!token, ")");
 
     eventSource = new EventSourcePolyfill(sseUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      heartbeatTimeout: 60000, // 1분마다 연결 유지 ping
+      heartbeatTimeout: 60000,
     });
 
     // 연결 성공
     eventSource.onopen = () => {
       console.log("SSE 연결 성공 (onopen)");
-      reconnectAttempts = 0; // 재연결 성공 시 카운터 리셋
-
-      // 재연결 타이머가 있으면 정리
+      reconnectAttempts = 0;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
     };
 
-    // 서버 이벤트 수신
+    // event: 가 있는 커스텀 이벤트 타입 자동 등록
+    const eventNames = [
+      "connect",
+      "heart beat",
+      "taskAssign",
+      "taskCancel",
+      "taskEnd",
+      "callRequest",
+      "callResponse",
+      "rtcCanceled",
+    ];
+
+    eventNames.forEach((name) => {
+      eventSource.addEventListener(name, (event: MessageEvent) => {
+        console.log(`SSE 이벤트 수신 [${name}]:`, event.data);
+        try {
+          // heart beat 이벤트는 JSON이 아닐 수 있으므로 특별 처리
+          if (name === "heart beat") {
+            // 텍스트 형태의 heartbeat 메시지 처리
+            handleParsedEvent({ type: "heart beat", payload: event.data }, name);
+          } else {
+            // 다른 이벤트는 JSON 파싱 시도
+            const parsed = JSON.parse(event.data);
+            handleParsedEvent(parsed, name);
+          }
+        } catch (err) {
+          // JSON 파싱 실패 시 (heart beat가 아닌 경우에만 에러 로그)
+          if (name !== "heart beat") {
+            console.error(`JSON Parse 실패 (${name})`, event.data, err);
+          }
+          // 파싱 실패해도 기본 처리 시도
+          handleParsedEvent({ type: name, payload: event.data }, name);
+        }
+        onMessage(event);
+      });
+    });
+
+    // event: 없는 기본 메시지 처리
     eventSource.onmessage = (event: MessageEvent) => {
-      console.log("SSE 메시지 수신:", event.data);
+      console.log("SSE 기본 메시지 수신:", event.data);
 
-      let parseDate;
       try {
-        parseDate = JSON.parse(event.data);
-      } catch (err) {
-        console.error("파싱 실패", err);
-        return;
+        const parsed = JSON.parse(event.data);
+        handleParsedEvent(parsed, parsed.type || "message");
+      } catch {
+        handleParsedEvent({ type: "message", payload: event.data }, "message");
       }
-
-      const { type, payload } = parseDate;
-
-      switch (type) {
-        case "taskAssign":
-          console.log("작업 할당", payload);
-          window.dispatchEvent(new CustomEvent("refreshTasks"));
-          break;
-
-        case "taskCancel":
-          console.log("작업 취소", payload);
-          window.dispatchEvent(new CustomEvent("refreshTasks"));
-          break;
-
-        case "taskEnd":
-          console.log("작업 완료:", payload);
-          window.dispatchEvent(new CustomEvent("refreshTasks"));
-          break;
-
-        case "callRequest":
-          console.log("연결 요청:", payload);
-          window.dispatchEvent(
-            new CustomEvent("incomingCall", { detail: payload })
-          );
-          onMessage(event);
-          break;
-
-        case "callResponse":
-          console.log("연결 응답:", payload);
-          window.dispatchEvent(
-            new CustomEvent("callResponse", { detail: payload })
-          );
-          onMessage(event);
-          break;
-
-        case "connect":
-          console.log("연결 유지 확인");
-          break;
-        case "heart beat":
-        case "ping":
-          console.log("Heartbeat 이벤트 수신");
-          break;
-
-        default:
-          console.log("알 수 없는 이벤트", type, payload);
-          onMessage(event);
-          break;
-      }
-      // onMessage(event);
+      onMessage(event);
     };
 
-    // // 특정 이벤트 타입별 처리 (ping 이벤트 등)
-    // eventSource.addEventListener("ping", () => {
-    //   console.log("SSE ping 이벤트 수신 - 연결 유지");
-    //   // ping 이벤트 수신 시 연결 유지 (타임아웃 리셋)
-    //   // heartbeatTimeout이 자동으로 처리하지만 명시적으로 처리
-    // });
-
-    // eventSource.addEventListener("connect", (event: any) => {
-    //   console.log("SSE connect 이벤트 수신:", event.data);
-    //   // 연결 성공 이벤트
-    //   onMessage(event);
-    // });
-
-    // eventSource.addEventListener("heart beat", (event: any) => {
-    //   console.log("SSE heart beat 이벤트 수신:", event.data);
-    //   // 연결 성공 이벤트
-    //   onMessage(event);
-    // });
-
-    // 오류 발생 시
+    // 오류 및 재연결 처리
     eventSource.onerror = (error: any) => {
       const readyState = eventSource?.readyState;
-      console.error("SSE 연결 오류 - readyState:", readyState, {
-        CONNECTING: EventSource.CONNECTING,
-        OPEN: EventSource.OPEN,
-        CLOSED: EventSource.CLOSED,
-        error: error,
-      });
+      console.error("SSE 연결 오류 - readyState:", readyState, error);
 
-      // 타임아웃이나 연결 실패 시 onError 콜백 호출
-      // if (onError && (readyState === EventSource.CONNECTING || readyState === EventSource.CLOSED)) {
-      //   const errorMessage = readyState === EventSource.CONNECTING 
-      //     ? "SSE 연결 타임아웃: 20초 내 연결 실패"
-      //     : "SSE 연결 실패: 연결이 끊어졌습니다";
-      //   onError(new Error(errorMessage));
-      // }
-
-      // 수동으로 닫은 경우가 아니고, 연결이 끊어진 경우에만 재연결 시도
-      if (!isManualClose && (readyState === EventSource.CLOSED || readyState === EventSource.CONNECTING)) {
+      if (
+        !isManualClose &&
+        (readyState === EventSource.CLOSED ||
+          readyState === EventSource.CONNECTING)
+      ) {
         reconnectAttempts++;
-
-        // 지수 백오프: 재연결 지연 시간 계산 (1초, 2초, 4초, 8초, ... 최대 30초)
         const delay = Math.min(
           INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1),
           MAX_RECONNECT_DELAY
         );
+        console.warn(`재연결 시도 ${reconnectAttempts}회 (delay ${delay}ms)`);
 
-        if (onReconnect) {
-          onReconnect(reconnectAttempts);
-        }
-
-        // 재연결 시도
+        onReconnect?.(reconnectAttempts);
         reconnectTimer = setTimeout(() => {
-          if (!isManualClose) {
-            connect();
-          }
+          if (!isManualClose) connect();
         }, delay);
       }
     };
@@ -198,20 +137,71 @@ export const connectSSE = (
     return eventSource;
   };
 
-  // 초기 연결
+  // 이벤트 데이터 공통 처리 함수
+  const handleParsedEvent = (parsed: any, eventName: string) => {
+    const type = parsed?.type || eventName;
+    const payload = parsed?.payload ?? parsed;
+
+    switch (type) {
+      case "connect":
+        console.log("연결 유지 확인");
+        break;
+
+      case "heart beat":
+        console.log("Heartbeat 이벤트 수신:", payload || parsed);
+        break;
+
+      case "taskAssign":
+        console.log("작업 할당:", payload);
+        window.dispatchEvent(new CustomEvent("refreshTasks"));
+        break;
+
+      case "taskCancel":
+        console.log("작업 취소:", payload);
+        window.dispatchEvent(new CustomEvent("refreshTasks"));
+        break;
+
+      case "taskEnd":
+        console.log("작업 완료:", payload);
+        window.dispatchEvent(new CustomEvent("refreshTasks"));
+        break;
+
+      case "callRequest":
+        console.log("연결 요청:", payload);
+        window.dispatchEvent(
+          new CustomEvent("incomingCall", { detail: payload })
+        );
+        break;
+
+      case "callResponse":
+        console.log("연결 응답:", payload);
+        window.dispatchEvent(
+          new CustomEvent("callResponse", { detail: payload })
+        );
+        break;
+
+      case "rtcCanceled":
+        console.log("통신 취소 이벤트 수신:", payload);
+        window.dispatchEvent(
+          new CustomEvent("rtcCanceled", { detail: payload })
+        );
+        break;
+
+      default:
+        console.log("기타 이벤트 수신:", type, payload);
+        break;
+    }
+  };
+
+  // 초기 연결 시도
   const initialEventSource = connect();
 
-  // 종료 함수를 이벤트 소스에 추가
+  // 수동 종료 함수 추가
   if (initialEventSource) {
     (initialEventSource as any).manualClose = () => {
       isManualClose = true;
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (initialEventSource) {
-        initialEventSource.close();
-      }
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      initialEventSource.close();
     };
   }
 
@@ -221,7 +211,6 @@ export const connectSSE = (
 // SSE 연결 종료 함수
 export const disconnectSSE = (eventSource: any) => {
   if (eventSource) {
-    // 수동 종료 플래그 설정 (재연결 방지)
     if (eventSource.manualClose) {
       eventSource.manualClose();
     } else {
