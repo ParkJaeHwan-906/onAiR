@@ -8,8 +8,8 @@ import asyncio
 import torch
 import numpy as np
 import cv2
-from .redis_util import get_latest_frames, get_redis
-from .yolo_utils import load_yolo_model, yolo_infer
+from app.services.cv.redis_util import get_latest_frames, get_redis
+from app.services.cv.yolo_utils import load_yolo_model, yolo_infer
 
 # 현재 감지된 장비 타입 (다른 서비스에서 참조)
 current_device_type: str = "unknown"
@@ -26,7 +26,7 @@ async def background_device_detector():
 
     # YOLO 모델 로드 (한 번만)
     if _yolo_device_model is None:
-        _yolo_device_model = load_yolo_model("/app/models/device_best.pt")
+        _yolo_device_model = load_yolo_model("/app/app/models/device_best.pt")
 
     print("✅ [device_monitor] 장비 모니터링 시작됨 (주기: 2초)")
 

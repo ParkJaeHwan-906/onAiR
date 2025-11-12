@@ -95,6 +95,9 @@ pipeline {
                         echo 'Nginx 재시작 완료'
                     } else {
                         echo 'Nginx 컨테이너가 실행 중이지 않습니다.'
+                        echo 'Nginx 컨테이너 재시작 중...'
+                        sh 'docker restart nginx'
+                        echo 'Nginx 재시작 완료'
                     }
                 }
             }
