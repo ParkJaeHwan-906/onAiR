@@ -99,7 +99,10 @@ function HomeBig({
 
         // 소켓으로 통신 요청 수락 이벤트 전송
         if (socket) {
+          console.log("accept_communication 이벤트 emit")
           socket.emit('accept_communication', null);
+        }else{
+          console.log("error : 소켓이 없음!");
         }
         
 
