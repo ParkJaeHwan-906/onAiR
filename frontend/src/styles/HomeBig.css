@@ -2,7 +2,9 @@
   flex: 1 1 clamp(300px, 47%, 560px);
   min-width: 300px;
   max-width: 100%;
-  height: clamp(320px, 52.5vh, 550px);
+  height: 100%;
+  max-height: 550px;
+  overflow: hidden;
   border-radius: clamp(8px, 0.9vw, 12px);
   background-color: var(--color-surface-base);
   color: var(--color-text-primary);
@@ -13,8 +15,6 @@
   padding: clamp(16px, 1.5vw, 20px) clamp(14px, 1.5vw, 20px)
     clamp(14px, 1.3vw, 18px);
   box-sizing: border-box;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .home-big-header {
