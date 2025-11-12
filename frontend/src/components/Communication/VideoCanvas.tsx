@@ -39,6 +39,7 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
       // 소켓 이벤트 수신
       const handleAudioFrame = (data: ArrayBuffer) => {
+        console.log("[DEBUG] 오디오 프레임 수신")
         const floatData = new Float32Array(data);
         // AudioWorklet으로 전달
         workletNode.port.postMessage({type: "audio_frame", frame: floatData});

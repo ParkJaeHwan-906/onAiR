@@ -74,6 +74,7 @@ class AudioService:
         self.rate = rate
         self.chunk = chunk
         self.is_streaming = False
+        self.stream = None  # 스트림 객체 저장용
     
     def start_streaming(self):
         if not self.is_streaming:
@@ -82,7 +83,19 @@ class AudioService:
             threading.Thread(target=self.stream_audio, daemon=True).start()
     
     def stop_streaming(self):
-        self.is_streaming = False
+        """오디오 스트리밍 종료"""
+        if self.is_streaming:
+            print("🛑 Stopping microphone stream...")
+            self.is_streaming = False
+            # 스트림이 열려있으면 명시적으로 닫기
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except Exception as e:
+                    print(f"⚠️ Stream close error: {e}")
+                finally:
+                    self.stream = None
 
     def stream_audio(self):
         def callback(indata, frames, time_info, status):
@@ -94,14 +107,29 @@ class AudioService:
                 except Exception as e:
                     print("⚠️ Audio emit error:", e)
 
-        with sd.InputStream(
-            channels=1,
-            samplerate=self.rate,
-            blocksize=self.chunk,
-            callback=callback
-        ):
+        try:
+            self.stream = sd.InputStream(
+                channels=1,
+                samplerate=self.rate,
+                blocksize=self.chunk,
+                callback=callback
+            )
+            self.stream.start()
+            # 스트리밍이 활성화된 동안 대기
             while self.is_streaming:
                 time.sleep(0.05)
+        except Exception as e:
+            print(f"⚠️ Audio stream error: {e}")
+        finally:
+            # 스트림 정리
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except:
+                    pass
+                self.stream = None
+            print("🔇 Microphone stream closed")
 
 
 # ===== 글로벌 인스턴스 =====
@@ -144,10 +172,19 @@ def connect():
     print("✅ Connected to EC2 server")
     sio.emit("register_device", {"device": "raspi"})
 
-    # 연결 시 자동 스트리밍 시작
+    # 연결 시 비디오만 자동 스트리밍 시작 (오디오는 서버 이벤트로 시작)
     is_streaming = True
     camera.start_streaming()
-    audio.start_streaming()
+
+@sio.event
+def handle_audio_stream(data):
+    """서버에서 오디오 스트리밍 시작 이벤트 수신"""
+    if data.get("start", False):
+        print("🎙️ Audio streaming start signal received from server")
+        audio.start_streaming()
+    else:
+        print("🛑 Audio streaming stop signal received from server")
+        audio.stop_streaming()
 
 @sio.event
 def disconnect():
