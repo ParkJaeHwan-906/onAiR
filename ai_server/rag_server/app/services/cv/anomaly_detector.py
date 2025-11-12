@@ -83,7 +83,21 @@ async def run_anomaly_detection(frames: List, modules: List[Dict[str, Any]] = No
                 })
 
         has_fallback = len(fallback_triggers) > 0
-        overall_status = "partial_fail" if has_fallback else "done"
+        
+        # 이상 탐지 여부 확인 (results 중 하나라도 status="anomaly"인지)
+        has_anomaly_detected = False
+        for module_result in result_map.values():
+            if isinstance(module_result, dict) and module_result.get("status") == "anomaly":
+                has_anomaly_detected = True
+                break
+        
+        # overall_status 결정
+        if has_anomaly_detected:
+            overall_status = "anomaly_detected"  # 이상 탐지 성공
+        elif has_fallback:
+            overall_status = "partial_fail"  # 부분 실패 (fallback 필요)
+        else:
+            overall_status = "done"  # 정상 완료 (이상 없음)
 
         # ------------------------------------------
         # 최종 결과
@@ -95,7 +109,7 @@ async def run_anomaly_detection(frames: List, modules: List[Dict[str, Any]] = No
             "fallback": fallback_triggers if has_fallback else None,
         }
 
-        logger.info(f"[anomaly_detector] 결과 요약: {summary['status']} | fallback={has_fallback}")
+        logger.info(f"[anomaly_detector] 결과 요약: {summary['status']} | fallback={has_fallback} | anomaly_detected={has_anomaly_detected}")
         return summary
 
     except Exception as e:
