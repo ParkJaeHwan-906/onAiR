@@ -1460,7 +1460,7 @@ async def handle_video_frame(sid, data):
             print("⚠️ Failed to decode frame bytes")
             return
         try:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
         except Exception as e:
             print(f"⚠️ Frame rotation error: {e}")
     # 회전 실패 시 원본 프레임으로 계속 진행
