@@ -337,12 +337,29 @@ class MainActivitySttServer : AppCompatActivity() {
                     
                     IntentType.OPERATOR -> {
                         Log.i(TAG, "✅ OPERATOR 분기 처리 시작")
+                        addLog("✅ OPERATOR 분기 처리 시작")
                         
-                        // 1. 오디오 재생: "통신이 시작됩니다."
-                        ttsRepository.speakText("통신이 시작됩니다.")
-                        
-                        // 2. UI 업데이트: "통신 중..." 화면 표시
+                        // 1. UI 업데이트: "통신 중..." 화면 표시
                         updateIntentUI(IntentType.OPERATOR, "통신 중...")
+                        
+                        // 2. 오디오 재생: "통신이 시작됩니다."
+                        lifecycleScope.launch {
+                            ttsRepository.speakText("통신이 시작됩니다.") {
+                                // 재생 완료 콜백
+                                Log.i(TAG, "✅ OPERATOR TTS 재생 완료")
+                                addLog("✅ OPERATOR TTS 재생 완료")
+                                
+                                // FastAPI 서버로 재생 완료 이벤트 전송
+                                val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
+                                if (success) {
+                                    Log.i(TAG, "📤 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 완료")
+                                    addLog("📤 재생 완료 이벤트 전송 완료")
+                                } else {
+                                    Log.e(TAG, "❌ 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 실패")
+                                    addLog("❌ 재생 완료 이벤트 전송 실패")
+                                }
+                            }
+                        }
                         
                         // 3. Spring 서버 WebRTC API 연결 요청
                         // ACCESS_TOKEN이 만료되었을 수 있으므로 갱신 시도
