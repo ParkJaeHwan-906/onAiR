@@ -1429,6 +1429,7 @@ async def handle_audio_frame(sid, data):
         return
 
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
+    print("[DEBUG] 오디오 프레임 수신됨")
     await broadcast_to("pc", "audio_frame", data)
 
 # ========================================
