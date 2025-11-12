@@ -13,7 +13,7 @@ type HomeSmallProps = {
 function HomeSmall({
   isGraph,
   numInfo,
-  totalInfo,
+  // totalInfo,
   title,
   value,
   icon,
@@ -25,14 +25,14 @@ function HomeSmall({
         <img src={icon} alt="list" />
       </div>
       <div className="status">
-        {/* <span>{numInfo}</span> */}
-        {title === "작업 인원 수" && totalInfo !== undefined ? (
+        <span>{numInfo}</span>
+        {/* {title === "작업 인원 수" && totalInfo !== undefined ? (
           <span>
             전체 {totalInfo}명 · 온라인 {numInfo}명
           </span>
         ) : (
           <span>{numInfo}</span>
-        )}
+        )} */}
       </div>
       <div className="content-wrapper">
         {isGraph && <SemicircleGauge value={value} />}
