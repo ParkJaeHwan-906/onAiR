@@ -7,6 +7,7 @@
 import asyncio
 # import torch
 # from ultralytics import YOLO
+import numpy as np
 from loguru import logger
 
 # YOLO 모델 캐시
