@@ -65,7 +65,7 @@
                 android:textAppearance="?attr/textAppearanceBodyLargeEmphasized"
                 android:layout_margin="5dp"/>
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="통신을 요청했습니다: 사유사유사유사유사유"
                 android:id="@+id/description"
