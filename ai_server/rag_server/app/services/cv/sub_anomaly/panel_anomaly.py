@@ -10,7 +10,7 @@ import os
 import cv2
 import pytesseract
 import numpy as np
-from ultralytics import YOLO
+# from ultralytics import YOLO
 from loguru import logger
 
 # ---------------------------------------------------------
@@ -83,65 +83,61 @@ async def analyze_panel(frames):
         # 2️⃣ 가장 선명한 프레임 선택
         sharpest_frame, best_score = max(valid_frames, key=lambda x: x[1])
 
-        # 3️⃣ 모델 로드
-        module_model = YOLO(MODULE_MODEL_PATH)
-        panel_model = YOLO(PANEL_MODEL_PATH)
+        logger.warning("⚠️ [panel] 테스트 모드: YOLO 기반 제어판 분석 생략")
+        # module_model = YOLO(MODULE_MODEL_PATH)
+        # panel_model = YOLO(PANEL_MODEL_PATH)
 
-        # 4️⃣ 모듈 모델로 패널 ROI 탐지
-        module_results = module_model.predict(sharpest_frame, conf=0.5, device="cpu", verbose=False)
-        panel_roi = None
-        for r in module_results:
-            for box in r.boxes:
-                cls = module_model.names[int(box.cls)]
-                if "panel" in cls.lower():
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    panel_roi = sharpest_frame[y1:y2, x1:x2]
-                    break
-        if panel_roi is None or panel_roi.size == 0:
-            return {"type": "panel", "status": "not_found", "message": "제어판 미검출"}
+        # module_results = module_model.predict(sharpest_frame, conf=0.5, device="cpu", verbose=False)
+        # panel_roi = None
+        # for r in module_results:
+        #     for box in r.boxes:
+        #         cls = module_model.names[int(box.cls)]
+        #         if "panel" in cls.lower():
+        #             x1, y1, x2, y2 = map(int, box.xyxy[0])
+        #             panel_roi = sharpest_frame[y1:y2, x1:x2]
+        #             break
+        # if panel_roi is None or panel_roi.size == 0:
+        #     return {"type": "panel", "status": "not_found", "message": "제어판 미검출"}
 
-        # 5️⃣ 패널 모델로 LED/온도 분석
-        button_results = panel_model.predict(panel_roi, conf=0.5, device="cpu", verbose=False)
-        led_status, temp_values = {}, []
+        # button_results = panel_model.predict(panel_roi, conf=0.5, device="cpu", verbose=False)
+        # led_status, temp_values = {}, []
 
-        for r in button_results:
-            for box in r.boxes:
-                cls = panel_model.names[int(box.cls)]
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                roi = panel_roi[y1:y2, x1:x2]
-                if roi.size == 0:
-                    continue
+        # for r in button_results:
+        #     for box in r.boxes:
+        #         cls = panel_model.names[int(box.cls)]
+        #         x1, y1, x2, y2 = map(int, box.xyxy[0])
+        #         roi = panel_roi[y1:y2, x1:x2]
+        #         if roi.size == 0:
+        #             continue
 
-                if cls == "temperature":
-                    temp = ocr_temperature(roi)
-                    if temp is not None:
-                        temp_values.append(temp)
-                else:
-                    on, color = led_color_status(roi)
-                    led_status[cls] = {"on": on, "color": color}
+        #         if cls == "temperature":
+        #             temp = ocr_temperature(roi)
+        #             if temp is not None:
+        #                 temp_values.append(temp)
+        #         else:
+        #             on, color = led_color_status(roi)
+        #             led_status[cls] = {"on": on, "color": color}
 
-        # 6️⃣ 결과 없으면 fallback
-        if not led_status and not temp_values:
-            return {"type": "panel", "status": "low_confidence", "message": "LED/온도 인식 실패"}
+        # if not led_status and not temp_values:
+        #     return {"type": "panel", "status": "low_confidence", "message": "LED/온도 인식 실패"}
 
-        # 7️⃣ 최종 판정
-        temp_mean = np.mean(temp_values) if temp_values else None
-        msg = "정상"
-        if any(v["color"] == "red" and v["on"] for v in led_status.values()):
-            msg = "⚠️ 경고등 점등"
-        elif temp_mean and temp_mean > 60:
-            msg = f"⚠️ 온도 이상 ({temp_mean:.1f}°C)"
+        # temp_mean = np.mean(temp_values) if temp_values else None
+        # msg = "정상"
+        # if any(v["color"] == "red" and v["on"] for v in led_status.values()):
+        #     msg = "⚠️ 경고등 점등"
+        # elif temp_mean and temp_mean > 60:
+        #     msg = f"⚠️ 온도 이상 ({temp_mean:.1f}°C)"
 
-        logger.info(f"[panel] Sharpness={best_score:.2f}, Temp={temp_mean}, LEDs={led_status}")
+        # logger.info(f"[panel] Sharpness={best_score:.2f}, Temp={temp_mean}, LEDs={led_status}")
 
         return {
             "type": "panel",
-            "status": "done",
+            "status": "disabled",
             "sharpness": best_score,
-            "message": msg,
+            "message": "YOLO 기반 제어판 분석이 테스트 모드로 비활성화되었습니다",
             "results": {
-                "temp": round(temp_mean, 2) if temp_mean else None,
-                "leds": led_status
+                "temp": None,
+                "leds": {}
             }
         }
 
