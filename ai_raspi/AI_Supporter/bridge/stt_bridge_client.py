@@ -72,6 +72,38 @@ class SttBridgeClient:
                     logger.error(f"❌ Failed to forward STT result to FastAPI: {e}")
             else:
                 logger.warning("⚠️ FastAPI Socket.IO 클라이언트가 연결되지 않음, 전송 대기")
+        
+        # Wakeword 감지 이벤트 수신 (Python 3.10 → Python 3.13 → FastAPI)
+        @self.sio.on('wakeword_detected')
+        def on_wakeword_detected(data):
+            """Wakeword 감지 이벤트를 FastAPI 서버로 전달"""
+            logger.info("=" * 60)
+            logger.info(f"📥 [단계 2-1] 브리지 클라이언트: Wakeword 감지 이벤트 수신")
+            logger.info("=" * 60)
+            
+            # FastAPI 서버로 전송
+            if self.socketio_fastapi_client and self.socketio_fastapi_client.is_connected():
+                try:
+                    def send_async():
+                        """새 이벤트 루프에서 비동기 함수 실행"""
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        try:
+                            logger.info("📡 [단계 2-1] FastAPI 서버로 Wakeword 감지 이벤트 전송 시작...")
+                            new_loop.run_until_complete(self.socketio_fastapi_client.emit_wakeword_detected())
+                            logger.info("=" * 60)
+                            logger.info("✅ [단계 2-1 완료] FastAPI 서버로 Wakeword 감지 이벤트 전송 완료")
+                            logger.info("=" * 60)
+                        finally:
+                            new_loop.close()
+                    
+                    import threading
+                    thread = threading.Thread(target=send_async, daemon=True)
+                    thread.start()
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward wakeword_detected to FastAPI: {e}")
+            else:
+                logger.warning("⚠️ FastAPI Socket.IO 클라이언트가 연결되지 않음, 전송 대기")
 
     def set_fastapi_socketio_client(self, socketio_client):
         """FastAPI 서버 Socket.IO 클라이언트 주입"""
@@ -143,12 +175,56 @@ class SttBridgeClient:
 
     def connect(self):
         """브리지 서버에 연결"""
+        logger.info("=" * 60)
+        logger.info("🔌 브리지 서버 연결 시도 중...")
+        logger.info(f"   URL: {self.bridge_url}")
+        logger.info("   ℹ️  브리지 서버는 Python 3.10 프로세스(main_py310.py)에서 실행됩니다.")
+        logger.info("   ℹ️  Python 3.10 프로세스가 실행 중이 아니면 연결이 실패할 수 있습니다.")
+        logger.info("   ℹ️  재연결 옵션이 활성화되어 있어, Python 3.10 프로세스가 시작되면 자동으로 연결됩니다.")
+        logger.info("=" * 60)
+        
+        max_retries = 10
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                logger.info(f"   연결 시도 {retry_count + 1}/{max_retries}...")
+                self.sio.connect(self.bridge_url, wait_timeout=5)
+                # 연결 성공 확인
+                if self.sio.connected:
+                    logger.info("=" * 60)
+                    logger.info(f"✅ 브리지 서버 연결 성공! (시도 횟수: {retry_count + 1})")
+                    logger.info("=" * 60)
+                    self.sio.wait()  # 연결 유지
+                    return
+                else:
+                    logger.warning(f"   연결 시도 실패 (연결 상태: {self.sio.connected})")
+            except Exception as e:
+                logger.warning(f"   연결 시도 {retry_count + 1} 실패: {e}")
+            
+            retry_count += 1
+            if retry_count < max_retries:
+                import time
+                wait_time = min(2 ** retry_count, 10)  # 지수 백오프, 최대 10초
+                logger.info(f"   {wait_time}초 후 재시도...")
+                time.sleep(wait_time)
+        
+        # 최종 실패
+        logger.error("=" * 60)
+        logger.error(f"❌ 브리지 서버 연결 실패 (최대 시도 횟수: {max_retries})")
+        logger.error("   확인 사항:")
+        logger.error("   1. Python 3.10 프로세스(main_py310.py)가 실행 중인지 확인")
+        logger.error("   2. 브리지 서버가 포트 5050에서 실행 중인지 확인: netstat -an | grep 5050")
+        logger.error("   3. Python 3.10 프로세스를 실행하려면: python3.10 main_py310.py")
+        logger.error("=" * 60)
+        self.connected = False
+        
+        # 재연결을 위해 계속 시도 (재연결 옵션이 활성화되어 있음)
         try:
-            self.sio.connect(self.bridge_url)
-            self.sio.wait()
-        except Exception as e:
-            logger.error(f"❌ 브리지 서버 연결 오류: {e}")
-            self.connected = False
+            logger.info("🔄 재연결 옵션으로 계속 재시도 중...")
+            self.sio.wait()  # 재연결 대기
+        except:
+            pass
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

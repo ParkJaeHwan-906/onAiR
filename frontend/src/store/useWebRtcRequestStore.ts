@@ -9,7 +9,7 @@ export interface WebRtcRequest {
   equipmentName: string | null;
   description?: string;
   requestTime: string; // 요청 시간
-  status: "pending" | "accepted" | "rejected" | "completed"; // 요청 상태
+  status: "pending" | "accepted" | "rejected" | "timeout" | "completed"; // 요청 상태
   accessToken?: string; // 응답 시 받은 토큰
   // 상대방 정보 (요청을 보낼 때 저장)
   receiverInfo?: {
@@ -59,6 +59,12 @@ interface WebRtcRequestState {
 
   // 보낸 요청 완료 처리 (통신 종료 시)
   completeSentRequest: () => void;
+
+  // 보낸 요청 시간 초과 처리 (1분 후 서버에서 자동 취소)
+  cancelSentRequestByTimeout: () => void;
+
+  // 받은 요청 시간 초과 처리 (1분 후 서버에서 자동 취소)
+  cancelRequestByTimeout: (senderAccountId: number) => void;
 
   // 오늘의 요청만 필터링
   getTodayRequests: () => WebRtcRequest[];
@@ -193,6 +199,28 @@ export const useWebRtcRequestStore = create<WebRtcRequestState>()(
           sentRequests: state.sentRequests.map((req) =>
             req.status === "accepted" || req.status === "pending"
               ? { ...req, status: "completed" as "completed" }
+              : req
+          ),
+        }));
+        get().calculateTodayCount();
+      },
+
+      cancelSentRequestByTimeout: () => {
+        set((state) => ({
+          sentRequests: state.sentRequests.map((req) =>
+            req.status === "pending"
+              ? { ...req, status: "timeout" as "timeout" }
+              : req
+          ),
+        }));
+        get().calculateTodayCount();
+      },
+
+      cancelRequestByTimeout: (senderAccountId) => {
+        set((state) => ({
+          requests: state.requests.map((req) =>
+            req.senderAccountId === senderAccountId && req.status === "pending"
+              ? { ...req, status: "timeout" as "timeout" }
               : req
           ),
         }));

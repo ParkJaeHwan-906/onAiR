@@ -14,13 +14,16 @@ from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
-from bridge.stt_bridge_server import run_server, send_stt_result, set_start_streaming_stt_callback
+from bridge.stt_bridge_server import run_server, send_stt_result, set_start_streaming_stt_callback, set_service_completed_callback, send_wakeword_detected, set_wakeword_audio_completed_callback
+from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 자동 모드 플래그 (전역 변수)
+auto_mode_enabled = False
 
 # ========================================
 # 🐛 단계별 수동 실행 모드 (디버깅용) - 동기 버전
@@ -35,7 +38,7 @@ def wait_for_next_step_sync(step_name: str, step_number: str = ""):
         step_number: 단계 번호 (예: "1", "2", "3-1")
     
     사용법:
-        - DEBUG_STEP_BY_STEP=True일 때: /tmp/next_step_raspi 파일이 생성될 때까지 대기
+        - DEBUG_STEP_BY_STEP=True일 때: Enter 키 입력 대기
         - DEBUG_STEP_BY_STEP=False일 때: 바로 진행 (0.5초 딜레이만)
     """
     if not settings.DEBUG_STEP_BY_STEP:
@@ -43,61 +46,33 @@ def wait_for_next_step_sync(step_name: str, step_number: str = ""):
         time.sleep(0.5)
         return
     
-    # 수동 모드: 파일 트리거 대기
-    trigger_file = settings.DEBUG_STEP_TRIGGER_FILE
-    timeout = settings.DEBUG_STEP_WAIT_TIMEOUT
+    # 자동 모드가 활성화되었으면 바로 진행
+    global auto_mode_enabled
+    if auto_mode_enabled:
+        time.sleep(0.2)
+        return
     
+    # 수동 모드: 키보드 입력(Enter) 대기
     logger.info("=" * 80)
     logger.info(f"⏸️  [단계 {step_number}] {step_name} 완료")
-    logger.info(f"   다음 단계로 진행하려면 다음 명령을 실행하세요:")
-    logger.info(f"   $ touch {trigger_file}")
-    logger.info(f"   또는 자동으로 진행하려면: $ echo 'auto' > {trigger_file}")
-    logger.info(f"   (최대 {timeout}초 대기)")
+    logger.info(f"   다음 단계로 진행하려면 Enter 키를 누르세요")
+    logger.info(f"   (또는 자동 모드를 원하면 'auto'를 입력하고 Enter)")
     logger.info("=" * 80)
     
-    # 기존 트리거 파일 삭제 (이전 단계에서 남아있을 수 있음)
-    if os.path.exists(trigger_file):
-        try:
-            os.remove(trigger_file)
-        except:
-            pass
-    
-    # 파일이 생성될 때까지 대기
-    start_time = time.time()
-    check_interval = 0.5  # 0.5초마다 확인
-    
-    while True:
-        if os.path.exists(trigger_file):
-            # 파일 내용 확인 (auto 모드 체크)
-            try:
-                with open(trigger_file, 'r') as f:
-                    content = f.read().strip()
-                if content == "auto":
-                    # 자동 모드: 이후 단계도 자동 진행
-                    logger.info(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
-                    os.remove(trigger_file)
-                    return
-            except:
-                pass
-            
-            # 수동 모드: 파일 삭제 후 진행
-            try:
-                os.remove(trigger_file)
-            except:
-                pass
+    try:
+        user_input = input("   👆 Enter 키를 눌러 다음 단계 진행... ")
+        if user_input.strip().lower() == "auto":
+            logger.info(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
+            auto_mode_enabled = True
+        else:
             logger.info(f"✅ 다음 단계 진행: {step_name}")
-            logger.info("=" * 80)
-            time.sleep(0.2)  # 파일 삭제 후 짧은 딜레이
-            return
-        
-        # 타임아웃 체크
-        elapsed = time.time() - start_time
-        if elapsed >= timeout:
-            logger.info(f"⚠️ 타임아웃 ({timeout}초) - 자동으로 다음 단계 진행")
-            logger.info("=" * 80)
-            return
-        
-        time.sleep(check_interval)
+    except (EOFError, KeyboardInterrupt):
+        # 입력이 불가능한 환경(백그라운드 실행 등)에서는 자동 진행
+        logger.info(f"⚠️ 키보드 입력을 받을 수 없습니다. 자동으로 다음 단계 진행")
+    except Exception as e:
+        logger.warning(f"⚠️ 입력 처리 오류: {e}, 자동으로 다음 단계 진행")
+    
+    logger.info("=" * 80)
 
 
 def run_stt_loop():
@@ -248,15 +223,57 @@ def run_stt_loop():
                 wait_for_next_step_sync("Wakeword 감지 완료", "2")
                 time.sleep(0.5)  # 0.5초 대기 (단계 구분)
                 
+                # Wakeword 감지 후 즉시 wakeword 콜백 비활성화 (STT 세션 중 wakeword 감지 중지)
+                logger.info("🔇 Wakeword 감지기 일시 중지 (STT 세션 중)")
+                mic.disable_wakeword_callback()
+                # Wakeword 감지기 자체도 일시 중지
+                if wakeword_detector:
+                    wakeword_detector.pause()
+                
+                # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
                 logger.info("=" * 60)
-                logger.info("⏳ [단계 2-1] 사용자 발화 준비 대기 중... (3초)")
-                logger.info("   💡 이제 말씀해주세요!")
+                logger.info("📤 [단계 2-1] 브리지 서버로 Wakeword 감지 이벤트 전송")
+                logger.info("=" * 60)
+                send_wakeword_detected()
+                wait_for_next_step_sync("Wakeword 감지 이벤트 전송 완료", "2-1")
+                
+                # 모바일에서 음성 파일 재생 완료 대기
+                logger.info("=" * 60)
+                logger.info("⏳ [단계 2-2] 모바일 음성 파일 재생 완료 대기 중...")
+                logger.info("   💡 모바일에서 'onAir 서비스를 시작합니다. 어떤 것을 도와드릴까요?' 재생 중...")
                 logger.info("=" * 60)
                 
-                # 3초 대기 (사용자가 말할 시간 제공)
-                for i in range(3, 0, -1):
-                    logger.info(f"   ⏰ {i}초 후 버퍼링 STT 세션 시작...")
-                    time.sleep(1)
+                wakeword_audio_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                
+                def on_wakeword_audio_completed():
+                    """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                    wakeword_audio_completed_flag["completed"] = True
+                    logger.info("=" * 60)
+                    logger.info("✅ 모바일 음성 파일 재생 완료 신호 수신")
+                    logger.info("=" * 60)
+                    # 디버그 모드에서 Enter 키 대기 (콜백 내부에서 호출)
+                    wait_for_next_step_sync("모바일 음성 파일 재생 완료", "2-2")
+                
+                # 모바일 음성 파일 재생 완료 콜백 등록
+                set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
+                
+                max_wait_time = 30  # 최대 30초 대기 (음성 파일 재생 시간)
+                wait_start = time.time()
+                
+                while not wakeword_audio_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
+                    time.sleep(0.5)  # 0.5초마다 확인
+                
+                if not wakeword_audio_completed_flag["completed"]:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다. 타임아웃으로 버퍼링 STT 시작")
+                    logger.warning("=" * 60)
+                    # 타임아웃 시에도 디버그 모드에서 Enter 키 대기
+                    wait_for_next_step_sync("모바일 음성 파일 재생 완료 (타임아웃)", "2-2")
+                else:
+                    logger.info("=" * 60)
+                    logger.info("✅ [단계 2-2 완료] 모바일 음성 파일 재생 완료")
+                    logger.info("=" * 60)
+                    # 콜백 내부에서 이미 wait_for_next_step_sync 호출됨
                 
                 logger.info("=" * 60)
                 logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
@@ -267,9 +284,48 @@ def run_stt_loop():
                 loop.run_until_complete(stt_session())
                 
                 logger.info("=" * 60)
-                logger.info("🟢 [단계 완료] STT 세션 종료, 다시 대기 중...")
+                logger.info("🟢 [단계 완료] STT 세션 종료, 서비스 완료 대기 중...")
                 logger.info("=" * 60)
                 wait_for_next_step_sync("STT 세션 종료", "완료")
+                
+                # 서비스 완료 대기 (FastAPI 서버에서 GPT-4o 답변 생성 및 TTS 완료 후 service_completed 이벤트 수신)
+                # 주의: Python 3.10과 Python 3.13은 별도 프로세스이므로 메모리를 공유할 수 없음
+                # 따라서 브리지 서버를 통해 서비스 완료 신호를 받아야 함
+                logger.info("⏳ 서비스 완료 대기 중... (GPT-4o 답변 생성 및 TTS 완료 후 wakeword 재활성화)")
+                service_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                
+                def on_service_completed():
+                    """서비스 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                    service_completed_flag["completed"] = True
+                    logger.info("=" * 60)
+                    logger.info("✅ 서비스 완료 신호 수신: GPT-4o 답변 생성 및 TTS 완료")
+                    logger.info("=" * 60)
+                
+                # 서비스 완료 콜백 등록
+                set_service_completed_callback(on_service_completed)
+                
+                max_wait_time = 300  # 최대 5분 대기
+                wait_start = time.time()
+                
+                while not service_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
+                    time.sleep(0.5)  # 0.5초마다 확인
+                
+                if not service_completed_flag["completed"]:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 서비스 완료 신호를 받지 못했습니다. 타임아웃으로 wakeword 재활성화")
+                    logger.warning("=" * 60)
+                
+                # 서비스 완료 후 wakeword 콜백 재활성화 (옵션)
+                if settings.REENABLE_WAKEWORD_AFTER_SERVICE:
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
+                        wakeword_detector.resume()  # Wakeword 감지기 재개
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                        # 서비스 완료 플래그 리셋
+                        service_completed_flag["completed"] = False
+                else:
+                    logger.info("⏸️ 설정에 따라 wakeword 감지기 재활성화를 건너뜁니다 (REENABLE_WAKEWORD_AFTER_SERVICE=False)")
+                
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
     except KeyboardInterrupt:
         logger.info("🛑 종료 중...")

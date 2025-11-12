@@ -23,6 +23,12 @@ import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
 import com.onair.mobile.assistant.data.task.SseTaskClient
+import com.onair.mobile.communicate.PreferenceUtil
+import com.onair.mobile.communicate.data.AuthRepository
+import com.onair.mobile.communicate.data.api.ApiClient
+import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.presentation.ui.LoginActivity
+import android.content.Intent
 
 /**
  * Socket.IO를 통해 라즈베리파이로부터 STT 텍스트를 수신하는 Activity
@@ -45,12 +51,20 @@ class MainActivitySttServer : AppCompatActivity() {
     private var sseTaskClient: SseTaskClient? = null
     private lateinit var tokenManager: TokenManager
     private lateinit var webRtcRepository: WebRtcRepository
+    private lateinit var authRepository: AuthRepository
+    private lateinit var preferenceUtil: PreferenceUtil
     
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1  // Clarify 턴 ID 추적
     
     private val TAG = "MainActivitySttServer"
+    
+    // Wakeword 감지 시 재생할 음성 파일명 (assets 폴더에 있는 파일)
+    companion object {
+        private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
+        private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
+    }
     
     // 서버 URL 설정
     // EC2에 배포된 FastAPI 서버 URL (라즈베리파이와 동일한 URL 사용)
@@ -67,6 +81,23 @@ class MainActivitySttServer : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 로그인 상태 확인 (communication 폴더의 AuthRepository 사용)
+        preferenceUtil = PreferenceUtil(applicationContext)
+        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
+        authRepository = AuthRepository(apiService, preferenceUtil)
+        
+        // 로그인 상태 확인
+        val refreshToken = authRepository.getRefreshToken()
+        if (refreshToken.isEmpty()) {
+            // 로그인되지 않음 → LoginActivity로 이동
+            Log.i(TAG, "⚠️ 로그인되지 않음 → LoginActivity로 이동")
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+        
+        // 로그인 상태 확인 완료 → 정상 진행
         setContentView(R.layout.activity_test)  // 기본 레이아웃 사용
         
         // UI 참조 초기화
@@ -79,6 +110,7 @@ class MainActivitySttServer : AppCompatActivity() {
         // 초기 상태 표시
         updateStatus("Socket.IO 연결 대기 중...")
         addLog("🚀 MainActivitySttServer 시작")
+        addLog("✅ 로그인 상태 확인 완료")
         
         // STT Repository 초기화
         sttRepository = SttRepositoryImpl(this)
@@ -136,6 +168,10 @@ class MainActivitySttServer : AppCompatActivity() {
                 // Clarify 질문/답변 턴 수신 (작업자 질문 + LLM 답변)
                 handleClarifyQaTurn(qaTurn)
             },
+            onWakewordDetected = {
+                // Wakeword 감지 이벤트 수신 (음성 파일 재생 시작)
+                handleWakewordDetected()
+            },
             onConnect = {
                 // Socket.IO 연결 성공
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
@@ -159,25 +195,33 @@ class MainActivitySttServer : AppCompatActivity() {
         // 라즈베리파이 제어 API 초기화 (Socket.IO 클라이언트 사용)
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
         
-        // 토큰 관리자 초기화
+        // 토큰 관리자 초기화 (assistant 폴더의 TokenManager는 레거시, communication의 AuthRepository 사용)
         tokenManager = TokenManager(this)
         
         // WebRTC Repository 초기화
         webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
         
-        // TODO: 테스트 완료 후 제거 - REFRESH_TOKEN 하드코딩 (임시)
-        // REFRESH_TOKEN을 하드코딩하여 테스트
-        // TokenManager.kt의 HARDCODED_REFRESH_TOKEN 상수에 실제 REFRESH_TOKEN을 입력하세요
-        tokenManager.setupHardcodedRefreshToken()
-        
+        // communication 폴더의 AuthRepository를 사용하여 토큰 갱신
         // REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 시도
         lifecycleScope.launch {
-            val refreshed = tokenManager.refreshAccessToken()
-            if (refreshed) {
-                Log.i(TAG, "✅ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 완료")
+            val refreshToken = authRepository.getRefreshToken()
+            if (refreshToken.isNotEmpty()) {
+                authRepository.refreshAccessToken(refreshToken) { result ->
+                    result.onSuccess {
+                        Log.i(TAG, "✅ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 완료")
+                        addLog("✅ 토큰 갱신 완료")
+                    }.onFailure { e ->
+                        Log.w(TAG, "⚠️ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 실패: ${e.message}")
+                        addLog("⚠️ 토큰 갱신 실패: ${e.message}")
+                        // 토큰 갱신 실패 시 로그인 화면으로 이동
+                        startActivity(Intent(this@MainActivitySttServer, LoginActivity::class.java))
+                        finish()
+                    }
+                }
             } else {
-                Log.w(TAG, "⚠️ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 실패")
-                Log.w(TAG, "   TokenManager.kt의 HARDCODED_REFRESH_TOKEN을 확인하세요.")
+                Log.w(TAG, "⚠️ REFRESH_TOKEN이 없음 → 로그인 화면으로 이동")
+                startActivity(Intent(this@MainActivitySttServer, LoginActivity::class.java))
+                finish()
             }
         }
         
@@ -241,21 +285,42 @@ class MainActivitySttServer : AppCompatActivity() {
                 when (intentType) {
                     IntentType.AI_SUPPORTER -> {
                         Log.i(TAG, "✅ AI_SUPPORTER 분기 처리 시작")
+                        addLog("✅ AI_SUPPORTER 분기 처리 시작")
                         
                         // 모바일 UI 업데이트: Socket.IO로 받은 intent_result 이벤트를 통해 처리
-                        // 1. 오디오 재생: "AI_SUPPORTER가 도와드리겠습니다"
-                        ttsRepository.speakText("AI_SUPPORTER가 도와드리겠습니다")
+                        // 1. 음성 파일 재생 시작 시점에 "AI Supporter on" 화면 표시 (1초간)
+                        runOnUiThread {
+                            updateIntentUI(IntentType.AI_SUPPORTER, "AI Supporter on")
+                        }
+                        Log.i(TAG, "📱 UI 업데이트: AI Supporter on (1초간 표시)")
+                        addLog("📱 UI: AI Supporter on")
                         
-                        // 2. UI 업데이트: "AI_SUPPORTER on" 화면 표시
-                        updateIntentUI(IntentType.AI_SUPPORTER, "AI_SUPPORTER on")
+                        // 2. 1초 후 "오류 탐지 중..." 화면 표시 (CV 결과를 받을 때까지 유지)
+                        lifecycleScope.launch {
+                            kotlinx.coroutines.delay(1000) // 1초 대기
+                            runOnUiThread {
+                                updateIntentUI(IntentType.AI_SUPPORTER, "오류 탐지 중...")
+                            }
+                            Log.i(TAG, "📱 UI 업데이트: 오류 탐지 중... (CV 결과 대기 중)")
+                            addLog("📱 UI: 오류 탐지 중...")
+                        }
                         
-                        // 3. 잠시 후 "오류 분석 중입니다. 움직이지 말아주세요." 화면 표시
-                        kotlinx.coroutines.delay(2000) // 오디오 재생 후 2초 대기
-                        updateIntentUI(IntentType.AI_SUPPORTER, "오류 분석 중입니다. 움직이지 말아주세요.")
+                        // 3. 로컬 음성 파일 재생: "AI_Supporter 기능을 시작합니다. 오류 탐지."
+                        Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
+                        addLog("🔊 AI_SUPPORTER 음성 파일 재생: $AI_SUPPORTER_AUDIO_FILE")
+                        
+                        mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
+                            // 재생 완료 콜백
+                            Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            addLog("✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            // 음성 파일 재생 완료 후에도 "오류 탐지 중..." 화면은 CV 결과를 받을 때까지 유지됨
+                        }
                         
                         // CV 모델은 FastAPI 서버에서 실행됨
                         // 오류 탐지 실패 시 cv_detection_failed 이벤트를 통해 알림 받음
+                        // cv_detection_failed 이벤트 수신 시 "오류 탐지 중..." 화면이 업데이트됨
                         // 라즈베리파이 제어는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
+                        // TODO: CV 연결 구현 예정 (현재는 비워둠)
                     }
                     
                     IntentType.OPERATOR -> {
@@ -270,8 +335,8 @@ class MainActivitySttServer : AppCompatActivity() {
                         // 3. Spring 서버 WebRTC API 연결 요청
                         // ACCESS_TOKEN이 만료되었을 수 있으므로 갱신 시도
                         lifecycleScope.launch {
-                            val accessToken = tokenManager.ensureValidAccessToken()
-                            if (accessToken != null) {
+                            val accessToken = authRepository.getAccessToken()
+                            if (accessToken.isNotEmpty()) {
                                 // TODO: receiverAccountId를 실제 값으로 설정 (현재는 임시로 0)
                                 val receiverAccountId = 0L  // 실제 수신자 계정 ID로 변경 필요
                                 val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
@@ -346,10 +411,12 @@ class MainActivitySttServer : AppCompatActivity() {
     private fun connectSseTaskStream() {
         // 액세스 토큰 확인 및 갱신
         lifecycleScope.launch {
-            val accessToken = tokenManager.ensureValidAccessToken()
-            if (accessToken == null) {
+            val accessToken = authRepository.getAccessToken()
+            if (accessToken.isEmpty()) {
                 Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-                // TODO: 로그인 화면으로 이동하거나 토큰 입력 요청
+                // 로그인 화면으로 이동
+                startActivity(Intent(this@MainActivitySttServer, LoginActivity::class.java))
+                finish()
                 return@launch
             }
             
@@ -387,15 +454,21 @@ class MainActivitySttServer : AppCompatActivity() {
     /**
      * Socket.IO로부터 CV 탐지 실패 수신 처리
      * FastAPI 서버에서 CV 모델이 오류를 탐지하지 못했을 때 전송
+     * "오류 탐지 중..." 화면을 업데이트함
      */
     private fun handleCvDetectionFailed(cvFailed: CvDetectionFailedDto) {
         Log.i(TAG, "📩 CV 탐지 실패 수신: ${cvFailed.message}")
+        addLog("📩 CV 탐지 실패: ${cvFailed.message}")
         
         lifecycleScope.launch {
             try {
-                // UI 업데이트: "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
+                // UI 업데이트: "오류 탐지 중..." 화면을 CV 결과 메시지로 업데이트
                 val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
-                updateIntentUI(IntentType.AI_SUPPORTER, message)
+                runOnUiThread {
+                    updateIntentUI(IntentType.AI_SUPPORTER, message)
+                }
+                Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
+                addLog("📱 UI: CV 탐지 실패 메시지")
                 
                 // 라즈베리파이 제어는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
                 // (라즈베리파이에 마이크 켜고 Streaming STT 세션 시작)
@@ -612,6 +685,47 @@ class MainActivitySttServer : AppCompatActivity() {
         val mimeType = ragResponse.result?.mime_type
         
         handleFinalAnswer(answer, audioContent, mimeType)
+    }
+    
+    /**
+     * Wakeword 감지 이벤트 처리
+     * 모바일에서 음성 파일 재생 후 재생 완료 신호 전송
+     */
+    private fun handleWakewordDetected() {
+        Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
+        addLog("📩 Wakeword 감지: 음성 파일 재생 시작")
+        
+        lifecycleScope.launch {
+            try {
+                // 로컬 음성 파일 재생 (assets 폴더에 있는 파일)
+                Log.i(TAG, "🔊 로컬 음성 파일 재생 시작: $WAKEWORD_AUDIO_FILE")
+                addLog("🔊 음성 파일 재생: $WAKEWORD_AUDIO_FILE")
+                
+                // MediaPlayerController를 사용하여 로컬 파일 재생
+                mediaPlayerController.playLocalAudio(WAKEWORD_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ 로컬 음성 파일 재생 완료")
+                    addLog("✅ 음성 파일 재생 완료")
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendWakewordAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송 완료")
+                        addLog("📤 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패")
+                        addLog("❌ 재생 완료 이벤트 전송 실패")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Wakeword 감지 이벤트 처리 오류: ${e.message}")
+                e.printStackTrace()
+                addLog("❌ 음성 파일 재생 실패: ${e.message}")
+                
+                // 오류 발생 시에도 재생 완료 이벤트 전송 (타임아웃 방지)
+                socketIoSttClient.sendWakewordAudioCompleted()
+            }
+        }
     }
 
     override fun onDestroy() {

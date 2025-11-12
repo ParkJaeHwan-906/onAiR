@@ -79,6 +79,29 @@ pipeline {
                 sh "bash scripts/deploy.sh '${env.CHANGED_SERVICES}'"
             }
         }
+
+        stage('Reload Nginx'){
+            steps{
+                script {
+                    // nginx 컨테이너가 존재하는지 확인
+                    def nginxExists = sh(
+                        script: 'docker ps -q -f name=^nginx\$',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (nginxExists) {
+                        echo 'Nginx 컨테이너 재시작 중...'
+                        sh 'docker restart nginx'
+                        echo 'Nginx 재시작 완료'
+                    } else {
+                        echo 'Nginx 컨테이너가 실행 중이지 않습니다.'
+                        echo 'Nginx 컨테이너 재시작 중...'
+                        sh 'docker restart nginx'
+                        echo 'Nginx 재시작 완료'
+                    }
+                }
+            }
+        }
     }
     
     post {

@@ -56,6 +56,7 @@ class WakewordDetector:
         self.output_details = None
         self.detection_queue = queue.Queue()
         self.is_running = False
+        self.is_paused = False  # Wakeword 감지 일시 중지 플래그
         self.thread = None
         self._load_model()
 
@@ -111,8 +112,20 @@ class WakewordDetector:
         별도 스트림을 열지 않고 외부에서 오디오 데이터를 받아서 처리
         주의: 이 메서드는 콜백에서 호출되므로 블로킹 작업을 하면 안 됨
         """
-        if self.interpreter is None or not self.is_running:
+        if self.interpreter is None or not self.is_running or self.is_paused:
             return
+        
+        # 실제 음성 입력 검증: RMS(루트 평균 제곱) 값으로 볼륨 확인
+        # 조용한 환경(노이즈만 있는 경우)에서는 감지하지 않음
+        # 주의: audio_chunk는 int16 타입이므로 float32로 변환 시 스케일 유지
+        audio_array = np.array(audio_chunk, dtype=np.int16)
+        # int16 범위(-32768 ~ 32767)에서 RMS 계산
+        rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
+        # RMS 임계값: 너무 조용하면 무시 (실제 음성이 아닌 노이즈로 판단)
+        # int16 범위에서 최소 500 이상이어야 실제 음성으로 간주 (노이즈 필터링 강화)
+        MIN_RMS_THRESHOLD = 500.0  # int16 범위에서 적절한 값 (기존 100.0 → 500.0으로 상향)
+        if rms < MIN_RMS_THRESHOLD:
+            return  # 조용한 환경, 실제 음성 없음
         
         # 버퍼에 추가
         if not hasattr(self, 'audio_buffer'):
@@ -129,36 +142,57 @@ class WakewordDetector:
             self.audio_buffer.extend(audio_chunk)
         
         # 버퍼가 충분히 쌓이면 (1초 이상) Wakeword 감지
-        # 중복 방지: 최근 1초 이내에 감지했으면 스킵
+        # 중복 방지: 최근 3초 이내에 감지했으면 스킵 (기존 1초 → 3초로 연장하여 오탐지 방지)
         current_time = time.time()
-        if len(self.audio_buffer) >= SAMPLE_RATE and (current_time - self.last_detection_time) > 1.0:
+        DETECTION_COOLDOWN_SEC = 3.0  # 중복 감지 방지 시간 (초)
+        if len(self.audio_buffer) >= SAMPLE_RATE and (current_time - self.last_detection_time) > DETECTION_COOLDOWN_SEC:
             audio = np.array(list(self.audio_buffer))
+            
+            # 실제 음성 입력 검증: RMS 값으로 볼륨 확인
+            # int16 범위에서 RMS 계산 (정확한 스케일 유지)
+            audio_int16 = audio.astype(np.int16)
+            rms = np.sqrt(np.mean(audio_int16.astype(np.float64) ** 2))
+            # RMS 임계값: 너무 조용하면 무시 (실제 음성이 아닌 노이즈로 판단)
+            # int16 범위에서 최소 500 이상이어야 실제 음성으로 간주 (노이즈 필터링 강화)
+            MIN_RMS_THRESHOLD = 500.0  # int16 범위에서 적절한 값 (기존 100.0 → 500.0으로 상향)
+            if rms < MIN_RMS_THRESHOLD:
+                # 조용한 환경, 실제 음성 없음 - 버퍼만 비우고 스킵
+                self.audio_buffer.clear()
+                return
+            
             pred = self.predict_wakeword(audio)
             if pred is not None:
                 label = "onair" if np.argmax(pred) == 0 else "negative"
                 conf = np.max(pred)
+                # 디버그: 모든 예측 결과 로깅 (오탐지 원인 파악용)
+                if conf > 0.5:  # 어느 정도 신뢰도가 있으면 로깅
+                    print(f"🔍 [디버그] 예측 결과: label={label}, conf={conf:.3f}, threshold={WAKEWORD_THRESHOLD}")
+                
                 if label == "onair" and conf > WAKEWORD_THRESHOLD:
                     print(f"🚀 Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
                     self.detection_queue.put(True)
                     self.audio_buffer.clear()
                     self.last_detection_time = current_time  # 중복 방지
+                elif label == "onair" and conf > 0.7:  # threshold 미만이지만 높은 신뢰도면 경고
+                    print(f"⚠️ [경고] 'onair'로 예측되었지만 threshold 미만: conf={conf:.3f} < {WAKEWORD_THRESHOLD}")
+                    # 버퍼는 유지 (다음 청크와 합쳐서 다시 시도)
 
     def _detection_loop(self):
-        """Wakeword 감지 루프 (별도 스레드에서 실행) - MicStream에서 오디오 데이터를 받음"""
-        # 모델이 없으면 더미 모드
-        if self.interpreter is None:
-            print("⚠️ Wakeword 모델이 없어 더미 모드로 동작합니다")
-            while self.is_running:
-                time.sleep(0.1)
-            return
-        
-        # 오디오 버퍼 초기화
-        self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
-        
-        print("🎧 Wakeword 감지 대기 중... (MicStream에서 오디오 데이터 수신)")
+        """
+        Wakeword 감지 루프 (별도 스레드에서 실행) - 레거시 코드
+        주의: 실제로는 MicStream을 통해 process_audio_chunk를 사용하므로 이 메서드는 사용되지 않음
+        하지만 start()에서 호출되므로, 오류를 방지하기 위해 더미 모드로만 동작
+        """
+        # 실제로는 MicStream이 마이크를 열고, 그 콜백을 통해 process_audio_chunk를 호출함
+        # 따라서 이 루프는 별도의 마이크 스트림을 열지 않고 더미 모드로만 동작
+        # 하드코딩된 장치 이름으로 별도 스트림을 열면 MicStream과 충돌 발생 가능
+        print("ℹ️ Wakeword 감지 루프 시작 (더미 모드 - MicStream을 통해 실제 감지 수행)")
         while self.is_running:
             time.sleep(0.1)
-
+        
+        # 레거시 코드 (사용 안 함 - 하드코딩된 장치 이름으로 인한 오류 방지)
+        # 실제 감지는 MicStream의 콜백을 통해 process_audio_chunk로 수행됨
+    
     def start(self):
         """Wakeword 감지 시작"""
         if self.is_running:
@@ -168,9 +202,24 @@ class WakewordDetector:
         self.thread.start()
         print("✅ Wakeword 감지기 시작")
 
+    def pause(self):
+        """Wakeword 감지 일시 중지"""
+        self.is_paused = True
+        if hasattr(self, 'audio_buffer'):
+            self.audio_buffer.clear()
+        print("🔇 Wakeword 감지기 일시 중지")
+    
+    def resume(self):
+        """Wakeword 감지 재개"""
+        self.is_paused = False
+        if hasattr(self, 'last_detection_time'):
+            self.last_detection_time = 0  # 재개 시 중복 방지 타이머 리셋
+        print("🔊 Wakeword 감지기 재개")
+    
     def stop(self):
         """Wakeword 감지 중지"""
         self.is_running = False
+        self.is_paused = True
         if self.thread:
             self.thread.join(timeout=2.0)
         print("🔇 Wakeword 감지기 중지")

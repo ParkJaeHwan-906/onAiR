@@ -1,6 +1,6 @@
 .control-bar {
-  width: 972px;
-  height: 72px;
+  width: 100%;
+  height: clamp(36px, 2.8vw, 42px);
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
   display: flex;
@@ -14,20 +14,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 32px;
+  gap: clamp(12px, 1.2vw, 16px);
   flex-wrap: nowrap;
 }
 
 /* 아이콘 그룹  */
 .icon-group {
   display: flex;
-  gap: 16px;
+  gap: clamp(6px, 0.6vw, 10px);
 }
 
 /* 버튼 공통 스타일 */
 .icon-button {
-  width: 48px;
-  height: 48px;
+  width: clamp(28px, 2.2vw, 32px);
+  height: clamp(28px, 2.2vw, 32px);
   background-color: #f9fafb;
   border: none;
   border-radius: 9999px;
@@ -39,8 +39,12 @@
 }
 
 .icon-button.active {
-  border: 2px solid #6b7280; /* 진한 회색 (gray-500) */
-  border-radius: 10px; /* 기존 9999px → 모서리 둥글게 유지하면서 살짝 각지게 */
+  border: clamp(1.5px, 0.14vw, 2px) solid #6b7280; /* 진한 회색 (gray-500) */
+  border-radius: clamp(
+    8px,
+    0.7vw,
+    10px
+  ); /* 기존 9999px → 모서리 둥글게 유지하면서 살짝 각지게 */
   background-color: #f9fafb; /* 원래 배경 그대로 유지 */
 }
 
@@ -74,8 +78,8 @@
 }
 
 .color-picker {
-  width: 28px;
-  height: 28px;
+  width: clamp(18px, 1.4vw, 22px);
+  height: clamp(18px, 1.4vw, 22px);
   border: none;
   background: none;
   cursor: pointer;
@@ -97,13 +101,13 @@
 .color-palette {
   display: none;
   position: absolute;
-  bottom: 60px;
+  bottom: clamp(32px, 2.6vw, 38px);
   left: 0;
   background: white;
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: clamp(6px, 0.6vw, 8px);
+  padding: clamp(4px, 0.4vw, 5px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  gap: 6px;
+  gap: clamp(2px, 0.2vw, 3px);
   flex-direction: column;
   z-index: 1000;
 }
@@ -113,8 +117,8 @@
 }
 
 .color-dot {
-  width: 38px;
-  height: 38px;
+  width: clamp(22px, 1.8vw, 26px);
+  height: clamp(22px, 1.8vw, 26px);
   border-radius: 50%;
   border: none;
   outline: none;
@@ -139,13 +143,13 @@
 .shape-palette {
   display: none;
   position: absolute;
-  bottom: 60px;
+  bottom: clamp(32px, 2.6vw, 38px);
   left: 0;
   background: white;
-  border-radius: 8px;
-  padding: 6px;
+  border-radius: clamp(4px, 0.4vw, 5px);
+  padding: clamp(2px, 0.2vw, 3px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  gap: 6px;
+  gap: clamp(2px, 0.2vw, 3px);
   flex-direction: column;
   z-index: 1000;
 }
@@ -165,8 +169,8 @@
 
 /* 선택된 색상 팔레트 */
 .color-dot {
-  width: 36px;
-  height: 36px;
+  width: clamp(20px, 1.6vw, 24px);
+  height: clamp(20px, 1.6vw, 24px);
   border-radius: 50%;
   border: none;
   cursor: pointer;

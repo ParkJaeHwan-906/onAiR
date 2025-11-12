@@ -5,9 +5,15 @@ import re, json
 import numpy as np
 from app.core.config import settings
 from app.core.model_loader import embed_texts, KNOWN_SUBJECTS
-import google.generativeai as genai
+from app.services.gms_client import call_gemini_via_gms
 
-genai.configure(api_key=settings.GMS_API_KEY)
+# ✅ GMS API 키 확인
+if settings.GMS_API_KEY:
+    print(f"✅ [Answerability] GMS_API_KEY 설정 완료: {settings.GMS_API_KEY[:10]}...")
+    gms_api_key = settings.GMS_API_KEY
+else:
+    print("⚠️ [Answerability] GMS_API_KEY가 설정되지 않았습니다.")
+    gms_api_key = None
 
 
 def _tokenize(q: str) -> List[str]:
@@ -708,10 +714,33 @@ JSON 형식:
 }}
 """
 
+    if not gms_api_key:
+        # Fallback: Evidence Trace 기반 기본 응답
+        return {
+            "need_clarify": True,
+            "reason": "질문이 다소 광범위하거나 문서 내 직접적인 근거가 부족합니다.",
+            "guide": clarify_guidance or "RAG 문서 내 유사 섹션을 참고해, 특정 부위나 현상을 명시해주세요.",
+            "examples": [
+                "송풍기 모터가 회전하지 않습니다.",
+                "댐퍼가 열리지 않습니다.",
+                "필터가 막혀 풍량이 줄어요."
+            ],
+            "original_query": query,
+            "clarifier_model": settings.GMS_MODEL_GATE,
+            "used_sections": top_sections,
+            "evidence_trace": evidence_trace,
+            "missing_info": missing_info,
+            "evidence_sources": evidence_stats.get("evidence_sources", []) if evidence_stats else []
+        }
+    
     try:
-        model = genai.GenerativeModel(settings.GMS_MODEL_GATE)
-        resp = model.generate_content(prompt)
-        text = resp.text or ""
+        print(f"🔵 [Answerability] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
+        text = call_gemini_via_gms(
+            model=settings.GMS_MODEL_GATE,
+            prompt=prompt,
+            api_key=gms_api_key
+        )
+        print(f"✅ [Answerability] Gemini-Flash API 호출 성공 (응답 길이: {len(text)} bytes)")
         
         # JSON 블록 제거
         if "```" in text:
@@ -734,7 +763,7 @@ JSON 형식:
         
         return result
     except Exception as e:
-        print("[Clarify Generation Error]", e)
+        print(f"❌ [Answerability] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
         # Fallback: Evidence Trace 기반 기본 응답
         return {
             "need_clarify": True,

@@ -29,6 +29,13 @@ RUN pip install --no-cache-dir torch==2.9.0+cpu torchvision==0.24.0+cpu torchaud
 # 나머지 의존성 설치 (torch 제외)
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ✅ ultralytics가 opencv-python을 자동 설치하므로, headless로 덮어씌움
+RUN pip uninstall -y opencv-python && \
+    pip install --no-cache-dir --force-reinstall opencv-python-headless==4.10.0.84
+
+# ✅ numpy 버전 강제 재설치 (FAISS 호환)
+RUN pip install --no-cache-dir --force-reinstall numpy==1.26.4
+
 # =============== Runtime Stage ===============
 FROM python:3.10-slim
 
@@ -38,6 +45,7 @@ WORKDIR /app
 # 런타임에 필요한 시스템 패키지만 설치 (curl은 헬스체크용)
 RUN apt-get update && apt-get install -y \
     curl \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # 빌드 스테이지에서 설치된 Python 패키지 복사

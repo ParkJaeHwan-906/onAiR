@@ -12,11 +12,12 @@
 }
 
 .work-action-modal {
-  background: white;
+  background: var(--color-surface-base);
   border-radius: 12px;
   width: 90%;
   max-width: 500px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  color: var(--color-text-primary);
 }
 
 .work-action-modal-header {
@@ -29,16 +30,16 @@
 
 .work-action-modal-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--font-size-heading-md);
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .close-button {
   background: none;
   border: none;
   font-size: 24px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
   width: 30px;
@@ -60,9 +61,9 @@
 
 .work-action-modal-body label {
   display: block;
-  font-size: 14px;
+  font-size: var(--font-size-body-md);
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
@@ -71,8 +72,8 @@
   padding: 12px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
+  font-size: var(--font-size-body-md);
+  font-family: var(--font-family-base);
   resize: vertical;
   box-sizing: border-box;
   transition: border-color 0.2s;
@@ -95,7 +96,7 @@
   padding: 10px 20px;
   border: none;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -103,7 +104,7 @@
 
 .cancel-button {
   background-color: #f3f4f6;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .cancel-button:hover:not(:disabled) {
@@ -115,11 +116,11 @@
 }
 
 .submit-button.complete {
-  background-color: #374151;
+  background-color: #3b4a6b;
 }
 
 .submit-button.complete:hover:not(:disabled) {
-  background-color: #374151;
+  background-color: #2f3b5a;
 }
 
 .submit-button.cancel {
@@ -134,6 +135,3 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
-
-
-
