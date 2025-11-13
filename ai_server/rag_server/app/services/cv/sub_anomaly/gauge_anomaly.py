@@ -140,19 +140,26 @@ async def _analyze_with_context(
     """YOLO 모델을 사용한 게이지 이상 탐지"""
     global _yolo_gauge_model
     
-    # 모델 로드 (lazy load)
+    # 모델 로드 (lazy load) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     if _yolo_gauge_model is None:
-        try:
-            if Path(MODEL_PATH).exists():
-                _yolo_gauge_model = YOLO(MODEL_PATH)
-                _yolo_gauge_model.fuse()
-                logger.info("✅ [gauge] YOLO 모델 로드 완료")
-            else:
-                logger.warning(f"⚠️ [gauge] 모델 파일이 없습니다: {MODEL_PATH}")
-                return {"type": "gauge", "status": "error", "message": "모델 파일 없음", "sharpness": best_score}
-        except Exception as e:
-            logger.error(f"❌ [gauge] 모델 로드 실패: {e}")
-            return {"type": "gauge", "status": "error", "message": f"모델 로드 실패: {e}", "sharpness": best_score}
+        def _load_model():
+            global _yolo_gauge_model
+            try:
+                if Path(MODEL_PATH).exists():
+                    _yolo_gauge_model = YOLO(MODEL_PATH)
+                    _yolo_gauge_model.fuse()
+                    logger.info("✅ [gauge] YOLO 모델 로드 완료")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [gauge] 모델 파일이 없습니다: {MODEL_PATH}")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [gauge] 모델 로드 실패: {e}")
+                return False
+        
+        load_success = await ctx.run(_load_model)
+        if not load_success:
+            return {"type": "gauge", "status": "error", "message": "모델 로드 실패", "sharpness": best_score}
     
     # YOLO로 게이지 탐지
     def _detect_gauges():
