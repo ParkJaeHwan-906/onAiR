@@ -26,9 +26,14 @@ if echo "$CHANGED_FILES" | grep -q "^frontend/"; then
     SERVICES="$SERVICES frontend"
 fi
 
-# ai_server 변경 감지
-if echo "$CHANGED_FILES" | grep -q "^ai_server/"; then
+# ai_server/rag_server 변경 감지
+if echo "$CHANGED_FILES" | grep -q "^ai_server/rag_server/"; then
     SERVICES="$SERVICES ai_server"
+fi
+
+# ai_server/yolo_service 변경 감지 (docker-compose.yml의 vision 서비스)
+if echo "$CHANGED_FILES" | grep -q "^ai_server/yolo_service/"; then
+    SERVICES="$SERVICES vision"
 fi
 
 # 변경된 서비스 출력

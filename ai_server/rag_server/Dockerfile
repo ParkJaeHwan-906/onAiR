@@ -21,17 +21,17 @@ COPY requirements.txt .
 # pip 업그레이드
 RUN pip install --no-cache-dir --upgrade pip
 
-# # PyTorch CPU 버전 먼저 설치 (리눅스/EC2 환경용)
-# # requirements.txt에서는 --index-url 옵션을 사용할 수 없으므로 여기서 처리
+# PyTorch CPU 버전 먼저 설치 (리눅스/EC2 환경용)
+# requirements.txt에서는 --index-url 옵션을 사용할 수 없으므로 여기서 처리
 # RUN pip install --no-cache-dir torch==2.9.0+cpu torchvision==0.24.0+cpu torchaudio==2.9.0+cpu \
 #     --index-url https://download.pytorch.org/whl/cpu
 
-# # 나머지 의존성 설치 (torch 제외)
-# RUN pip install --no-cache-dir -r requirements.txt
+# 나머지 의존성 설치 (torch 제외)
+RUN pip install --no-cache-dir -r requirements.txt
 
-# # ✅ ultralytics가 opencv-python을 자동 설치하므로, headless로 덮어씌움
-# RUN pip uninstall -y opencv-python && \
-#     pip install --no-cache-dir --force-reinstall opencv-python-headless==4.10.0.84
+# ✅ ultralytics가 opencv-python을 자동 설치하므로, headless로 덮어씌움
+RUN pip uninstall -y opencv-python && \
+    pip install --no-cache-dir --force-reinstall opencv-python-headless==4.10.0.84
 
 # ✅ numpy 버전 강제 재설치 (FAISS 호환)
 RUN pip install --no-cache-dir --force-reinstall numpy==1.26.4
