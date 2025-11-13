@@ -17,7 +17,7 @@ function HomePage() {
   const [onlineEmployees, setOnlineEmployees] = useState(0);
   const [completionRate, setCompletionRate] = useState(0);
   const [todayTasks, setTodayTasks] = useState<Work[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const formatTime = (dateTimeString: string) => {
     if (!dateTimeString) return "-";
@@ -125,21 +125,17 @@ function HomePage() {
   return (
     <div className="home-wrapper">
       <div className="home-row home-small-row">
-        {loading ? (
-          <div>로딩 중...</div>
-        ) : (
-          stats.map((item, index) => (
-            <HomeSmall
-              key={index}
-              isGraph={item.isGraph}
-              numInfo={item.numInfo}
-              totalInfo={item.totalInfo}
-              title={item.title}
-              value={item.value}
-              icon={item.icon}
-            />
-          ))
-        )}
+        {stats.map((item, index) => (
+          <HomeSmall
+            key={index}
+            isGraph={item.isGraph}
+            numInfo={item.numInfo}
+            totalInfo={item.totalInfo}
+            title={item.title}
+            value={item.value}
+            icon={item.icon}
+          />
+        ))}
       </div>
       <div className="home-row home-big-row">
         <HomeBig
