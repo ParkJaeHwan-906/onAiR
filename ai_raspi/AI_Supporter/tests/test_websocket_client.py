@@ -47,7 +47,9 @@ async def test_websocket():
                     
     except ConnectionRefusedError:
         print("❌ 연결 실패: 서버가 실행 중이지 않습니다.")
-        print("   먼저 'python main.py'를 실행하세요.")
+        print("   먼저 다음 프로세스들을 실행하세요:")
+        print("   - 터미널 1: python3.10 main_py310.py")
+        print("   - 터미널 2: cd ../../raspi/app/sockets && python3.13 socket_manager.py")
     except Exception as e:
         print(f"❌ 오류: {e}")
 
