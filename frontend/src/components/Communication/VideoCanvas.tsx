@@ -58,11 +58,18 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
       workletNode.connect(audioContext.destination);
 
       // 소켓 이벤트 수신
-      const handleAudioFrame = (data: ArrayBuffer) => {
-        console.log("[DEBUG] 오디오 프레임 수신")
-        const floatData = new Float32Array(data);
+      const handleAudioFrame = (data: { 
+        timestamp: number; 
+        frame: ArrayBuffer 
+      }) => {
+        console.log("[DEBUG] 오디오 프레임 수신: " + data.timestamp)
+        const floatData = new Float32Array(data.frame);
         // AudioWorklet으로 전달
-        workletNode.port.postMessage({type: "audio_frame", frame: floatData});
+        workletNode.port.postMessage({
+          type: "audio_frame", 
+          frame: floatData,
+          timestamp: data.timestamp
+        });
       };
 
       socket.on("audio_frame", handleAudioFrame); // 이벤트 리스너 등록
