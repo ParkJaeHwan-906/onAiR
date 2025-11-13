@@ -123,6 +123,95 @@ def handle_wakeword_audio_completed(sid, data):
         logger.warning("⚠️ 모바일 음성 파일 재생 완료 콜백이 등록되지 않았습니다")
         logger.warning("=" * 60)
 
+# Wakeword 감지 대기 시작 이벤트 수신 (Python 3.13 → Python 3.10)
+wakeword_start_waiting_callback = None
+mic_off_callback = None
+mic_on_callback = None
+
+def set_wakeword_start_waiting_callback(callback):
+    """Wakeword 감지 대기 시작 콜백 등록"""
+    global wakeword_start_waiting_callback
+    wakeword_start_waiting_callback = callback
+    logger.info("✅ Wakeword 감지 대기 시작 콜백이 등록되었습니다")
+
+def set_mic_off_callback(callback):
+    """STT 목적 음성 수집 중지 콜백 등록"""
+    global mic_off_callback
+    mic_off_callback = callback
+    logger.info("✅ STT 목적 음성 수집 중지 콜백이 등록되었습니다")
+
+def set_mic_on_callback(callback):
+    """STT 목적 음성 수집 재개 콜백 등록"""
+    global mic_on_callback
+    mic_on_callback = callback
+    logger.info("✅ STT 목적 음성 수집 재개 콜백이 등록되었습니다")
+
+@sio.on('wakeword_start_waiting')
+def handle_wakeword_start_waiting(sid, data):
+    """Wakeword 감지 대기 시작 이벤트 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: Wakeword 감지 대기 시작 이벤트 수신")
+    logger.info("=" * 60)
+    
+    if wakeword_start_waiting_callback:
+        try:
+            wakeword_start_waiting_callback()
+            logger.info("=" * 60)
+            logger.info(f"✅ 브리지 서버: Wakeword 감지 대기 시작 이벤트 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ 브리지 서버: Wakeword 감지 대기 시작 이벤트 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ Wakeword 감지 대기 시작 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
+@sio.on('mic_off')
+def handle_mic_off(sid, data):
+    """STT 목적 음성 수집 중지 이벤트 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: STT 목적 음성 수집 중지 이벤트 수신")
+    logger.info("=" * 60)
+    
+    if mic_off_callback:
+        try:
+            mic_off_callback()
+            logger.info("=" * 60)
+            logger.info(f"✅ 브리지 서버: 마이크 OFF 이벤트 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ 브리지 서버: 마이크 OFF 이벤트 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 마이크 OFF 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
+@sio.on('mic_on')
+def handle_mic_on(sid, data):
+    """STT 목적 음성 수집 재개 이벤트 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: STT 목적 음성 수집 재개 이벤트 수신")
+    logger.info("=" * 60)
+    
+    if mic_on_callback:
+        try:
+            mic_on_callback()
+            logger.info("=" * 60)
+            logger.info(f"✅ 브리지 서버: 마이크 ON 이벤트 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ 브리지 서버: 마이크 ON 이벤트 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 마이크 ON 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
 # Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
 def send_wakeword_detected():
     """Wakeword 감지 이벤트를 브리지 클라이언트(3.13)에게 전송"""
