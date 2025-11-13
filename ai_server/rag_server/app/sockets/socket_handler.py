@@ -1503,9 +1503,24 @@ async def handle_video_frame(sid, data):
 
     # --- ② JPEG → OpenCV 이미지 디코딩 (별도 스레드) ---
     loop = asyncio.get_event_loop()
-    frame = await loop.run_in_executor(_frame_processing_executor, _decode_frame_sync, frame_bytes)
+    frame = await loop.run_in_executor(_frame_pr0ocessing_executor, _decode_frame_sync, frame_bytes)
+
     if frame is None:
         print("⚠️ Failed to decode frame bytes")
+    # --- ② JPEG → OpenCV 이미지 디코딩 ---
+    try:
+        np_data = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+        if frame is None:
+            print("⚠️ Failed to decode frame bytes")
+            return
+        # try:
+        #     frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        # except Exception as e:
+        #     print(f"⚠️ Frame rotation error: {e}")
+    # 회전 실패 시 원본 프레임으로 계속 진행
+    except Exception as e:
+        print(f"⚠️ Frame decode error: {e}")
         return
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
