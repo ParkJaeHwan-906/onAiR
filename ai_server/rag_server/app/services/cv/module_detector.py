@@ -6,7 +6,9 @@
 
 from loguru import logger
 import numpy as np
-# from ultralytics import YOLO
+import os
+from pathlib import Path
+from ultralytics import YOLO
 
 from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
@@ -18,8 +20,18 @@ def get_module_model():
     """YOLO 모듈 탐지 모델 (lazy load, 단일 인스턴스)"""
     global _yolo_module_model
     if _yolo_module_model is None:
-        logger.warning("⚠️ [module_detector] 테스트 모드: YOLO 로드 과정 비활성화")
-        _yolo_module_model = False
+        try:
+            model_path = "/app/models/module_best.pt"
+            if not Path(model_path).exists():
+                logger.warning(f"⚠️ [module_detector] 모델 파일이 없습니다: {model_path}")
+                _yolo_module_model = False
+            else:
+                _yolo_module_model = YOLO(model_path)
+                _yolo_module_model.fuse()
+                logger.info("✅ [module_detector] YOLO 모듈 모델 로드 완료")
+        except Exception as e:
+            logger.error(f"❌ [module_detector] YOLO 모델 로드 실패: {e}")
+            _yolo_module_model = False
     return _yolo_module_model
 
 
@@ -40,7 +52,7 @@ async def detect_modules_from_recent_frames(
 
     model = get_module_model()
     if not model:
-        logger.info("⏭️ [module_detector] 테스트 모드로 인해 YOLO 탐지 스킵")
+        logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
         return []
 
     if yolo_ctx is None:
@@ -54,8 +66,23 @@ async def _detect_with_context(
     model,
     frames: list[np.ndarray],
 ):
-    # YOLO 실행 로직 테스트 모드에서는 생략
-    return []
+    """YOLO 모델로 프레임에서 모듈 탐지"""
+    detections = []
+    
+    def _infer():
+        nonlocal detections
+        for frame in frames:
+            results = model.predict(frame, imgsz=640, conf=0.35, verbose=False)
+            for res in results:
+                for box in res.boxes:
+                    label = model.names[int(box.cls)]
+                    conf = float(box.conf)
+                    detections.append({"label": label, "confidence": conf})
+    
+    await ctx.run(_infer)
+    
+    # 중복 제거 및 최고 신뢰도 선택
+    return _filter_top_detections(detections)
 
 
 def _filter_top_detections(detections, min_conf=0.4):

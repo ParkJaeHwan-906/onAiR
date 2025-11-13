@@ -9,7 +9,8 @@ import numpy as np
 from collections import deque, Counter
 from loguru import logger
 import os
-# from ultralytics import YOLO
+from pathlib import Path
+from ultralytics import YOLO
 
 from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
@@ -17,8 +18,8 @@ from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 # 기본 파라미터
 # -------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "../../../models/module_best.pt")
-_fan_belt_model = False
+MODEL_PATH = "/app/models/module_best.pt"
+_fan_belt_model = None
 
 MAG_THRESH = 0.5
 STOP_THRESH = 0.15
@@ -106,11 +107,52 @@ async def _analyze_with_context(
     ctx: YOLOContext,
     frames,
 ):
-    logger.warning("⚠️ [fan_belt] 테스트 모드: YOLO 기반 팬/벨트 탐지 생략")
+    """YOLO 모델을 사용한 팬/벨트 이상 탐지"""
+    global _fan_belt_model
+    
+    # 모델 로드 (lazy load)
+    if _fan_belt_model is None:
+        try:
+            if Path(MODEL_PATH).exists():
+                _fan_belt_model = YOLO(MODEL_PATH)
+                _fan_belt_model.fuse()
+                logger.info("✅ [fan_belt] YOLO 모델 로드 완료")
+            else:
+                logger.warning(f"⚠️ [fan_belt] 모델 파일이 없습니다: {MODEL_PATH}")
+                return {"type": "fan_belt", "status": "error", "message": "모델 파일 없음"}
+        except Exception as e:
+            logger.error(f"❌ [fan_belt] 모델 로드 실패: {e}")
+            return {"type": "fan_belt", "status": "error", "message": f"모델 로드 실패: {e}"}
+    
+    # Optical Flow 기반 이상 탐지
+    gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
+    motion_mags = []
+    
+    for i in range(1, len(gray_frames)):
+        mag = estimate_motion(gray_frames[i-1], gray_frames[i])
+        motion_mags.append(mag.mean())
+    
+    if len(motion_mags) < 3:
+        return {"type": "fan_belt", "status": "unknown", "message": "프레임 부족"}
+    
+    # 상태 분류
+    avg_mag = np.mean(motion_mags)
+    std_mag = np.std(motion_mags)
+    cur_mag = motion_mags[-1]
+    ratio = cur_mag / (avg_mag + 1e-5)
+    delta = cur_mag - avg_mag
+    
+    state = classify_state(cur_mag, avg_mag, ratio, delta, "E_NORMAL", std_mag)
+    
+    has_anomaly = state != "E_NORMAL"
+    
     return {
         "type": "fan_belt",
-        "status": "disabled",
-        "message": "YOLO 기반 팬/벨트 분석이 테스트 모드로 비활성화되었습니다",
+        "status": "anomaly" if has_anomaly else "normal",
+        "message": f"상태: {state}",
+        "state": state,
+        "motion_magnitude": float(cur_mag),
+        "avg_magnitude": float(avg_mag),
     }
 
 
