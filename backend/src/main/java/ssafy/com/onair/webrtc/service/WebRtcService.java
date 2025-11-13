@@ -44,7 +44,7 @@ public class WebRtcService {
                 .equipmentName(senderInfo.getEquipmentName())
                 .equipmentCategoryId(senderInfo.getEquipmentCategoryId())
                 .equipmentCategoryName(senderInfo.getEquipmentCategoryName())
-                .description("")    // TODO: AI 서포터 질문 요약 추가하기
+                .description(webRtcRequestDto.description())    // TODO: AI 서포터 질문 요약 추가하기
                 .build();
         String senderRole = senderInfo.getRole();
 
@@ -52,7 +52,7 @@ public class WebRtcService {
 
         StringBuilder roomName = new StringBuilder();
         roomName.append(senderInfoDto.senderAccountId()).append(' ').append(webRtcRequestDto.receiverAccountId());
-        webRtcManager.getWaitingRoomList().put(roomName.toString(), LocalDateTime.now(Clock.system(ZoneId.of("Asia/Seoul"))).plusMinutes(1));
+        webRtcManager.getWaitingRoomList().put(roomName.toString(), LocalDateTime.now().plusMinutes(1));
         // 사용자가 요청한거면 sender : 사용자, receiver : 관리자
         if(senderRole.equals("사용자")){
             // 작업자 -> 관리자

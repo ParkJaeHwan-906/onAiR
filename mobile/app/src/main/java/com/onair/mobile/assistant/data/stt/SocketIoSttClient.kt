@@ -12,6 +12,10 @@ import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
 import java.net.URISyntaxException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과 및 Clarify 응답을 수신
@@ -87,8 +91,10 @@ class SocketIoSttClient(
             // 연결 이벤트
             socket?.on(Socket.EVENT_CONNECT) {
                 isConnected = true
+                Log.i(TAG, "=".repeat(60))
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공: $serverUrl (경로: /ws)")
                 Log.i(TAG, "   Socket ID: ${socket?.id()}")
+                Log.i(TAG, "=".repeat(60))
                 
                 // 디바이스 등록
                 registerDevice()
@@ -302,8 +308,19 @@ class SocketIoSttClient(
             
             // 연결 시도
             Log.i(TAG, "🔌 Socket.IO 연결 시작...")
+            Log.i(TAG, "   현재 Socket 상태: ${if (socket?.connected() == true) "연결됨" else "연결 안 됨"}")
             socket?.connect()
             Log.i(TAG, "✅ Socket.IO connect() 호출 완료 (연결 대기 중...)")
+            
+            // 연결 상태 주기적 확인 (5초 후)
+            CoroutineScope(Dispatchers.IO).launch {
+                delay(5000)
+                val connected = socket?.connected() == true
+                Log.i(TAG, "🔍 Socket.IO 연결 상태 확인 (5초 후): ${if (connected) "✅ 연결됨" else "❌ 연결 안 됨"}")
+                if (!connected) {
+                    Log.w(TAG, "⚠️ Socket.IO 연결이 안 되어 있습니다. 이벤트를 수신할 수 없습니다.")
+                }
+            }
             
         } catch (e: URISyntaxException) {
             Log.e(TAG, "❌ Socket.IO URL 파싱 오류: ${e.message}")
@@ -447,7 +464,7 @@ class SocketIoSttClient(
     }
     
     /**
-     * 모바일 음성 파일 재생 완료 이벤트 전송
+     * 모바일 음성 파일 재생 완료 이벤트 전송 (Wakeword용)
      * 
      * @return 전송 성공 여부
      */
@@ -463,10 +480,96 @@ class SocketIoSttClient(
             }
             
             socket?.emit("wakeword_audio_completed", payload)
-            Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송")
+            Log.i(TAG, "📤 모바일 Wakeword 음성 파일 재생 완료 이벤트 전송")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            Log.e(TAG, "❌ 모바일 Wakeword 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * Intent 결과에 따른 음성 파일 재생 완료 이벤트 전송 (AI_SUPPORTER용)
+     * 
+     * @param intent Intent 타입 ("AI_SUPPORTER" | "OPERATOR")
+     * @return 전송 성공 여부
+     */
+    fun sendIntentAudioCompleted(intent: String): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("intent", intent)
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("intent_audio_completed", payload)
+            Log.i(TAG, "📤 모바일 Intent 음성 파일 재생 완료 이벤트 전송: intent=$intent")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 Intent 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * CV 탐지 실패 음성 파일 재생 완료 이벤트 전송
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendCvDetectionFailedAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "cv_detection_failed")
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * Clarify Q&A 턴 TTS 재생 완료 이벤트 전송
+     * 
+     * @param sessionId Clarify 세션 ID
+     * @param turnId Clarify 턴 ID
+     * @return 전송 성공 여부
+     */
+    fun sendClarifyQaTurnAudioCompleted(sessionId: String, turnId: Int): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "clarify_qa_turn")
+                put("session_id", sessionId)
+                put("turn_id", turnId)
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송: session_id=$sessionId, turn_id=$turnId")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
             e.printStackTrace()
             false
         }
