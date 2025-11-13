@@ -104,21 +104,32 @@ class AudioService:
 
     def stream_audio(self):
         def callback(indata, frames, time_info, status):
-            if not self.is_streaming: return
+            if not self.is_streaming:
+                return
 
             length = len(indata)
             if self.buffer_index + length >= len(self.buffer):
-                # 버퍼 채워짐 → 서버로 전송
-                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:,0]
+                # 버퍼가 꽉 찼을 때 한 덩어리 전송
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:, 0]
+
                 try:
-                    sio.emit("audio_frame", self.buffer.tobytes())
+                    timestamp = int(time.time() * 1000)  # 현재 시각 (ms 단위)
+                    sio.emit(
+                        "audio_frame",
+                        {
+                            "timestamp": timestamp,
+                            "frame": self.buffer.tobytes(),
+                        }
+                    )
                 except Exception as e:
                     print("⚠️ Audio emit error:", e)
+
                 self.buffer_index = 0
             else:
-                # 아직 버퍼 채우기
-                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:,0]
+                # 버퍼 아직 덜 찼을 때
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:, 0]
                 self.buffer_index += length
+
 
         try:
             self.stream = sd.InputStream(
