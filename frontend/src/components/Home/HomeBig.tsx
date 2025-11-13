@@ -184,7 +184,7 @@ function HomeBig({
       case "rejected":
         return { bg: "#F4C0C0", color: "#EF4444" };
       case "timeout":
-        return { bg: "#FDE68A", color: "#D97706" }; // 주황색 계열
+        return { bg: "#FDE68A", color: "#D97706" };
       case "completed":
         return { bg: "#E0E7FF", color: "#6366F1" };
       default:
