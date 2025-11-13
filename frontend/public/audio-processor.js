@@ -5,13 +5,13 @@ class AudioProcessor extends AudioWorkletProcessor {
 
 
       // 버퍼 : 약 1초 분량 저장
-      this.bufferSize = 16000; // 16kHz 기준 1초
+      this.bufferSize = 32000; // 16kHz 기준 1초
       this.buffer = new Float32Array(this.bufferSize);
       this.writeIndex = 0;
       this.readIndex = 0;
       this.availableSamples = 0;
       this.started = false;
-      this.minBufferThreshold = 8000; // 0.5초 버퍼 확보 후 재생 시작 
+      this.minBufferThreshold = 16000; // 1초 버퍼 확보 후 재생 시작 
       this.lastSample = 0; // 마지막 출력 샘플 저장
       
       // 메인 스레드로부터 메시지 수신
