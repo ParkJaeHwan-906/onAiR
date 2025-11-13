@@ -21,6 +21,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
         --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
+# ✅ ultralytics가 opencv-python을 자동 설치하므로, headless로 덮어씌움
+RUN pip uninstall -y opencv-python && \
+    pip install --no-cache-dir --force-reinstall opencv-python-headless==4.10.0.84
+
 # Copy only yolo_service code and models (avoid copying entire ai_server)
 COPY ai_server/yolo_service /app/ai_server/yolo_service
 
