@@ -1,89 +1,98 @@
-// public/audio-processor.js
 class AudioProcessor extends AudioWorkletProcessor {
-    constructor() {
-      super();
+  constructor() {
+    super();
 
+    this.bufferSize = 100000;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.writeIndex = 0;
+    this.readIndex = 0;
+    this.availableSamples = 0;
+    this.started = false;
 
-      // 버퍼 : 약 1초 분량 저장
-      this.bufferSize = 100000; // 
-      this.buffer = new Float32Array(this.bufferSize);
-      this.writeIndex = 0;
-      this.readIndex = 0;
-      this.availableSamples = 0;
-      this.started = false;
-      this.minBufferThreshold = 45000; // 1초 버퍼 확보 후 재생 시작 
-      this.lastSample = 0; // 마지막 출력 샘플 저장
-      
-      // 메인 스레드로부터 메시지 수신
-      this.port.onmessage = (event) => {
-        if (event.data && event.data.type === "audio_frame") {
-          this.enqueue(event.data.frame);
-        }
-      };
+    this.minBufferThreshold = 45000;  // 최소 버퍼 확보 (1초 정도)
+    this.targetBuffer = 50000;        // 목표 버퍼 수위
+    this.maxBufferThreshold = 70000;  // 너무 많으면 프레임 일부 버림
+
+    this.lastSample = 0;
+    this.slowdownFactor = 1.0;        // 재생속도 보정용 (1.0 = 정상)
+    this.adjustRate = 0.0001;         // 보정 속도 (너무 크면 끊김)
+
+    this.port.onmessage = (event) => {
+      if (event.data?.type === "audio_frame") {
+        this.enqueue(event.data.frame);
+      }
+    };
+  }
+
+  enqueue(frame) {
+    const inputRate = 16000;
+    const outputRate = sampleRate;
+    const ratio = outputRate / inputRate;
+
+    let outPos = this.writeIndex;
+
+    for (let i = 0; i < frame.length - 1; i++) {
+      const start = frame[i];
+      const end = frame[i + 1];
+      for (let j = 0; j < Math.floor(ratio); j++) {
+        const alpha = j / ratio;
+        this.buffer[outPos % this.bufferSize] = start * (1 - alpha) + end * alpha;
+        outPos++;
+      }
     }
 
-    enqueue(frame){
-      const inputRate = 16000;
-      const outputRate = sampleRate; // Worklet에서 전역 sampleRate 가능
-      const ratio = outputRate / inputRate; // 업샘플링 비율
+    this.buffer[outPos % this.bufferSize] = frame[frame.length - 1];
+    outPos++;
 
-      let outPos = this.writeIndex;
+    this.writeIndex = outPos % this.bufferSize;
+    this.availableSamples = Math.min(this.availableSamples + Math.floor(frame.length * ratio), this.bufferSize);
 
-      for (let i = 0; i < frame.length - 1; i++) {
-        const start = frame[i];
-        const end = frame[i + 1];
-
-        for (let j = 0; j < Math.floor(ratio); j++) {
-          const alpha = j / ratio;
-          this.buffer[outPos % this.bufferSize] = start * (1 - alpha) + end * alpha;
-          outPos++;
-        }
-      }
-      // 마지막 샘플 처리
-      this.buffer[outPos % this.bufferSize] = frame[frame.length - 1];
-      outPos++;
-      
-      this.writeIndex = outPos % this.bufferSize;
-      this.availableSamples = Math.min(this.availableSamples + Math.floor(frame.length * ratio), this.bufferSize);
-    }
-
-    dequeue(output) {
-      if (this.availableSamples < output.length) {
-        // 데이터 부족 → 부족 시 직전 샘플로 채움 (보간)
-        // 부드러운 감쇠 보간
-        for (let i = 0; i < output.length; i++) {
-          this.lastSample *= 0.95;
-          output[i] = this.lastSample;
-        }
-        return;
-      }
-  
-      for (let i = 0; i < output.length; i++) {
-        output[i] = this.buffer[this.readIndex];
-        this.lastSample = output[i]; // ✅ 직전 샘플 갱신
-        this.readIndex = (this.readIndex + 1) % this.bufferSize;
-      }
-      this.availableSamples -= output.length;
-    }
-  
-    process(inputs, outputs) {
-      const output = outputs[0][0]; // 단일 채널 기준
-  
-      // 최소 버퍼 확보 전까지는 재생 안 함
-      if (!this.started) {
-        if (this.availableSamples > this.minBufferThreshold) {
-          this.started = true;
-        } else {
-          output.fill(0);
-          return true;
-        }
-      }
-
-      // 버퍼에서 일정량 dequeue
-      this.dequeue(output);
-      return true;
+    // 버퍼 과잉 시 일부 프레임 버림 (급격한 지연 방지)
+    if (this.availableSamples > this.maxBufferThreshold) {
+      const skip = Math.floor((this.availableSamples - this.targetBuffer) / 2);
+      this.readIndex = (this.readIndex + skip) % this.bufferSize;
+      this.availableSamples -= skip;
+      console.warn(`[AudioProcessor] Dropped ${skip} samples (buffer too full)`);
     }
   }
-  
-  registerProcessor("audio-processor", AudioProcessor);
-  
+
+  dequeue(output) {
+    if (this.availableSamples < output.length) {
+      for (let i = 0; i < output.length; i++) {
+        this.lastSample *= 0.95;
+        output[i] = this.lastSample;
+      }
+      return;
+    }
+
+    // ✅ 드리프트 제어: 버퍼 상태에 따라 속도 보정
+    const bufferDiff = this.availableSamples - this.targetBuffer;
+    this.slowdownFactor -= bufferDiff * this.adjustRate; 
+    this.slowdownFactor = Math.max(0.98, Math.min(1.02, this.slowdownFactor));
+
+    for (let i = 0; i < output.length; i++) {
+      const adjustedIndex = Math.floor(this.readIndex);
+      output[i] = this.buffer[adjustedIndex % this.bufferSize];
+      this.lastSample = output[i];
+      this.readIndex += this.slowdownFactor;
+      if (this.readIndex >= this.bufferSize) this.readIndex -= this.bufferSize;
+    }
+
+    this.availableSamples -= Math.floor(output.length * this.slowdownFactor);
+  }
+
+  process(inputs, outputs) {
+    const output = outputs[0][0];
+    if (!this.started) {
+      if (this.availableSamples > this.minBufferThreshold) this.started = true;
+      else {
+        output.fill(0);
+        return true;
+      }
+    }
+    this.dequeue(output);
+    return true;
+  }
+}
+
+registerProcessor("audio-processor", AudioProcessor);
