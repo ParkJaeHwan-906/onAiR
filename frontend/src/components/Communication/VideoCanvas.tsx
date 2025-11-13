@@ -23,6 +23,23 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   // 연결 상태만 최소한으로 관리 (UI 표시용)
   const [isConnected, setIsConnected] = useState(false);
 
+  // 페이지 이탈/창 닫기 감지 및 통신 종료 이벤트 전송
+  useEffect(() => {
+    if (!socket) return;
+
+    // 브라우저 창/탭 닫기, 새로고침 감지
+    const handleBeforeUnload = () => {
+      socket.emit("communication_close", null);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // 컴포넌트 언마운트 시 (다른 페이지로 이동)
+    return () => {
+      // socket.emit("communication_close", null);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [socket]);
 
   // 오디오 재생용 useEffect
   useEffect(() => {

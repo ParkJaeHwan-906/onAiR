@@ -1551,13 +1551,13 @@ async def accept_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
     """
-    # print("[DEBUG] accept_communication 이벤트 발생")
+    print("[DEBUG] accept_communication 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
 
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
-    # print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
+    print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
     await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 종료 이벤트 전달
@@ -1566,11 +1566,12 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
-    # print("[DEBUG] communication_close 이벤트 발생")
+    print("[DEBUG] communication_close 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
 
+    print("[DEBUG] handle_audio_stream (start:False) emit")
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
     await broadcast_to("raspi", "handle_audio_stream", {"start" : False})
 
