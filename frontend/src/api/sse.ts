@@ -77,9 +77,9 @@ export const connectSSE = (
         console.log(`SSE 이벤트 수신 [${name}]:`, event.data);
         try {
           // heart beat 이벤트는 JSON이 아닐 수 있으므로 특별 처리
-          if (name === "heart beat") {
+          if (name === "heart beat" || name === "connect") {
             // 텍스트 형태의 heartbeat 메시지 처리
-            handleParsedEvent({ type: "heart beat", payload: event.data }, name);
+            handleParsedEvent({ type: name, payload: event.data }, name);
           } else {
             // 다른 이벤트는 JSON 파싱 시도
             const parsed = JSON.parse(event.data);
