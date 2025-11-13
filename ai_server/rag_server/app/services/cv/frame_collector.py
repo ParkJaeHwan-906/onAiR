@@ -3,6 +3,7 @@
 - 평소: 최소한의 프레임만 유지 (device_monitor용, 약 5~10프레임)
 - CV 분석 필요 시: 즉시 사용 가능하도록 최근 프레임 확보
 - 메모리 효율적 + 즉시 사용 가능
+- 프레임 복사 작업을 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
 """
 
 from collections import deque
@@ -10,6 +11,10 @@ import numpy as np
 from typing import List, Optional
 import asyncio
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+
+# 프레임 복사 작업을 위한 전용 스레드 풀 (메인 이벤트 루프 블로킹 방지)
+_frame_copy_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="frame-copy")
 
 # 실시간 프레임 스트림 (최소한만 유지)
 # device_monitor는 2초마다 1장만 필요하므로, 최소 5~10프레임이면 충분
@@ -24,17 +29,27 @@ _cv_collection_buffer: deque = deque(maxlen=30)  # CV 분석용 (약 1초 @ 30fp
 _cv_collection_lock = asyncio.Lock()
 
 
+def _copy_frame_sync(frame: np.ndarray) -> np.ndarray:
+    """동기 함수: 프레임 복사 (별도 스레드에서 실행)"""
+    return frame.copy()
+
+
 async def add_frame(frame: np.ndarray, timestamp: Optional[float] = None) -> None:
     """
     프레임을 스트림에 추가
     - 기본 버퍼: 최소한만 유지 (device_monitor용)
     - CV 수집 버퍼: 활성화 시에만 추가
+    - 프레임 복사는 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     """
     if timestamp is None:
         timestamp = datetime.now().timestamp()
     
+    # 프레임 복사를 별도 스레드에서 실행 (비동기)
+    loop = asyncio.get_running_loop()
+    frame_copy = await loop.run_in_executor(_frame_copy_executor, _copy_frame_sync, frame)
+    
     frame_data = {
-        "frame": frame.copy(),
+        "frame": frame_copy,
         "timestamp": timestamp
     }
     
@@ -102,16 +117,24 @@ async def collect_recent_frames(
     now = datetime.now().timestamp()
     cutoff_time = now - duration_seconds
     
-    recent_frames = []
+    # 필터링된 프레임 데이터 수집 (lock 밖에서)
+    filtered_items = []
     for item in unique_frames:
         if item["timestamp"] >= cutoff_time:
-            recent_frames.append(item["frame"].copy())
-            if len(recent_frames) >= max_frames:
+            filtered_items.append(item)
+            if len(filtered_items) >= max_frames:
                 break
     
     # 최소 프레임 수 확인
-    if len(recent_frames) < min_frames:
+    if len(filtered_items) < min_frames:
         return []
+    
+    # 프레임 복사를 별도 스레드에서 실행 (메인 이벤트 루프 블로킹 방지)
+    loop = asyncio.get_running_loop()
+    recent_frames = []
+    for item in filtered_items:
+        frame_copy = await loop.run_in_executor(_frame_copy_executor, _copy_frame_sync, item["frame"])
+        recent_frames.append(frame_copy)
     
     return recent_frames
 
@@ -119,17 +142,32 @@ async def collect_recent_frames(
 async def collect_latest_n_frames(n: int = 1) -> List[np.ndarray]:
     """
     최근 N개 프레임 수집 (device_monitor용 - 간단한 버전)
+    프레임 복사는 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     """
     async with _stream_lock:
         if len(_frame_stream) == 0:
             return []
         
-        frames = [item["frame"].copy() for item in list(_frame_stream)[-n:]]
-        frames.reverse()  # 최신 순서
-        return frames
+        # 프레임 데이터 가져오기 (lock 내에서만)
+        frame_items = list(_frame_stream)[-n:]
+    
+    # 프레임 복사를 별도 스레드에서 실행 (lock 밖에서)
+    loop = asyncio.get_running_loop()
+    frames = []
+    for item in frame_items:
+        frame_copy = await loop.run_in_executor(_frame_copy_executor, _copy_frame_sync, item["frame"])
+        frames.append(frame_copy)
+    
+    frames.reverse()  # 최신 순서
+    return frames
 
 
 async def get_stream_size() -> int:
     """스트림에 저장된 프레임 수 반환"""
     async with _stream_lock:
         return len(_frame_stream)
+
+
+def shutdown_frame_collector() -> None:
+    """프레임 복사 executor 종료 (서버 종료 시 호출)"""
+    _frame_copy_executor.shutdown(wait=False)
