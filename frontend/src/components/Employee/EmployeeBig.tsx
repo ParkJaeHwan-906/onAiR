@@ -2,6 +2,7 @@ import "../../styles/EmployeeBig.css";
 import EmployeeList from "./EmployeeList";
 import type { Employee } from "../../types/employee";
 import { useUserStore } from "../../store/useUserStore";
+import { useState } from "react";
 
 type EmployeeBigProps = {
   onSelectEmployee: (employee: Employee) => void;
@@ -10,6 +11,26 @@ type EmployeeBigProps = {
 function EmployeeBig({ onSelectEmployee }: EmployeeBigProps) {
   const { employees, myInfo, loading, error } = useUserStore();
   const isAdmin = myInfo?.role === "관리자";
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // 검색 필터
+  const filtered = employees.filter((emp) => {
+    if (!searchTerm) return true;
+    // 원본 전화번호 (DB)
+    const rawPhone = emp.phone ?? "";
+    // 표시되는 전화번호 (커스텀 포맷)
+    const formattedPhone = rawPhone.replace(
+      /(\d{3})(\d{4})(\d{4})/,
+      "$1-$2-$3"
+    );
+    return (
+      emp.name.includes(searchTerm) ||
+      rawPhone.includes(searchTerm) ||
+      formattedPhone.includes(searchTerm) ||
+      (emp.email ?? "").includes(searchTerm) ||
+      (emp.part ?? "").includes(searchTerm)
+    );
+  });
 
   return (
     <div className="employee-big">
@@ -17,7 +38,13 @@ function EmployeeBig({ onSelectEmployee }: EmployeeBigProps) {
         <span className="employee-list">직원 목록</span>
       </div>
 
-      <input className="search-bar" placeholder="직원 검색 ..." type="text" />
+      <input
+        className="search-bar"
+        placeholder="직원 검색 ..."
+        type="text"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
 
       <div className="employee-table">
         <div className="list-header">
@@ -38,7 +65,7 @@ function EmployeeBig({ onSelectEmployee }: EmployeeBigProps) {
 
           {isAdmin ? (
             employees.length > 0 ? (
-              employees.map((item) => (
+              filtered.map((item) => (
                 <EmployeeList
                   key={item.userAccountId}
                   name={item.name}

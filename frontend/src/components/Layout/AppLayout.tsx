@@ -9,7 +9,7 @@ import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
 
 function AppLayout() {
   const navigate = useNavigate();
-  const { connect, disconnect, eventSource } = useSSEStore();
+  const { eventSource } = useSSEStore();
   const { myInfo, fetchMyInfo } = useUserStore();
 
   const addRequest = useWebRtcRequestStore((state) => state.addRequest);
@@ -27,14 +27,6 @@ function AppLayout() {
   );
 
   const pendingEventsRef = useRef<any[]>([]);
-
-  useEffect(() => {
-    connect();
-
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
 
   // 최초 myInfo 로드
   useEffect(() => {
@@ -215,26 +207,30 @@ function AppLayout() {
     const handleRtcCanceled = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!detail) return;
-      
+
       // rtcCanceled 이벤트는 시간 초과로 인한 취소
       console.log("rtcCanceled 이벤트 수신 - 시간 초과로 인한 취소:", detail);
-      
+
       if (!myInfo) {
         console.warn("myInfo가 없어 rtcCanceled 이벤트를 처리할 수 없습니다.");
         return;
       }
-      
+
       // 관리자인 경우: 보낸 요청을 timeout으로 변경
       if (myInfo.role === "관리자") {
         cancelSentRequestByTimeout();
       } else {
         // 작업자인 경우: 받은 요청을 timeout으로 변경
         // detail에서 requestUserAccountId 또는 senderAccountId를 확인
-        const senderAccountId = detail.requestUserAccountId || detail.senderAccountId;
+        const senderAccountId =
+          detail.requestUserAccountId || detail.senderAccountId;
         if (senderAccountId) {
           cancelRequestByTimeout(senderAccountId);
         } else {
-          console.warn("rtcCanceled 이벤트에 senderAccountId가 없습니다:", detail);
+          console.warn(
+            "rtcCanceled 이벤트에 senderAccountId가 없습니다:",
+            detail
+          );
         }
       }
       calculateTodayCount();
@@ -264,7 +260,13 @@ function AppLayout() {
         handleRtcCanceled as EventListener
       );
     };
-  }, [processEvent, cancelSentRequestByTimeout, cancelRequestByTimeout, calculateTodayCount, myInfo]);
+  }, [
+    processEvent,
+    cancelSentRequestByTimeout,
+    cancelRequestByTimeout,
+    calculateTodayCount,
+    myInfo,
+  ]);
 
   useEffect(() => {
     if (!myInfo || pendingEventsRef.current.length === 0) return;
