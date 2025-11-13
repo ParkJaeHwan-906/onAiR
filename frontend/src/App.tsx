@@ -11,10 +11,14 @@ import SignupPage from "./pages/SignupPage";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { SocketProvider } from "./utils/socketContext";
+import { useSSEStore } from "./store/useSSEStore";
 
 function App() {
   const restoreSession = useAuthStore((state) => state.restoreSession);
   const isRestoring = useAuthStore((state) => state.isRestoring);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  const { connect, disconnect } = useSSEStore();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -22,6 +26,17 @@ function App() {
     };
     initAuth();
   }, [restoreSession]);
+
+  // 로그인 후 자동 SSE 연결
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log("🔌 [App] SSE Connect");
+      connect();
+    } else {
+      console.log("🔌 [App] SSE Disconnect");
+      disconnect();
+    }
+  }, [isAuthenticated, connect, disconnect]);
 
   if (isRestoring) return null;
 

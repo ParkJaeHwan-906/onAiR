@@ -211,6 +211,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       sendDrawingData({
         event: "draw-start",
         tool,
+        color: penColor,
         x: pos.x,
         y: pos.y,
       });
@@ -230,6 +231,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       ]);
       sendDrawingData({
         event: "draw-start",
+        color: penColor,
         tool,
         x: pos.x,
         y: pos.y,

@@ -745,13 +745,28 @@ class MainActivitySttServer : AppCompatActivity() {
         if (audioContent != null && audioContent.isNotBlank()) {
             lifecycleScope.launch {
                 ttsRepository.playAudio(audioContent, mimeType) {
-                    // 재생 완료 콜백 (최종 답변이므로 재생 완료 이벤트는 선택적)
+                    // 재생 완료 콜백
                     Log.i(TAG, "✅ 최종 답변 TTS 재생 완료")
                     addLog("✅ 최종 답변 TTS 재생 완료")
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송 완료")
+                        addLog("📤 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패")
+                        addLog("❌ 재생 완료 이벤트 전송 실패")
+                    }
                 }
             }
         } else {
             Log.w(TAG, "⚠️ 오디오 파일이 포함되지 않음")
+            // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
+            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+            if (success) {
+                Log.i(TAG, "📤 모바일 최종 답변 재생 완료 이벤트 전송 완료 (오디오 없음)")
+            }
         }
     }
     
