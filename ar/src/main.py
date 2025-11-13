@@ -1,31 +1,143 @@
 import cv2
 import numpy as np
 import os
+
 from feature_extractor import extract_features
 from feature_tracker import track_features
-from ransac_filter import ransac_filter  
+from ransac_filter import ransac_filter
 from motion_estimator import estimate_motion
+
 
 # ==========================================================
 # 🎯 설정
 # ==========================================================
 VIDEO_PATH = "../data/test.mp4"
-MIN_FEATURES = 50
-MIN_DIST_BETWEEN = 10.0
-MAX_AGE = 30
+INTR_PATH = "../data/camera_intrinsics.npy"
+DIST_PATH = "../data/dist_coeffs.npy"
 
-K_PATH = "../data/K.npy"
-if os.path.exists(K_PATH):
-    K = np.load(K_PATH)
-else:
-    fx, fy, cx, cy = 800, 800, 320, 240
-    K = np.array([[fx, 0, cx],
-                  [0, fy, cy],
-                  [0, 0, 1]], dtype=np.float32)
+os.makedirs("output/features", exist_ok=True)
+os.makedirs("output/flow", exist_ok=True)
+os.makedirs("output/ransac", exist_ok=True)
+os.makedirs("output/motion", exist_ok=True)
 
 
 # ==========================================================
-# 🎬 메인 (시각화 제거 버전)
+# 🔧 카메라 파라미터 로드
+# ==========================================================
+def load_camera_params():
+    if os.path.exists(INTR_PATH):
+        K = np.load(INTR_PATH)
+        print("📌 Loaded K from camera_intrinsics.npy")
+    else:
+        print("⚠️ camera_intrinsics.npy 없음 → 기본 K 사용")
+        K = np.array([[800, 0, 320],
+                      [0, 800, 240],
+                      [0, 0,   1]], dtype=np.float32)
+
+    if os.path.exists(DIST_PATH):
+        D = np.load(DIST_PATH)
+        print("📌 Loaded distortion coeffs from dist_coeffs.npy")
+    else:
+        print("⚠️ dist_coeffs.npy 없음 → 왜곡 보정 없이 진행")
+        D = None
+
+    return K, D
+
+
+# ==========================================================
+# 🔧 특징점 저장
+# ==========================================================
+def save_feature_frame(frame, pts, method, frame_idx):
+    vis = frame.copy()
+
+    for (x, y) in pts.reshape(-1, 2):
+        cv2.circle(vis, (int(x), int(y)), 2, (0, 255, 0), -1)
+
+    cv2.putText(
+        vis,
+        f"{method} | {len(pts)} pts",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.imwrite(f"output/features/frame_{frame_idx:04d}_pts{len(pts)}.jpg", vis)
+
+
+# ==========================================================
+# 🔧 Optical Flow 시각화
+# ==========================================================
+def save_optical_flow_frame(frame, prev_pts, next_pts, frame_idx):
+    vis = frame.copy()
+
+    for p1, p2 in zip(prev_pts, next_pts):
+        cv2.arrowedLine(
+            vis,
+            tuple(p1[0].astype(int)),
+            tuple(p2[0].astype(int)),
+            (0, 0, 255),
+            1,
+            tipLength=0.3
+        )
+
+    cv2.putText(
+        vis,
+        f"Tracked: {len(prev_pts)} pts",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.imwrite(f"output/flow/flow_{frame_idx:04d}.jpg", vis)
+
+
+# ==========================================================
+# 🔧 RANSAC 시각화
+# ==========================================================
+def save_ransac_frame(frame, prev_pts, next_pts, mask, frame_idx):
+    vis = frame.copy()
+    mask = mask.astype(bool)
+
+    for (p1, p2, m) in zip(prev_pts, next_pts, mask):
+        color = (0, 255, 0) if m else (0, 0, 255)
+        cv2.arrowedLine(
+            vis,
+            tuple(p1[0].astype(int)),
+            tuple(p2[0].astype(int)),
+            color,
+            1,
+            tipLength=0.3
+        )
+
+    inliers = np.count_nonzero(mask)
+    total = len(mask)
+    ratio = (inliers / total) * 100 if total > 0 else 0
+
+    cv2.putText(vis, f"Inlier: {inliers}/{total} ({ratio:.1f}%)",
+                (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                (0, 255, 255), 2)
+
+    cv2.imwrite(f"output/ransac/ransac_{frame_idx:04d}.jpg", vis)
+
+
+# ==========================================================
+# 🔧 Motion Estimator 시각화 (scale)
+# ==========================================================
+def save_motion_frame(frame, scale, frame_idx):
+    vis = frame.copy()
+    cv2.putText(vis, f"Scale(Z): {scale:.4f}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                (255, 200, 0), 2)
+    cv2.imwrite(f"output/motion/motion_{frame_idx:04d}.jpg", vis)
+
+
+# ==========================================================
+# 🎬 메인 (FEATURE → FLOW → RANSAC → MOTION)
 # ==========================================================
 def main():
     cap = cv2.VideoCapture(VIDEO_PATH)
@@ -33,119 +145,93 @@ def main():
         print("❌ 비디오를 열 수 없습니다.")
         return
 
-    print("🎬 Optical Flow + Essential Matrix (no visualization)")
+    K, D = load_camera_params()
 
-    prev_gray = None
     frame_idx = 0
+    prev_gray = None
+    prev_pts = None
 
-    # ✅ 누적 Pose
-    R_total = np.eye(3, dtype=np.float32)
-    t_total = np.zeros((3, 1), dtype=np.float32)
-    trajectory = []
-
-    feature_pool = {
-        "pts": np.empty((0, 1, 2), dtype=np.float32),
-        "age": np.empty((0,), dtype=np.int32)
-    }
+    print("🎬 Running Full Pipeline (Feature + Flow + RANSAC + Motion)…")
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        # Undistort
+        frame_undist = cv2.undistort(frame, K, D) if D is not None else frame
+        gray = cv2.cvtColor(frame_undist, cv2.COLOR_BGR2GRAY)
+
+        # ========== 1) 첫 프레임 특징점 ==========
         if prev_gray is None:
-            init_pts, method = extract_features(gray)
-            feature_pool["pts"] = init_pts
-            feature_pool["age"] = np.zeros(len(init_pts), dtype=np.int32)
-            print(f"[{frame_idx:04d}] {method}: {len(init_pts)} initial points")
+            prev_pts, method = extract_features(gray)
+            save_feature_frame(frame_undist, prev_pts, method, frame_idx)
             prev_gray = gray.copy()
             frame_idx += 1
             continue
 
-        prev_pts = feature_pool["pts"]
-
-        # === Optical Flow ===
+        # ========== 2) Optical Flow ==========
         prev_valid, next_valid, _ = track_features(
-            prev_gray, gray, prev_pts,
-            fb_thresh=1.5,
-            large_motion_px=100.0,
-            enable_equalize=False,
+            prev_gray,
+            gray,
+            prev_pts,
+            fb_thresh=2.0,
             blur_var_thresh=12.0,
             lk_win_size=(25, 25),
             lk_max_level=4,
-            frame=frame
+            frame=frame_undist
         )
 
-        # === 점 관리 ===
-        if len(next_valid) > 0:
-            feature_pool["pts"] = next_valid
-            feature_pool["age"] = np.zeros(len(next_valid), dtype=np.int32)
-        else:
-            feature_pool["age"] += 1
+        if len(prev_valid) == 0:
+            prev_gray = gray.copy()
+            prev_pts = []
+            frame_idx += 1
+            continue
 
-        valid_mask = feature_pool["age"] < MAX_AGE
-        feature_pool["pts"] = feature_pool["pts"][valid_mask]
-        feature_pool["age"] = feature_pool["age"][valid_mask]
+        save_optical_flow_frame(frame_undist, prev_valid, next_valid, frame_idx)
 
-        if len(feature_pool["pts"]) < MIN_FEATURES:
-            new_pts, _ = extract_features(gray)
-            if new_pts is not None and len(new_pts) > 0:
-                if len(feature_pool["pts"]) > 0:
-                    dist = np.linalg.norm(
-                        new_pts.reshape(-1, 1, 2) - feature_pool["pts"].reshape(1, -1, 2),
-                        axis=2
-                    )
-                    mask_far = (dist.min(axis=1) > MIN_DIST_BETWEEN)
-                    added_pts = new_pts[mask_far]
-                else:
-                    added_pts = new_pts
+        # ========== 3) RANSAC ==========
+        in_prev, in_next, F, mask = ransac_filter(
+            prev_valid, next_valid,
+            threshold=1.0,
+            prob=0.999,
+            frame_shape=frame_undist.shape,
+            grid_size=(8, 6),
+            dir_cos_thresh=0.5,
+            sigma_scale=2.0
+        )
 
-                if len(added_pts) > 0:
-                    feature_pool["pts"] = np.vstack((feature_pool["pts"], added_pts))
-                    ages = np.full(len(added_pts), -MAX_AGE, dtype=np.int32)
-                    feature_pool["age"] = np.concatenate((feature_pool["age"], ages))
-                    print(f"[{frame_idx:04d}] Added {len(added_pts)} points")
+        if mask is not None:
+            save_ransac_frame(frame_undist, prev_valid, next_valid, mask, frame_idx)
+            print(f"[{frame_idx:04d}] RANSAC Inliers = {np.count_nonzero(mask)}/{len(mask)}")
+
+        # ========== 4) Essential-Based Motion (scale for Z) ==========
+        R, t, scale, stats = estimate_motion(in_prev, in_next, K)
+
+        if stats["pose_ok"]:
+            save_motion_frame(frame_undist, scale, frame_idx)
+            print(f"[{frame_idx:04d}] Scale(Z) ≈ {scale:.4f}")
+
+        # ========== 5) 다음 프레임용 포인트 준비 ==========
+        # 부족하면 신규 특징점 add
+        if len(in_prev) < 300:
+            new_pts, method = extract_features(gray)
+            if len(new_pts) > 0:
+                prev_pts = np.vstack([in_next, new_pts])
             else:
-                print(f"[{frame_idx:04d}] ⚠️ Unable to add new features")
-
-        # === RANSAC ===
-        if len(prev_valid) >= 8 and len(next_valid) >= 8:
-            inlier_prev, inlier_next, F, inlier_mask = ransac_filter(
-                prev_valid, next_valid, threshold=1.0, prob=0.999, visualize=False
-            )
-
-            if inlier_mask is not None:
-                inlier_count = np.count_nonzero(inlier_mask)
-                print(f"[{frame_idx:04d}] RANSAC inliers: {inlier_count}/{len(inlier_mask)}")
-
-                # === Essential Matrix 기반 모션 추정 ===
-                R, t, E, stats = estimate_motion(inlier_prev, inlier_next, K)
-                if stats["pose_ok"]:
-                    s = stats["scale"]
-                    t_total += R_total @ (s * t)
-                    R_total = R @ R_total
-                    xyz = t_total.reshape(3)
-                    trajectory.append(xyz.copy())
-
-                    print(f"    → pose_ok | xyz=({xyz[0]:.3f}, {xyz[1]:.3f}, {xyz[2]:.3f}) "
-                          f"| scale={s:.3f} | inliers={inlier_count}")
-                else:
-                    print("    → pose failed (low parallax or cheirality)")
+                prev_pts = in_next
         else:
-            print(f"[{frame_idx:04d}] Not enough points for RANSAC")
+            prev_pts = in_next
 
         prev_gray = gray.copy()
         frame_idx += 1
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
     cap.release()
-    cv2.destroyAllWindows()
-    print("✅ Completed: Essential Matrix motion estimation (no visualization)")
+    print("✨ DONE → output/{features, flow, ransac, motion}")
 
 
+# ==========================================================
+# 🔧 실행
 # ==========================================================
 if __name__ == "__main__":
     main()
