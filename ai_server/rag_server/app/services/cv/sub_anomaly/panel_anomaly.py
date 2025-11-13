@@ -10,8 +10,9 @@ import os
 import cv2
 import pytesseract
 import numpy as np
-from ultralytics import YOLO
+from pathlib import Path
 from loguru import logger
+from ultralytics import YOLO
 
 from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
@@ -19,8 +20,8 @@ from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 # 경로 설정
 # ---------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODULE_MODEL_PATH = os.path.join(BASE_DIR, "../../../models/module_best.pt")
-PANEL_MODEL_PATH = os.path.join(BASE_DIR, "../../../models/panel_best.pt")
+MODULE_MODEL_PATH = "/app/models/module_best.pt"
+PANEL_MODEL_PATH = "/app/models/panel_best.pt"
 
 # ---------------------------------------------------------
 # 하이퍼파라미터
@@ -106,84 +107,103 @@ async def _analyze_with_context(
     sharpest_frame,
     best_score: float,
 ):
-    module_model = _get_module_model()
-    panel_model = _get_panel_model()
-
-    module_results = await ctx.run(module_model.predict, sharpest_frame, conf=0.5, device="cpu", verbose=False)
-    panel_roi = None
-    if module_results:
-        for res in module_results:
-            for box in res.boxes:
-                cls = module_model.names[int(box.cls)]
+    """YOLO 모델을 사용한 제어판 분석"""
+    global _module_model, _panel_model
+    
+    # 모델 로드 (lazy load)
+    if _module_model is None:
+        try:
+            if Path(MODULE_MODEL_PATH).exists():
+                _module_model = YOLO(MODULE_MODEL_PATH)
+                _module_model.fuse()
+                logger.info("✅ [panel] Module 모델 로드 완료")
+            else:
+                logger.warning(f"⚠️ [panel] Module 모델 파일이 없습니다: {MODULE_MODEL_PATH}")
+                return {"type": "panel", "status": "error", "message": "Module 모델 파일 없음"}
+        except Exception as e:
+            logger.error(f"❌ [panel] Module 모델 로드 실패: {e}")
+            return {"type": "panel", "status": "error", "message": f"Module 모델 로드 실패: {e}"}
+    
+    if _panel_model is None:
+        try:
+            if Path(PANEL_MODEL_PATH).exists():
+                _panel_model = YOLO(PANEL_MODEL_PATH)
+                logger.info("✅ [panel] Panel 모델 로드 완료")
+            else:
+                logger.warning(f"⚠️ [panel] Panel 모델 파일이 없습니다: {PANEL_MODEL_PATH}")
+                return {"type": "panel", "status": "error", "message": "Panel 모델 파일 없음"}
+        except Exception as e:
+            logger.error(f"❌ [panel] Panel 모델 로드 실패: {e}")
+            return {"type": "panel", "status": "error", "message": f"Panel 모델 로드 실패: {e}"}
+    
+    # Module 모델로 제어판 ROI 추출
+    def _detect_panel_roi():
+        module_results = _module_model.predict(sharpest_frame, conf=0.5, device="cpu", verbose=False)
+        panel_roi = None
+        for r in module_results:
+            for box in r.boxes:
+                cls = _module_model.names[int(box.cls)]
                 if "panel" in cls.lower():
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     panel_roi = sharpest_frame[y1:y2, x1:x2]
                     break
-            if panel_roi is not None:
-                break
-
+        return panel_roi
+    
+    panel_roi = await ctx.run(_detect_panel_roi)
+    
     if panel_roi is None or panel_roi.size == 0:
-        return {"type": "panel", "status": "not_found", "message": "제어판 미검출"}
-
-    button_results = await ctx.run(panel_model.predict, panel_roi, conf=0.5, device="cpu", verbose=False)
-    led_status, temp_values = {}, []
-
-    if button_results:
-        for res in button_results:
-            for box in res.boxes:
-                cls = panel_model.names[int(box.cls)]
+        return {"type": "panel", "status": "not_found", "message": "제어판 미검출", "sharpness": best_score}
+    
+    # Panel 모델로 LED/온도 분석
+    def _analyze_panel_components():
+        button_results = _panel_model.predict(panel_roi, conf=0.5, device="cpu", verbose=False)
+        
+        leds = {}
+        temp = None
+        
+        for r in button_results:
+            for box in r.boxes:
+                cls = _panel_model.names[int(box.cls)]
+                conf = float(box.conf)
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 roi = panel_roi[y1:y2, x1:x2]
-                if roi.size == 0:
-                    continue
-
-                if cls == "temperature":
-                    temp = ocr_temperature(roi)
-                    if temp is not None:
-                        temp_values.append(temp)
-                else:
-                    on, color = led_color_status(roi)
-                    led_status[cls] = {"on": on, "color": color}
-
-    if not led_status and not temp_values:
-        return {"type": "panel", "status": "low_confidence", "message": "LED/온도 인식 실패"}
-
-    temp_mean = np.mean(temp_values) if temp_values else None
-    msg = "정상"
-    if any(v["color"] == "red" and v["on"] for v in led_status.values()):
-        msg = "⚠️ 경고등 점등"
-    elif temp_mean and temp_mean > 60:
-        msg = f"⚠️ 온도 이상 ({temp_mean:.1f}°C)"
-
-    logger.info(f"[panel] Sharpness={best_score:.2f}, Temp={temp_mean}, LEDs={led_status}")
-
+                
+                if "led" in cls.lower() or "button" in cls.lower():
+                    is_on, color = led_color_status(roi)
+                    leds[cls] = {"status": "on" if is_on else "off", "color": color, "confidence": conf}
+                elif "temp" in cls.lower() or "temperature" in cls.lower():
+                    temp_value = ocr_temperature(roi)
+                    if temp_value is not None:
+                        temp = temp_value
+        
+        return {"leds": leds, "temp": temp}
+    
+    results = await ctx.run(_analyze_panel_components)
+    
+    # 이상 판단
+    has_anomaly = False
+    if results["temp"] is not None and (results["temp"] > 80 or results["temp"] < 5):
+        has_anomaly = True
+    
+    for led_name, led_info in results["leds"].items():
+        if led_info["status"] == "on" and led_info["color"] == "red":
+            has_anomaly = True
+            break
+    
     return {
         "type": "panel",
-        "status": "done",
+        "status": "anomaly" if has_anomaly else "normal",
         "sharpness": best_score,
-        "message": msg,
-        "results": {
-            "temp": round(temp_mean, 2) if temp_mean else None,
-            "leds": led_status,
-        },
+        "message": "이상 탐지됨" if has_anomaly else "정상",
+        "results": results,
     }
 
 
 def _get_module_model():
     global _module_model
-    if _module_model is None:
-        logger.info("📦 [panel] module YOLO 모델 로드 중...")
-        _module_model = YOLO(MODULE_MODEL_PATH)
-        _module_model.fuse()
-        logger.info("✅ [panel] module YOLO 모델 로드 완료")
     return _module_model
 
 
 def _get_panel_model():
     global _panel_model
-    if _panel_model is None:
-        logger.info("📦 [panel] 패널 YOLO 모델 로드 중...")
-        _panel_model = YOLO(PANEL_MODEL_PATH)
-        _panel_model.fuse()
-        logger.info("✅ [panel] 패널 YOLO 모델 로드 완료")
     return _panel_model
