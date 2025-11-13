@@ -8,8 +8,9 @@
 import os
 import cv2
 import numpy as np
+from pathlib import Path
 from loguru import logger
-# from ultralytics import YOLO
+from ultralytics import YOLO
 
 from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
@@ -17,9 +18,9 @@ from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 # 경로 설정
 # ---------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "../../../models/module_best.pt")
+MODEL_PATH = "/app/models/module_best.pt"
 
-_yolo_gauge_model = False
+_yolo_gauge_model = None
 
 # ---------------------------------------------------------
 # 하이퍼파라미터
@@ -136,13 +137,81 @@ async def _analyze_with_context(
     sharpest_frame: np.ndarray,
     best_score: float,
 ):
-    logger.warning("⚠️ [gauge] 테스트 모드: YOLO 추론을 생략합니다")
+    """YOLO 모델을 사용한 게이지 이상 탐지"""
+    global _yolo_gauge_model
+    
+    # 모델 로드 (lazy load)
+    if _yolo_gauge_model is None:
+        try:
+            if Path(MODEL_PATH).exists():
+                _yolo_gauge_model = YOLO(MODEL_PATH)
+                _yolo_gauge_model.fuse()
+                logger.info("✅ [gauge] YOLO 모델 로드 완료")
+            else:
+                logger.warning(f"⚠️ [gauge] 모델 파일이 없습니다: {MODEL_PATH}")
+                return {"type": "gauge", "status": "error", "message": "모델 파일 없음", "sharpness": best_score}
+        except Exception as e:
+            logger.error(f"❌ [gauge] 모델 로드 실패: {e}")
+            return {"type": "gauge", "status": "error", "message": f"모델 로드 실패: {e}", "sharpness": best_score}
+    
+    # YOLO로 게이지 탐지
+    def _detect_gauges():
+        results = _yolo_gauge_model.predict(sharpest_frame, conf=0.5, device="cpu", verbose=False)
+        gauge_detections = []
+        for r in results:
+            for box in r.boxes:
+                cls = _yolo_gauge_model.names[int(box.cls)]
+                if "gauge" in cls.lower() or "thermometer" in cls.lower() or "pressure" in cls.lower():
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    roi = sharpest_frame[y1:y2, x1:x2]
+                    gauge_detections.append({"type": cls, "roi": roi})
+        return gauge_detections
+    
+    gauge_detections = await ctx.run(_detect_gauges)
+    
+    if not gauge_detections:
+        return {"type": "gauge", "status": "not_found", "message": "게이지 미검출", "sharpness": best_score, "results": {}}
+    
+    # 각 게이지 분석
+    results = {}
+    has_anomaly = False
+    
+    for det in gauge_detections:
+        gauge_type = det["type"]
+        roi = det["roi"]
+        
+        angle, _ = detect_gauge_value_fast(roi)
+        if angle is None:
+            continue
+        
+        # 각도를 값으로 변환 (간단한 매핑)
+        if "thermometer" in gauge_type.lower():
+            # 온도계: 각도를 온도로 변환 (예시)
+            value = (angle / 360.0) * 100  # 0-100도 범위로 가정
+        elif "pressure" in gauge_type.lower():
+            # 압력계: 각도를 압력으로 변환 (예시)
+            value = (angle / 360.0) * 2.0  # 0-2.0 범위로 가정
+        else:
+            value = angle / 360.0
+        
+        msg, status = judge_abnormal(gauge_type, value)
+        
+        results[gauge_type] = {
+            "value": float(value),
+            "angle": float(angle),
+            "status": status,
+            "message": msg,
+        }
+        
+        if status != "normal":
+            has_anomaly = True
+    
     return {
         "type": "gauge",
-        "status": "disabled",
+        "status": "anomaly" if has_anomaly else "normal",
         "sharpness": best_score,
-        "results": {},
-        "message": "YOLO 추론이 테스트 모드로 비활성화되었습니다",
+        "results": results,
+        "message": "이상 탐지됨" if has_anomaly else "정상",
     }
 
 
