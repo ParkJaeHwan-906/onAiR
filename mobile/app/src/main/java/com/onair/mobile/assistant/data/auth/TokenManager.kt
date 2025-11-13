@@ -3,6 +3,7 @@ package com.onair.mobile.assistant.data.auth
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.onair.mobile.communicate.PreferenceUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,11 +18,15 @@ import java.util.concurrent.TimeUnit
  * 
  * Spring 서버 액세스 토큰을 SharedPreferences에 저장하고 불러옵니다.
  * REFRESH_TOKEN을 사용하여 ACCESS_TOKEN을 자동으로 갱신합니다.
+ * 실제 로그인 플로우에서 받은 RefreshToken을 사용합니다.
  */
 class TokenManager(private val context: Context) {
     private val TAG = "TokenManager"
     private val preferences: SharedPreferences = 
         context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+    
+    // 실제 로그인 플로우에서 사용하는 PreferenceUtil 사용
+    private val preferenceUtil = PreferenceUtil(context)
     
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -31,9 +36,6 @@ class TokenManager(private val context: Context) {
     companion object {
         private const val PREFERENCES_KEY_ACCESS_TOKEN = "access_token"
         private const val PREFERENCES_KEY_REFRESH_TOKEN = "refresh_token"
-        
-        // TODO: 테스트 완료 후 제거 - REFRESH_TOKEN 하드코딩 (임시)
-        private const val HARDCODED_REFRESH_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI0IiwidHlwZSI6InJlZnJlc2giLCJpYXQiOjE3NjI1MjYzMDAsImV4cCI6MTc2Mjk1ODMwMH0.qUJN4pPNkXj1oU0BAqmjsU6HPdzQCpaQaP_KaJemgFQ"  // 여기에 실제 REFRESH_TOKEN 입력
         private const val SPRING_SERVER_URL = "https://onair.ai.kr/api"  // Spring 서버 URL
     }
     
@@ -76,11 +78,13 @@ class TokenManager(private val context: Context) {
     }
     
     /**
-     * REFRESH_TOKEN 저장 (임시 테스트용)
-     * 
-     * TODO: 테스트 완료 후 제거 - 실제 로그인 API에서 받아와야 함
+     * REFRESH_TOKEN 저장
+     * 실제 로그인 플로우의 PreferenceUtil에 저장합니다.
      */
     fun saveRefreshToken(token: String) {
+        // 실제 로그인 플로우에서 사용하는 PreferenceUtil에 저장
+        preferenceUtil.setRefreshToken(token)
+        // 레거시 호환성을 위해 기존 SharedPreferences에도 저장
         preferences.edit()
             .putString(PREFERENCES_KEY_REFRESH_TOKEN, token)
             .apply()
@@ -89,8 +93,15 @@ class TokenManager(private val context: Context) {
     
     /**
      * REFRESH_TOKEN 불러오기
+     * 실제 로그인 플로우에서 저장된 RefreshToken을 사용합니다.
      */
     fun getRefreshToken(): String? {
+        // 먼저 실제 로그인 플로우에서 저장된 RefreshToken 확인
+        val refreshTokenFromLogin = preferenceUtil.getRefreshToken()
+        if (refreshTokenFromLogin.isNotEmpty()) {
+            return refreshTokenFromLogin
+        }
+        // 레거시 SharedPreferences에서 확인 (하위 호환성)
         return preferences.getString(PREFERENCES_KEY_REFRESH_TOKEN, null)
     }
     
@@ -98,6 +109,9 @@ class TokenManager(private val context: Context) {
      * REFRESH_TOKEN 삭제
      */
     fun clearRefreshToken() {
+        // 실제 로그인 플로우의 PreferenceUtil에서 RefreshToken만 삭제 (빈 문자열로 설정)
+        preferenceUtil.setRefreshToken("")
+        // 레거시 호환성을 위해 기존 SharedPreferences에서도 삭제
         preferences.edit()
             .remove(PREFERENCES_KEY_REFRESH_TOKEN)
             .apply()
@@ -165,7 +179,12 @@ class TokenManager(private val context: Context) {
                 // REFRESH_TOKEN도 갱신되었을 수 있음
                 val newRefreshToken = json.optString("refreshToken", "")
                 if (newRefreshToken.isNotEmpty()) {
-                    saveRefreshToken(newRefreshToken)
+                    // 실제 로그인 플로우의 PreferenceUtil에 저장
+                    preferenceUtil.setRefreshToken(newRefreshToken)
+                    // 레거시 호환성을 위해 기존 SharedPreferences에도 저장
+                    preferences.edit()
+                        .putString(PREFERENCES_KEY_REFRESH_TOKEN, newRefreshToken)
+                        .apply()
                     Log.i(TAG, "✅ REFRESH_TOKEN 갱신 완료")
                 }
                 
@@ -178,20 +197,6 @@ class TokenManager(private val context: Context) {
         }
     }
     
-    /**
-     * 하드코딩된 REFRESH_TOKEN 설정 (임시 테스트용)
-     * 
-     * TODO: 테스트 완료 후 이 메서드 호출 부분 제거
-     */
-    fun setupHardcodedRefreshToken() {
-        if (HARDCODED_REFRESH_TOKEN.isNotEmpty() && HARDCODED_REFRESH_TOKEN != "YOUR_REFRESH_TOKEN_HERE") {
-            saveRefreshToken(HARDCODED_REFRESH_TOKEN)
-            Log.i(TAG, "✅ 하드코딩된 REFRESH_TOKEN 설정 완료")
-        } else {
-            Log.w(TAG, "⚠️ 하드코딩된 REFRESH_TOKEN이 설정되지 않았습니다.")
-            Log.w(TAG, "   TokenManager.kt의 HARDCODED_REFRESH_TOKEN 상수를 수정하세요.")
-        }
-    }
     
     /**
      * ACCESS_TOKEN이 만료되었는지 확인하고 필요시 갱신

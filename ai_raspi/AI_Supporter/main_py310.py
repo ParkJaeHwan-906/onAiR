@@ -14,7 +14,12 @@ from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
-from bridge.stt_bridge_server import run_server, send_stt_result, set_start_streaming_stt_callback, set_service_completed_callback, send_wakeword_detected, set_wakeword_audio_completed_callback
+from bridge.stt_bridge_server import (
+    run_server, send_stt_result, set_start_streaming_stt_callback, 
+    set_service_completed_callback, send_wakeword_detected, 
+    set_wakeword_audio_completed_callback,
+    set_wakeword_start_waiting_callback, set_mic_off_callback, set_mic_on_callback
+)
 from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
 
@@ -204,6 +209,46 @@ def run_stt_loop():
     
     # 브리지 서버에 Streaming STT 시작 콜백 등록
     set_start_streaming_stt_callback(start_streaming_stt)
+    
+    # Wakeword 감지 대기 시작 콜백 등록
+    def handle_wakeword_start_waiting():
+        """Wakeword 감지 대기 시작 처리"""
+        logger.info("=" * 60)
+        logger.info("🔊 Wakeword 감지 대기 시작")
+        logger.info("=" * 60)
+        if wakeword_detector and wakeword_detector.interpreter is not None:
+            wakeword_detector.resume()
+            mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+            logger.info("✅ Wakeword 감지기 재활성화 완료")
+        else:
+            logger.warning("⚠️ Wakeword 감지기가 초기화되지 않았습니다")
+    
+    set_wakeword_start_waiting_callback(handle_wakeword_start_waiting)
+    
+    # STT 목적 음성 수집 중지 콜백 등록
+    def handle_mic_off():
+        """STT 목적 음성 수집 중지 처리"""
+        logger.info("=" * 60)
+        logger.info("🔇 STT 목적 음성 수집 중지")
+        logger.info("   주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.")
+        logger.info("=" * 60)
+        mic.pause()
+    
+    set_mic_off_callback(handle_mic_off)
+    
+    # STT 목적 음성 수집 재개 콜백 등록
+    def handle_mic_on():
+        """STT 목적 음성 수집 재개 처리"""
+        logger.info("=" * 60)
+        logger.info("🔊 STT 목적 음성 수집 재개")
+        logger.info("   주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.")
+        logger.info("=" * 60)
+        if not mic.is_active():
+            mic.resume()
+        else:
+            logger.info("ℹ️ STT 목적 음성 수집이 이미 활성화되어 있습니다")
+    
+    set_mic_on_callback(handle_mic_on)
     
     logger.info("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
     logger.info("📌 Python 3.10에서 실행 중 (wakeword + STT)")
