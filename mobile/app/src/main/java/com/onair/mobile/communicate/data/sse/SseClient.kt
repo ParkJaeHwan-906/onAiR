@@ -5,9 +5,6 @@ import com.launchdarkly.eventsource.ConnectStrategy
 import com.launchdarkly.eventsource.EventSource
 import com.launchdarkly.eventsource.background.BackgroundEventHandler
 import com.launchdarkly.eventsource.background.BackgroundEventSource
-import com.onair.mobile.communicate.PreferenceUtil
-import com.onair.mobile.communicate.data.AuthRepository
-import com.onair.mobile.communicate.data.api.ApiService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
