@@ -817,14 +817,14 @@ async def process_frame(frame_bgr, sid=None):
         if ratio >= NCC_MIN_RATIO:
             # refine 결과가 충분히 많고, 비율도 괜찮으면 refine 사용
             use_refined = True
-            print(f"✅ Patch refine: {len(prev_valid_refined)} pts "
-                  f"({ratio*100:.1f}% of OF) | meanNCC={mean_score:.3f}")
-        else:
-            print(f"⚠️ Refined ratio too small "
-                  f"({len(prev_valid_refined)}/{len(prev_valid_of)}), "
-                  f"fallback to OF result")
-    else:
-        print(f"⚠️ Too few refined ({len(prev_valid_refined)}), fallback to OF result")
+            # print(f"✅ Patch refine: {len(prev_valid_refined)} pts "
+            #       f"({ratio*100:.1f}% of OF) | meanNCC={mean_score:.3f}")
+    #     else:
+    #         print(f"⚠️ Refined ratio too small "
+    #               f"({len(prev_valid_refined)}/{len(prev_valid_of)}), "
+    #               f"fallback to OF result")
+    # else:
+    #     print(f"⚠️ Too few refined ({len(prev_valid_refined)}), fallback to OF result")
 
     if use_refined:
         prev_valid = prev_valid_refined
