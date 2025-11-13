@@ -78,8 +78,8 @@ def print_test_instructions():
    python tests/test_websocket_client.py
 
 3️⃣  전체 시스템 테스트:
-   - 터미널 1: python tests/test_websocket_client.py
-   - 터미널 2: python main.py
+   - 터미널 1: python3.10 main_py310.py (AI_Supporter 디렉토리에서)
+   - 터미널 2: python3.13 socket_manager.py (raspi/app/sockets 디렉토리에서)
    
    그 다음 "onAir"라고 말하면 전체 흐름이 실행됩니다!
 
@@ -108,7 +108,8 @@ def main():
     print("지금 바로 테스트하려면:")
     print("  python tests/test_modules.py")
     print("\n또는 전체 시스템을 실행하려면:")
-    print("  python main.py")
+    print("  터미널 1: python3.10 main_py310.py")
+    print("  터미널 2: cd ../../raspi/app/sockets && python3.13 socket_manager.py")
 
 if __name__ == "__main__":
     try:
