@@ -38,8 +38,7 @@ class CameraService:
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameRate": 13},
-            transform=Transform(rotation=270)  # 반시계 방향 회전
+            controls={"FrameRate": 13}
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
