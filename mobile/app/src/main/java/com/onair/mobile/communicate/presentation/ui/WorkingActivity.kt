@@ -47,6 +47,7 @@ import com.onair.mobile.assistant.data.task.SseTaskClient
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
+    private var aiOnDialog: AiOnDialog? = null
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
         val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
@@ -365,6 +366,7 @@ class WorkingActivity : AppCompatActivity() {
                     IntentType.AI_SUPPORTER -> {
                         Log.i(TAG, "✅ AI_SUPPORTER 분기 처리 시작")
 
+//                        showModal(intentType)
                         // UI 업데이트: "AI Supporter on" (1초간)
                         runOnUiThread {
                             binding.taskName.text = "AI Supporter on"
@@ -561,7 +563,24 @@ class WorkingActivity : AppCompatActivity() {
 
         if (audioContent != null && audioContent.isNotBlank()) {
             lifecycleScope.launch {
-                ttsRepository.playAudio(audioContent, mimeType)
+                ttsRepository.playAudio(audioContent, mimeType) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ 최종 답변 TTS 재생 완료")
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패")
+                    }
+                }
+            }
+        } else {
+            // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
+            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+            if (success) {
+                Log.i(TAG, "📤 모바일 최종 답변 재생 완료 이벤트 전송 완료 (오디오 없음)")
             }
         }
     }
@@ -634,5 +653,14 @@ class WorkingActivity : AppCompatActivity() {
 
             sseTaskClient?.connect()
         }
+    }
+    private fun showModal(status: IntentType) {
+        if (aiOnDialog?.isVisible == true) return
+        aiOnDialog = AiOnDialog(status)
+        aiOnDialog?.show(supportFragmentManager, "loading")
+    }
+    private fun hideModal() {
+        aiOnDialog?.dismiss()
+        aiOnDialog = null
     }
 }

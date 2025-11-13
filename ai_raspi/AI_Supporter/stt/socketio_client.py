@@ -103,11 +103,20 @@ class SocketIOClient:
             """Streaming STT 종료 신호 수신"""
             session_id = data.get("session_id")
             reason = data.get("reason", "unknown")
+            logger.info("=" * 60)
             logger.info(f"🛑 Streaming STT 종료 신호 수신: session_id={session_id}, reason={reason}")
+            logger.info("=" * 60)
             
             # manager를 통해 종료 신호 전달
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
+                
+                # STT 목적 음성 수집 중지 (통신 요청 수락 등으로 인한 중지 시)
+                # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
+                mic = self.manager.get_mic_stream()
+                if mic and mic.is_active():
+                    mic.pause()
+                    logger.info("🔇 STT 목적 음성 수집 중지 (Streaming STT 세션 종료)")
         
         @self.sio.on("start_streaming_stt")
         async def handle_start_streaming_stt(data):
@@ -251,6 +260,101 @@ class SocketIOClient:
         async def handle_pong(data):
             """서버로부터 pong 응답 수신"""
             logger.debug(f"🏓 Pong 수신: {data}")
+        
+        @self.sio.on("wakeword_start_waiting")
+        async def handle_wakeword_start_waiting(data):
+            """Wakeword 감지 대기 시작 이벤트 수신"""
+            logger.info("=" * 60)
+            logger.info(f"📩 Wakeword 감지 대기 시작 이벤트 수신")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 Wakeword 감지 대기 시작 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 브리지 서버로 Wakeword 감지 대기 시작 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('wakeword_start_waiting', {})
+                        logger.info("=" * 60)
+                        logger.info(f"✅ 브리지 서버로 Wakeword 감지 대기 시작 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ 브리지 서버로 Wakeword 감지 대기 시작 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+                logger.warning("=" * 60)
+        
+        @self.sio.on("mic_off")
+        async def handle_mic_off(data):
+            """STT 목적 음성 수집 중지 이벤트 수신"""
+            logger.info("=" * 60)
+            logger.info(f"📩 STT 목적 음성 수집 중지 이벤트 수신")
+            logger.info("   주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 마이크 OFF 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 브리지 서버로 마이크 OFF 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('mic_off', {})
+                        logger.info("=" * 60)
+                        logger.info(f"✅ 브리지 서버로 마이크 OFF 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ 브리지 서버로 마이크 OFF 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+                logger.warning("=" * 60)
+        
+        @self.sio.on("mic_on")
+        async def handle_mic_on(data):
+            """STT 목적 음성 수집 재개 이벤트 수신"""
+            logger.info("=" * 60)
+            logger.info(f"📩 STT 목적 음성 수집 재개 이벤트 수신")
+            logger.info("   주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.")
+            logger.info("=" * 60)
+            
+            # 브리지 서버를 통해 Python 3.10으로 마이크 ON 신호 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                if self.manager.bridge_client.is_connected():
+                    try:
+                        logger.info("=" * 60)
+                        logger.info(f"📤 브리지 서버로 마이크 ON 신호 전송")
+                        logger.info("=" * 60)
+                        self.manager.bridge_client.sio.emit('mic_on', {})
+                        logger.info("=" * 60)
+                        logger.info(f"✅ 브리지 서버로 마이크 ON 신호 전송 완료")
+                        logger.info("=" * 60)
+                    except Exception as e:
+                        logger.error("=" * 60)
+                        logger.error(f"❌ 브리지 서버로 마이크 ON 신호 전송 실패: {e}")
+                        logger.error("=" * 60)
+                else:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다.")
+                    logger.warning("=" * 60)
+            else:
+                logger.warning("=" * 60)
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+                logger.warning("=" * 60)
         
         @self.sio.on("service_completed")
         async def handle_service_completed(data):

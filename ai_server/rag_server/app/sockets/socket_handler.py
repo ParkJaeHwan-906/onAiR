@@ -559,6 +559,12 @@ async def handle_intent_audio_completed(sid, data):
                         print("=" * 60)
                         print(f"🤖 [단계 12] GPT-4o로 최종 답변 생성 시작")
                         print("=" * 60)
+                        
+                        # GPT-4o 호출 시점에 STT 목적 음성 수집 중지 이벤트 전송
+                        # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
+                        print("[DEBUG] GPT-4o 호출 시점: STT 목적 음성 수집 중지 이벤트 전송")
+                        await broadcast_to("raspi", "mic_off", {})
+                        
                         snippets = [h["source"]["content"] for h in used_hits]
                         answer_result = llm_generate_answer(query, snippets, used_hits)
                         answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
@@ -616,6 +622,7 @@ async def handle_intent_audio_completed(sid, data):
                 await wait_for_next_step("모바일로 최종 답변 전송 완료", "14")
                 
                 # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
+                # CV 탐지 성공 시 마이크는 OFF 상태 유지 (켜지 않음)
                 await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
         except Exception as e:
             print(f"❌ CV 모델 실행 오류: {e}")
@@ -690,6 +697,35 @@ async def handle_audio_playback_completed(sid, data):
         print("   다음 Streaming STT 질문을 대기 중입니다.")
         print("=" * 60)
         await wait_for_next_step("Clarify Q&A 턴 TTS 재생 완료 처리", "12-3")
+    elif audio_type == "final_answer":
+        # AI_Supporter 최종 답변 TTS 재생 완료 → 마이크 ON + Wakeword 감지 대기 시작
+        print("=" * 60)
+        print(f"✅ AI_Supporter 최종 답변 TTS 재생 완료: session_id={session_id}")
+        print("   마이크 ON + Wakeword 감지 대기 시작 이벤트 전송")
+        print("=" * 60)
+        
+        # 라즈베리파이로 STT 목적 음성 수집 재개 이벤트 전송
+        # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
+        await broadcast_to("raspi", "mic_on", {})
+        
+        # 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송
+        await broadcast_to("raspi", "wakeword_start_waiting", {})
+        
+        print("✅ STT 목적 음성 수집 재개 + Wakeword 감지 대기 시작 이벤트 전송 완료")
+        await wait_for_next_step("최종 답변 TTS 재생 완료 처리", "14-1")
+    elif audio_type == "intent_audio":
+        # OPERATOR Intent 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 목적으로 음성 수집 시작
+        intent = data.get("intent", "").upper()
+        if intent == "OPERATOR":
+            print("=" * 60)
+            print(f"✅ OPERATOR Intent 음성 파일 재생 완료")
+            print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
+            print("=" * 60)
+            
+            # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
+            # accept_communication에서 이미 handle_audio_stream으로 처리됨
+            # 여기서는 추가 확인용
+            print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료")
     else:
         print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
 
@@ -1211,6 +1247,11 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             
             # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
+            # GPT-4o 호출 시점에 STT 목적 음성 수집 중지 이벤트 전송
+            # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
+            print("[DEBUG] GPT-4o 호출 시점: STT 목적 음성 수집 중지 이벤트 전송")
+            await broadcast_to("raspi", "mic_off", {})
+            
             snippets = [h["source"]["content"] for h in used_hits]
             answer_result = llm_generate_answer(effective_query, snippets, used_hits)
             print(f"✅ 최종 답변 생성 완료: {answer_result.get('tts_text', '')[:50]}...")
@@ -1567,15 +1608,47 @@ async def handle_start_communication(sid, data):
 async def accept_communication(sid, data):
     """
     오퍼레이터 통신 시작 이벤트
+    AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
     print("[DEBUG] accept_communication 이벤트 발생")
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
         return
 
-    # === raspi로 "handle_audio_stream" 이벤트 전송 ===
-    print("[DEBUG] handle_audio_stream(True) 이벤트 emit")
+    print("=" * 60)
+    print("📞 통신 요청 수락: AI_Supporter/OPERATOR 기능 중지 및 WebRTC 오디오 스트리밍 시작")
+    print("=" * 60)
+    
+    # 현재 실행 중인 Streaming STT 세션이 있는지 확인
+    active_sessions = list(clarify_sessions.keys())
+    if active_sessions:
+        print(f"⚠️ 실행 중인 Streaming STT 세션 발견: {len(active_sessions)}개")
+        print(f"   세션 ID: {active_sessions}")
+        
+        # 모든 실행 중인 Streaming STT 세션 종료
+        for session_id in active_sessions:
+            print(f"🛑 Streaming STT 세션 종료: {session_id}")
+            await broadcast_to("raspi", "stop_streaming_stt", {
+                "session_id": session_id,
+                "reason": "통신 요청 수락으로 인한 중지"
+            })
+        
+        # 세션 정보 정리
+        clarify_sessions.clear()
+        print("✅ 모든 Streaming STT 세션 종료 완료")
+    
+    # STT 목적으로 음성 수집 중지 이벤트 전송 (AI_Supporter/OPERATOR 기능 중지)
+    # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
+    print("[DEBUG] STT 목적 음성 수집 중지 이벤트 전송")
+    await broadcast_to("raspi", "mic_off", {})
+    
+    # === raspi로 "handle_audio_stream" 이벤트 전송 (WebRTC 오디오 스트리밍 목적으로 음성 수집 시작) ===
+    # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
+    print("[DEBUG] handle_audio_stream(True) 이벤트 emit (WebRTC 오디오 스트리밍 목적)")
     await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
+    
+    print("✅ 통신 요청 수락 처리 완료: AI_Supporter/OPERATOR 기능 중지, WebRTC 오디오 스트리밍 시작")
+    print("=" * 60)
 
 # 웹에서 통신 종료 이벤트 전달
 @sio.on("communication_close")
@@ -1591,6 +1664,10 @@ async def communication_close(sid, data):
     print("[DEBUG] handle_audio_stream (start:False) emit")
     # === raspi로 "handle_audio_stream" 이벤트 전송 ===
     await broadcast_to("raspi", "handle_audio_stream", {"start" : False})
+    
+    # === 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송 ===
+    print("[DEBUG] wakeword_start_waiting 이벤트 emit")
+    await broadcast_to("raspi", "wakeword_start_waiting", {})
 
 
 # ========================================
