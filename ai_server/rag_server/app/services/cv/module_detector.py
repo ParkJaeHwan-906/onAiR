@@ -50,15 +50,49 @@ async def detect_modules_from_recent_frames(
     if not frames:
         return []
 
-    model = get_module_model()
-    if not model:
-        logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
-        return []
-
     if yolo_ctx is None:
         async with acquire_yolo_context() as ctx:
+            # 모델 로드도 별도 스레드에서 실행
+            model = await _get_module_model_async(ctx)
+            if not model:
+                logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
+                return []
             return await _detect_with_context(ctx, model, frames)
-    return await _detect_with_context(yolo_ctx, model, frames)
+    else:
+        # 모델 로드도 별도 스레드에서 실행
+        model = await _get_module_model_async(yolo_ctx)
+        if not model:
+            logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
+            return []
+        return await _detect_with_context(yolo_ctx, model, frames)
+
+
+async def _get_module_model_async(ctx: YOLOContext):
+    """모델 로드를 별도 스레드에서 실행"""
+    global _yolo_module_model
+    if _yolo_module_model is not None and _yolo_module_model is not False:
+        return _yolo_module_model
+    
+    def _load_model():
+        global _yolo_module_model
+        try:
+            model_path = "/app/models/module_best.pt"
+            if not Path(model_path).exists():
+                logger.warning(f"⚠️ [module_detector] 모델 파일이 없습니다: {model_path}")
+                _yolo_module_model = False
+                return False
+            else:
+                _yolo_module_model = YOLO(model_path)
+                _yolo_module_model.fuse()
+                logger.info("✅ [module_detector] YOLO 모듈 모델 로드 완료")
+                return True
+        except Exception as e:
+            logger.error(f"❌ [module_detector] YOLO 모델 로드 실패: {e}")
+            _yolo_module_model = False
+            return False
+    
+    success = await ctx.run(_load_model)
+    return _yolo_module_model if success else None
 
 
 async def _detect_with_context(
