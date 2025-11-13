@@ -5,6 +5,7 @@ import os
 from feature_extractor import extract_features
 from feature_tracker import track_features
 from ransac_filter import ransac_filter
+from motion_estimator import estimate_motion
 
 
 # ==========================================================
@@ -17,6 +18,7 @@ DIST_PATH = "../data/dist_coeffs.npy"
 os.makedirs("output/features", exist_ok=True)
 os.makedirs("output/flow", exist_ok=True)
 os.makedirs("output/ransac", exist_ok=True)
+os.makedirs("output/motion", exist_ok=True)
 
 
 # ==========================================================
@@ -43,6 +45,28 @@ def load_camera_params():
 
 
 # ==========================================================
+# 🔧 특징점 저장
+# ==========================================================
+def save_feature_frame(frame, pts, method, frame_idx):
+    vis = frame.copy()
+
+    for (x, y) in pts.reshape(-1, 2):
+        cv2.circle(vis, (int(x), int(y)), 2, (0, 255, 0), -1)
+
+    cv2.putText(
+        vis,
+        f"{method} | {len(pts)} pts",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.imwrite(f"output/features/frame_{frame_idx:04d}_pts{len(pts)}.jpg", vis)
+
+
+# ==========================================================
 # 🔧 Optical Flow 시각화
 # ==========================================================
 def save_optical_flow_frame(frame, prev_pts, next_pts, frame_idx):
@@ -58,7 +82,6 @@ def save_optical_flow_frame(frame, prev_pts, next_pts, frame_idx):
             tipLength=0.3
         )
 
-    # optical flow count
     cv2.putText(
         vis,
         f"Tracked: {len(prev_pts)} pts",
@@ -77,11 +100,10 @@ def save_optical_flow_frame(frame, prev_pts, next_pts, frame_idx):
 # ==========================================================
 def save_ransac_frame(frame, prev_pts, next_pts, mask, frame_idx):
     vis = frame.copy()
-
     mask = mask.astype(bool)
 
     for (p1, p2, m) in zip(prev_pts, next_pts, mask):
-        color = (0, 255, 0) if m else (0, 0, 255)  # green = inlier, red = outlier
+        color = (0, 255, 0) if m else (0, 0, 255)
         cv2.arrowedLine(
             vis,
             tuple(p1[0].astype(int)),
@@ -103,29 +125,19 @@ def save_ransac_frame(frame, prev_pts, next_pts, mask, frame_idx):
 
 
 # ==========================================================
-# 🔧 특징점 저장
+# 🔧 Motion Estimator 시각화 (scale)
 # ==========================================================
-def save_feature_frame(frame, pts, method, frame_idx):
+def save_motion_frame(frame, scale, frame_idx):
     vis = frame.copy()
-
-    for (x, y) in pts.reshape(-1, 2):
-        cv2.circle(vis, (int(x), int(y)), 1, (0, 255, 0), -1)
-
-    cv2.putText(
-        vis,
-        f"{method} | {len(pts)} pts",
-        (20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1.0,
-        (0, 255, 255),
-        2
-    )
-
-    cv2.imwrite(f"output/features/frame_{frame_idx:04d}_pts{len(pts)}.jpg", vis)
+    cv2.putText(vis, f"Scale(Z): {scale:.4f}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                (255, 200, 0), 2)
+    cv2.imwrite(f"output/motion/motion_{frame_idx:04d}.jpg", vis)
 
 
 # ==========================================================
-# 🎬 메인 (FEATURE + OPTICAL FLOW + RANSAC)
+# 🎬 메인 (FEATURE → FLOW → RANSAC → MOTION)
 # ==========================================================
 def main():
     cap = cv2.VideoCapture(VIDEO_PATH)
@@ -134,30 +146,25 @@ def main():
         return
 
     K, D = load_camera_params()
-    frame_idx = 0
 
+    frame_idx = 0
     prev_gray = None
     prev_pts = None
 
-    print("🎬 Running FEATURE + OPTICAL FLOW + RANSAC debug mode…")
+    print("🎬 Running Full Pipeline (Feature + Flow + RANSAC + Motion)…")
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # 🔹 undistort
-        if D is not None:
-            frame_undist = cv2.undistort(frame, K, D)
-        else:
-            frame_undist = frame
-
+        # Undistort
+        frame_undist = cv2.undistort(frame, K, D) if D is not None else frame
         gray = cv2.cvtColor(frame_undist, cv2.COLOR_BGR2GRAY)
 
         # ========== 1) 첫 프레임 특징점 ==========
         if prev_gray is None:
             prev_pts, method = extract_features(gray)
-            print(f"[{frame_idx:04d}] {method}: {len(prev_pts)} pts (INIT)")
             save_feature_frame(frame_undist, prev_pts, method, frame_idx)
             prev_gray = gray.copy()
             frame_idx += 1
@@ -165,7 +172,9 @@ def main():
 
         # ========== 2) Optical Flow ==========
         prev_valid, next_valid, _ = track_features(
-            prev_gray, gray, prev_pts,
+            prev_gray,
+            gray,
+            prev_pts,
             fb_thresh=2.0,
             blur_var_thresh=12.0,
             lk_win_size=(25, 25),
@@ -173,55 +182,52 @@ def main():
             frame=frame_undist
         )
 
-        print(f"[{frame_idx:04d}] Tracked: {len(prev_valid)} pts")
-
         if len(prev_valid) == 0:
-            prev_pts = []
             prev_gray = gray.copy()
+            prev_pts = []
             frame_idx += 1
             continue
 
         save_optical_flow_frame(frame_undist, prev_valid, next_valid, frame_idx)
 
-        # ========== 3) RANSAC 적용 ==========
+        # ========== 3) RANSAC ==========
         in_prev, in_next, F, mask = ransac_filter(
             prev_valid, next_valid,
             threshold=1.0,
             prob=0.999,
-            frame_shape=frame.shape,
+            frame_shape=frame_undist.shape,
             grid_size=(8, 6),
             dir_cos_thresh=0.5,
             sigma_scale=2.0
         )
 
-        if mask is None:
-            print(f"[{frame_idx:04d}] RANSAC failed")
-        else:
-            # RANSAC 저장
+        if mask is not None:
             save_ransac_frame(frame_undist, prev_valid, next_valid, mask, frame_idx)
+            print(f"[{frame_idx:04d}] RANSAC Inliers = {np.count_nonzero(mask)}/{len(mask)}")
 
-            inliers = np.count_nonzero(mask)
-            total = len(mask)
-            ratio = (inliers / total * 100) if total > 0 else 0
-            print(f"[{frame_idx:04d}] RANSAC Inliers: {inliers}/{total} ({ratio:.1f}%)")
+        # ========== 4) Essential-Based Motion (scale for Z) ==========
+        R, t, scale, stats = estimate_motion(in_prev, in_next, K)
 
-        # ========== 4) 특징점 부족하면 재추출 ==========
+        if stats["pose_ok"]:
+            save_motion_frame(frame_undist, scale, frame_idx)
+            print(f"[{frame_idx:04d}] Scale(Z) ≈ {scale:.4f}")
+
+        # ========== 5) 다음 프레임용 포인트 준비 ==========
+        # 부족하면 신규 특징점 add
         if len(in_prev) < 300:
             new_pts, method = extract_features(gray)
             if len(new_pts) > 0:
                 prev_pts = np.vstack([in_next, new_pts])
-                print(f"[{frame_idx:04d}] Added {len(new_pts)} new pts → total {len(prev_pts)}")
             else:
                 prev_pts = in_next
         else:
             prev_pts = in_next
 
-        # ========== 5) 다음 프레임 준비 ==========
         prev_gray = gray.copy()
         frame_idx += 1
 
     cap.release()
-    print("✅ 저장 완료 → output/{features,flow,ransac}/")
+    print("✨ DONE → output/{features, flow, ransac, motion}")
 
 
 # ==========================================================
