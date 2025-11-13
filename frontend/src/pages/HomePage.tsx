@@ -17,7 +17,8 @@ function HomePage() {
   const [onlineEmployees, setOnlineEmployees] = useState(0);
   const [completionRate, setCompletionRate] = useState(0);
   const [todayTasks, setTodayTasks] = useState<Work[]>([]);
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
 
   const formatTime = (dateTimeString: string) => {
     if (!dateTimeString) return "-";
