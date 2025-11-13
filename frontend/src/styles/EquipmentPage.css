@@ -1,7 +1,7 @@
 .equipment-page-wrapper {
   box-sizing: border-box;
   width: 100%;
-  height: 100%;
+  height: calc(100vh - 72px);
   background-color: var(--color-surface-subtle);
   display: flex;
   flex-direction: column;
@@ -19,6 +19,7 @@
   align-items: stretch;
   gap: clamp(10px, 1vw, 14px);
   width: 100%;
+  height: 100%;
   box-sizing: border-box;
   min-height: 0;
   min-width: 0;

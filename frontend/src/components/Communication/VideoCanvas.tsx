@@ -48,7 +48,7 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
     // 1️⃣ AudioContext 생성 (오디오 처리를 담당하는 컨텍스트)
     const audioContext = new AudioContext({
       latencyHint: 'interactive', 
-      sampleRate: 44100 // 브라우저 기준
+      sampleRate: 48000 // 브라우저 기준
     });
     audioContextRef.current = audioContext;
 

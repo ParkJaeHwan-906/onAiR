@@ -1,36 +1,48 @@
+/* 전체 */
 .home-wrapper {
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  background-color: var(--color-surface-subtle);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
   gap: clamp(10px, 1vw, 14px);
+
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: clamp(0px, 1vw, 2px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-width: 0;
 }
 
-.component-wrapper {
+/* 행 공통 */
+.home-row {
   width: 100%;
   display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  justify-content: flex-start;
   gap: clamp(10px, 1vw, 14px);
-  min-height: 0;
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
-.component-wrapper:first-child {
-  flex: 0 1 auto;
-  min-height: clamp(160px, 18vh, 220px);
+/* HomeSmall (위 4개)        */
+.home-small-row {
+  height: 240px; /* ← 고정 높이 (중요!!) */
+  flex-shrink: 0;
+  display: flex;
 }
 
-.component-wrapper:last-child {
-  flex: 1 1 auto;
-  min-height: 0;
+/* 카드 최소 크기 때문에 줄면 자동으로 2줄~3줄로 wrap 되게 */
+.home-small-row > * {
+  min-width: 220px;
+}
+
+/*  HomeBig (아래 2개)        */
+
+.home-big-row {
+  flex: 1; /* ← 남는 공간 다 가져감 */
+  min-height: 0; /* ← overflow 문제 해결 */
+  max-height: 100%;
+  display: flex;
+  gap: clamp(10px, 1vw, 14px);
+}
+
+/* HomeBig 크기 균등 분배 */
+.home-big-row > * {
+  flex: 1;
+  min-width: 350px;
+  min-height: 0; /* 내부 스크롤 깨짐 방지 */
 }
