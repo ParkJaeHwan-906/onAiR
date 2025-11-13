@@ -576,6 +576,33 @@ class SocketIoSttClient(
     }
     
     /**
+     * 최종 답변 TTS 재생 완료 이벤트 전송
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendFinalAnswerAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "final_answer")
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
      * Ping 전송 (연결 테스트용)
      */
     fun ping() {
