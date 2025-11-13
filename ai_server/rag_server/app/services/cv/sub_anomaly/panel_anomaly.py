@@ -110,31 +110,45 @@ async def _analyze_with_context(
     """YOLO 모델을 사용한 제어판 분석"""
     global _module_model, _panel_model
     
-    # 모델 로드 (lazy load)
+    # 모델 로드 (lazy load) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     if _module_model is None:
-        try:
-            if Path(MODULE_MODEL_PATH).exists():
-                _module_model = YOLO(MODULE_MODEL_PATH)
-                _module_model.fuse()
-                logger.info("✅ [panel] Module 모델 로드 완료")
-            else:
-                logger.warning(f"⚠️ [panel] Module 모델 파일이 없습니다: {MODULE_MODEL_PATH}")
-                return {"type": "panel", "status": "error", "message": "Module 모델 파일 없음"}
-        except Exception as e:
-            logger.error(f"❌ [panel] Module 모델 로드 실패: {e}")
-            return {"type": "panel", "status": "error", "message": f"Module 모델 로드 실패: {e}"}
+        def _load_module_model():
+            global _module_model
+            try:
+                if Path(MODULE_MODEL_PATH).exists():
+                    _module_model = YOLO(MODULE_MODEL_PATH)
+                    _module_model.fuse()
+                    logger.info("✅ [panel] Module 모델 로드 완료")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [panel] Module 모델 파일이 없습니다: {MODULE_MODEL_PATH}")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [panel] Module 모델 로드 실패: {e}")
+                return False
+        
+        load_success = await ctx.run(_load_module_model)
+        if not load_success:
+            return {"type": "panel", "status": "error", "message": "Module 모델 로드 실패"}
     
     if _panel_model is None:
-        try:
-            if Path(PANEL_MODEL_PATH).exists():
-                _panel_model = YOLO(PANEL_MODEL_PATH)
-                logger.info("✅ [panel] Panel 모델 로드 완료")
-            else:
-                logger.warning(f"⚠️ [panel] Panel 모델 파일이 없습니다: {PANEL_MODEL_PATH}")
-                return {"type": "panel", "status": "error", "message": "Panel 모델 파일 없음"}
-        except Exception as e:
-            logger.error(f"❌ [panel] Panel 모델 로드 실패: {e}")
-            return {"type": "panel", "status": "error", "message": f"Panel 모델 로드 실패: {e}"}
+        def _load_panel_model():
+            global _panel_model
+            try:
+                if Path(PANEL_MODEL_PATH).exists():
+                    _panel_model = YOLO(PANEL_MODEL_PATH)
+                    logger.info("✅ [panel] Panel 모델 로드 완료")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [panel] Panel 모델 파일이 없습니다: {PANEL_MODEL_PATH}")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [panel] Panel 모델 로드 실패: {e}")
+                return False
+        
+        load_success = await ctx.run(_load_panel_model)
+        if not load_success:
+            return {"type": "panel", "status": "error", "message": "Panel 모델 로드 실패"}
     
     # Module 모델로 제어판 ROI 추출
     def _detect_panel_roi():

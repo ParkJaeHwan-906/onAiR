@@ -33,19 +33,28 @@ async def background_device_detector():
     """
     global current_device_type, _yolo_device_model
 
-    # YOLO 모델 로드 (한 번만)
+    # YOLO 모델 로드 (한 번만) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     if _yolo_device_model is None:
-        try:
-            model_path = "/app/models/device_best.pt"
-            if not Path(model_path).exists():
-                print(f"⚠️ [device_monitor] 모델 파일이 없습니다: {model_path}")
-                _yolo_device_model = False
-            else:
-                _yolo_device_model = load_yolo_model(model_path)
-                print("✅ [device_monitor] YOLO 장비 모델 로드 완료")
-        except Exception as e:
-            print(f"❌ [device_monitor] YOLO 모델 로드 실패: {e}")
-            _yolo_device_model = False
+        # 첫 번째 YOLO 컨텍스트를 사용하여 모델 로드
+        async with acquire_yolo_context() as ctx:
+            def _load_model():
+                global _yolo_device_model
+                try:
+                    model_path = "/app/models/device_best.pt"
+                    if not Path(model_path).exists():
+                        print(f"⚠️ [device_monitor] 모델 파일이 없습니다: {model_path}")
+                        _yolo_device_model = False
+                        return False
+                    else:
+                        _yolo_device_model = load_yolo_model(model_path)
+                        print("✅ [device_monitor] YOLO 장비 모델 로드 완료")
+                        return True
+                except Exception as e:
+                    print(f"❌ [device_monitor] YOLO 모델 로드 실패: {e}")
+                    _yolo_device_model = False
+                    return False
+            
+            await ctx.run(_load_model)
 
     print("✅ [device_monitor] 장비 모니터링 시작됨 (주기: 2초)")
 
