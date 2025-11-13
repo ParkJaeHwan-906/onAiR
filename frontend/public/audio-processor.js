@@ -5,13 +5,13 @@ class AudioProcessor extends AudioWorkletProcessor {
 
 
       // 버퍼 : 약 1초 분량 저장
-      this.bufferSize = 32000; // 16kHz 기준 1초
+      this.bufferSize = 100000; // 
       this.buffer = new Float32Array(this.bufferSize);
       this.writeIndex = 0;
       this.readIndex = 0;
       this.availableSamples = 0;
       this.started = false;
-      this.minBufferThreshold = 16000; // 1초 버퍼 확보 후 재생 시작 
+      this.minBufferThreshold = 45000; // 1초 버퍼 확보 후 재생 시작 
       this.lastSample = 0; // 마지막 출력 샘플 저장
       
       // 메인 스레드로부터 메시지 수신
@@ -23,11 +23,28 @@ class AudioProcessor extends AudioWorkletProcessor {
     }
 
     enqueue(frame){
-      for (let i = 0; i < frame.length; i++) {
-        this.buffer[this.writeIndex] = frame[i];
-        this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
+      const inputRate = 16000;
+      const outputRate = sampleRate; // Worklet에서 전역 sampleRate 가능
+      const ratio = outputRate / inputRate; // 업샘플링 비율
+
+      let outPos = this.writeIndex;
+
+      for (let i = 0; i < frame.length - 1; i++) {
+        const start = frame[i];
+        const end = frame[i + 1];
+
+        for (let j = 0; j < Math.floor(ratio); j++) {
+          const alpha = j / ratio;
+          this.buffer[outPos % this.bufferSize] = start * (1 - alpha) + end * alpha;
+          outPos++;
+        }
       }
-      this.availableSamples = Math.min(this.availableSamples + frame.length, this.bufferSize);
+      // 마지막 샘플 처리
+      this.buffer[outPos % this.bufferSize] = frame[frame.length - 1];
+      outPos++;
+      
+      this.writeIndex = outPos % this.bufferSize;
+      this.availableSamples = Math.min(this.availableSamples + Math.floor(frame.length * ratio), this.bufferSize);
     }
 
     dequeue(output) {
