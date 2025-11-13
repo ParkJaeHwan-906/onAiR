@@ -1,12 +1,12 @@
 """
 모듈 탐지 서비스
-- 최근 프레임(보통 3~5장)을 받아 YOLO로 fan, belt, gauge 등 모듈 감지
+- 최근 프레임(보통 1~3장)을 받아 YOLO로 fan, belt, gauge 등 모듈 감지
 - 가장 확신(confidence)이 높은 결과만 추출
 """
 
-from ultralytics import YOLO
 from loguru import logger
 import numpy as np
+# from ultralytics import YOLO
 
 from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
@@ -18,10 +18,8 @@ def get_module_model():
     """YOLO 모듈 탐지 모델 (lazy load, 단일 인스턴스)"""
     global _yolo_module_model
     if _yolo_module_model is None:
-        logger.info("📦 [module_detector] YOLO 모델 로드 중...")
-        _yolo_module_model = YOLO("/app/models/module_best.pt")
-        _yolo_module_model.fuse()  # CPU 최적화
-        logger.info("✅ [module_detector] YOLO 모델 로드 완료")
+        logger.warning("⚠️ [module_detector] 테스트 모드: YOLO 로드 과정 비활성화")
+        _yolo_module_model = False
     return _yolo_module_model
 
 
@@ -41,6 +39,9 @@ async def detect_modules_from_recent_frames(
         return []
 
     model = get_module_model()
+    if not model:
+        logger.info("⏭️ [module_detector] 테스트 모드로 인해 YOLO 탐지 스킵")
+        return []
 
     if yolo_ctx is None:
         async with acquire_yolo_context() as ctx:
@@ -53,23 +54,8 @@ async def _detect_with_context(
     model,
     frames: list[np.ndarray],
 ):
-    results_batches = []
-    for frame in frames:
-        results = await ctx.run(model.predict, frame, imgsz=640, conf=0.35, verbose=False)
-        results_batches.append(results)
-
-    detections = []
-    for results in results_batches:
-        for res in results:
-            boxes = res.boxes
-            for box in boxes:
-                label = model.names[int(box.cls)]
-                conf = float(box.conf)
-                detections.append({"label": label, "confidence": conf})
-
-    filtered = _filter_top_detections(detections)
-    logger.info(f"🔍 [module_detector] 탐지된 모듈 수: {len(filtered)}개")
-    return filtered
+    # YOLO 실행 로직 테스트 모드에서는 생략
+    return []
 
 
 def _filter_top_detections(detections, min_conf=0.4):
