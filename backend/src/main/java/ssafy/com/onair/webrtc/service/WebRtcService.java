@@ -44,7 +44,7 @@ public class WebRtcService {
                 .equipmentName(senderInfo.getEquipmentName())
                 .equipmentCategoryId(senderInfo.getEquipmentCategoryId())
                 .equipmentCategoryName(senderInfo.getEquipmentCategoryName())
-                .description("")    // TODO: AI 서포터 질문 요약 추가하기
+                .description(webRtcRequestDto.description())    // TODO: AI 서포터 질문 요약 추가하기
                 .build();
         String senderRole = senderInfo.getRole();
 
