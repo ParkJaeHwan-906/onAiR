@@ -1468,31 +1468,18 @@ async def handle_video_frame(sid, data):
         print("⚠️ Empty frame data received")
         return
 
-    # --- ② JPEG → OpenCV 이미지 디코딩 (별도 스레드에서 실행) ---
-    def _decode_and_rotate():
-        """프레임 디코딩 및 회전 (동기 함수, 별도 스레드에서 실행)"""
+    # --- ② JPEG → OpenCV 이미지 디코딩 ---
+    try:
         np_data = np.frombuffer(frame_bytes, np.uint8)
         frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
         if frame is None:
-            return None
-        try:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        except Exception:
-            pass  # 회전 실패 시 원본 프레임 사용
-        return frame
-    
-    try:
-        # 프레임 디코딩을 별도 스레드에서 실행 (메인 이벤트 루프 블로킹 방지)
-        loop = asyncio.get_running_loop()
-        from concurrent.futures import ThreadPoolExecutor
-        # OpenCV 작업용 전용 스레드 풀 (프레임 처리 전용)
-        if not hasattr(handle_video_frame, '_cv_executor'):
-            handle_video_frame._cv_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cv-opencv")
-        
-        frame = await loop.run_in_executor(handle_video_frame._cv_executor, _decode_and_rotate)
-        if frame is None:
             print("⚠️ Failed to decode frame bytes")
             return
+        try:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        except Exception as e:
+            print(f"⚠️ Frame rotation error: {e}")
+    # 회전 실패 시 원본 프레임으로 계속 진행
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
@@ -1506,7 +1493,6 @@ async def handle_video_frame(sid, data):
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
-    # add_frame은 이미 별도 스레드에서 프레임 복사를 수행하므로 비동기로 실행
     try:
         from app.services.cv.frame_collector import add_frame
         await add_frame(frame)
@@ -1514,19 +1500,10 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
-    # motion_core.process_frame은 async이지만 내부에서 동기 OpenCV 작업 수행
-    # 필요시 별도 스레드로 분리 가능하나, 현재는 빠른 작업이므로 유지
     result = await motion_core.process_frame(frame, sid=sid)
-    
-    # 프레임 인코딩을 별도 스레드에서 실행
-    def _encode_frame():
-        """프레임 인코딩 (동기 함수, 별도 스레드에서 실행)"""
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        return jpeg_bytes.tobytes()
-    
     if result["status"] not in ("ok", "init"):
-        jpeg_bytes = await loop.run_in_executor(handle_video_frame._cv_executor, _encode_frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes)
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1553,8 +1530,8 @@ async def handle_video_frame(sid, data):
         await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
-    jpeg_bytes = await loop.run_in_executor(handle_video_frame._cv_executor, _encode_frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes)
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
