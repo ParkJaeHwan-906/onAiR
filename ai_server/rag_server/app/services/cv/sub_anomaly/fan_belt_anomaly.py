@@ -110,19 +110,26 @@ async def _analyze_with_context(
     """YOLO 모델을 사용한 팬/벨트 이상 탐지"""
     global _fan_belt_model
     
-    # 모델 로드 (lazy load)
+    # 모델 로드 (lazy load) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     if _fan_belt_model is None:
-        try:
-            if Path(MODEL_PATH).exists():
-                _fan_belt_model = YOLO(MODEL_PATH)
-                _fan_belt_model.fuse()
-                logger.info("✅ [fan_belt] YOLO 모델 로드 완료")
-            else:
-                logger.warning(f"⚠️ [fan_belt] 모델 파일이 없습니다: {MODEL_PATH}")
-                return {"type": "fan_belt", "status": "error", "message": "모델 파일 없음"}
-        except Exception as e:
-            logger.error(f"❌ [fan_belt] 모델 로드 실패: {e}")
-            return {"type": "fan_belt", "status": "error", "message": f"모델 로드 실패: {e}"}
+        def _load_model():
+            global _fan_belt_model
+            try:
+                if Path(MODEL_PATH).exists():
+                    _fan_belt_model = YOLO(MODEL_PATH)
+                    _fan_belt_model.fuse()
+                    logger.info("✅ [fan_belt] YOLO 모델 로드 완료")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [fan_belt] 모델 파일이 없습니다: {MODEL_PATH}")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [fan_belt] 모델 로드 실패: {e}")
+                return False
+        
+        load_success = await ctx.run(_load_model)
+        if not load_success:
+            return {"type": "fan_belt", "status": "error", "message": "모델 로드 실패"}
     
     # Optical Flow 기반 이상 탐지
     gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
