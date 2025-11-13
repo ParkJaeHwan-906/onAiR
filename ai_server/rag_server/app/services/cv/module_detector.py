@@ -1,6 +1,6 @@
 """
 모듈 탐지 서비스
-- 최근 프레임(보통 3~5장)을 받아 YOLO로 fan, belt, gauge 등 모듈 감지
+- 최근 프레임(보통 1~3장)을 받아 YOLO로 fan, belt, gauge 등 모듈 감지
 - 가장 확신(confidence)이 높은 결과만 추출
 """
 
