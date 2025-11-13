@@ -1,6 +1,6 @@
 import { type KonvaEventObject } from "konva/lib/Node";
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Layer, Line, Stage, Circle, RegularPolygon, Group } from "react-konva";
+import { Layer, Line, Stage, Circle, Group } from "react-konva";
 import type { DrawingLine } from "../../types/DrawingLine";
 import { useRoomContext } from "@livekit/components-react";
 import { useSocket } from "../../utils/socketContext";
@@ -34,13 +34,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
   const room = useRoomContext();
 
   // 펜 선: opacity 값 포함
-  const [lines, setLines] = useState<{ line: DrawingLine; opacity: number }[]>(
-    []
-  );
-
-  // // 도형 관련 (주석처리)
-  // const [shapes, setShapes] = useState<any[]>([]); // 도형 목록 관리
-  // const [currentShape, setCurrentShape] = useState<any | null>(null); // 드래그 중 도형
+  const [lines, setLines] = useState<
+    { line: DrawingLine; opacity: number; fading: boolean }[]
+  >([]);
 
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(
     null
@@ -160,14 +156,14 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     };
   }, [socket, convertCameraToStage, scale]);
 
-  // Pulse 효과: 마커가 주기적으로 커졌다 작아짐
+  // -------------------------- Pulse 효과: 마커가 주기적으로 커졌다 작아짐 ---------------------------
   useEffect(() => {
     const interval = setInterval(() => {
       setArMarkers((prev) =>
         prev.map((m) => {
-          const newScale = (m.pulseScale ?? 1) + 0.05;
-          const newOpacity = (m.pulseOpacity ?? 0.5) - 0.03;
-          if (newScale > 1.8) {
+          const newScale = (m.pulseScale ?? 1) + 0.03;
+          const newOpacity = (m.pulseOpacity ?? 0.5) - 0.02;
+          if (newScale > 1.6) {
             // 다시 초기화 (한 바퀴 돌면 원래 크기로)
             return { ...m, pulseScale: 1, pulseOpacity: 0.5 };
           }
@@ -185,11 +181,17 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
         prev
           .map((item) => ({
             ...item,
-            opacity: Math.max(0, item.opacity - 0.05), // 점점 투명하게
+            // 숫자를 크게 하면 더 빨리 사라짐 (0.05 → 0.1 → 0.2)
+            // 숫자를 작게 하면 천천히 사라짐
+            opacity: item.fading
+              ? Math.max(0, item.opacity - 0.06)
+              : item.opacity,
           }))
           .filter((item) => item.opacity > 0)
       );
-    }, 100); //
+    }, 60);
+    // 실행 주기(ms). 숫자가 작을수록 더 빠르게, 부드럽게 사라짐
+    // 150ms → 느림 / 80ms → 빠름 / 40ms → 매우 부드럽고 빠름
     return () => clearInterval(interval);
   }, []);
 
@@ -220,7 +222,11 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       isDrawing.current = true;
       setLines((prev) => [
         ...prev,
-        { line: { tool, color: penColor, points: [pos.x, pos.y] }, opacity: 1 },
+        {
+          line: { tool, color: penColor, points: [pos.x, pos.y] },
+          opacity: 1,
+          fading: false,
+        },
       ]);
       sendDrawingData({
         event: "draw-start",
@@ -294,97 +300,20 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
 
   // ------------------------------- 마우스 클릭 끝 -------------------------------
   const handleMouseUp = () => {
-    // if (currentShape) {
-    //   setShapes((prev) => [...prev, currentShape]);
-    //   setCurrentShape(null);
-    // }
     isDrawing.current = false;
     startPos.current = null;
+
+    setLines((prev) => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        ...updated[updated.length - 1],
+        fading: true,
+      };
+      return updated;
+    });
     sendDrawingData({ event: "draw-end" });
   };
-
-  // ------------------------------- 삭제 -------------------------------
-  // const handleDeleteShape = (index: number) => {
-  //   if (tool !== "eraser") return;
-  //   setShapes((prev) => prev.filter((_, i) => i !== index));
-  // };
-
-  // ------------------------------- 도형 계산 함수 -------------------------------
-  // const renderShape = (shape: any, i: number) => {
-  //   const { type, startX, startY, endX, endY, color } = shape;
-  //   switch (type) {
-  //     case "circle": {
-  //       const radius = Math.hypot(endX - startX, endY - startY) / 2;
-  //       const centerX = (startX + endX) / 2;
-  //       const centerY = (startY + endY) / 2;
-  //       return (
-  //         <Circle
-  //           key={i}
-  //           x={centerX}
-  //           y={centerY}
-  //           radius={radius}
-  //           stroke={color}
-  //           strokeWidth={3}
-  //           hitStrokeWidth={15}
-  //           onClick={() => handleDeleteShape(i)}
-  //         />
-  //       );
-  //     }
-  //     case "square": {
-  //       const x = Math.min(startX, endX);
-  //       const y = Math.min(startY, endY);
-  //       const width = Math.abs(endX - startX);
-  //       const height = Math.abs(endY - startY);
-  //       return (
-  //         <Rect
-  //           key={i}
-  //           x={x}
-  //           y={y}
-  //           width={width}
-  //           height={height}
-  //           stroke={color}
-  //           strokeWidth={3}
-  //           hitStrokeWidth={15}
-  //           onClick={() => handleDeleteShape(i)}
-  //         />
-  //       );
-  //     }
-  //     case "triangle": {
-  //       const centerX = (startX + endX) / 2;
-  //       const centerY = (startY + endY) / 2;
-  //       const size = Math.abs(endX - startX);
-  //       return (
-  //         <RegularPolygon
-  //           key={i}
-  //           x={centerX}
-  //           y={centerY}
-  //           sides={3}
-  //           radius={size / 2}
-  //           stroke={color}
-  //           strokeWidth={3}
-  //           hitStrokeWidth={15}
-  //           onClick={() => handleDeleteShape(i)}
-  //         />
-  //       );
-  //     }
-  //     case "arrow": {
-  //       return (
-  //         <Arrow
-  //           key={i}
-  //           points={[startX, startY, endX, endY]}
-  //           stroke={color}
-  //           strokeWidth={3}
-  //           pointerLength={12}
-  //           pointerWidth={12}
-  //           hitStrokeWidth={15}
-  //           onClick={() => handleDeleteShape(i)}
-  //         />
-  //       );
-  //     }
-  //     default:
-  //       return null;
-  //   }
-  // };
 
   // ------------------------------- 렌더링 -------------------------------
   return (

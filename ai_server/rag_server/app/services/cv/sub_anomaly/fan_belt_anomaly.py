@@ -7,16 +7,19 @@ Fan/Belt 이상 탐지 (Optical Flow + YOLO)
 import cv2
 import numpy as np
 from collections import deque, Counter
-from ultralytics import YOLO
-import asyncio
 from loguru import logger
 import os
+from pathlib import Path
+from ultralytics import YOLO
+
+from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
 
 # -------------------------------
 # 기본 파라미터
 # -------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "../../../models/module_best.pt")
+MODEL_PATH = "/app/models/module_best.pt"
+_fan_belt_model = None
 
 MAG_THRESH = 0.5
 STOP_THRESH = 0.15
@@ -75,7 +78,10 @@ def classify_state(cur_mag, avg_mag, ratio, delta, prev_state, std_motion):
 # -------------------------------
 # 메인 분석 (프레임 리스트 기반)
 # -------------------------------
-async def analyze_fan_belt(frames):
+async def analyze_fan_belt(
+    frames,
+    yolo_ctx: YOLOContext | None = None,
+):
     """버퍼 전체 기반 팬/벨트 이상 탐지"""
     try:
         if len(frames) < 3:
@@ -86,91 +92,77 @@ async def analyze_fan_belt(frames):
             }
 
         logger.info(f"[fan_belt] 입력 프레임 수: {len(frames)}")
-        model = YOLO(MODEL_PATH)
 
-        prev_gray = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-        belts = {}
-        frame_idx = 1
-
-        for i in range(1, len(frames)):
-            gray = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
-            mag = estimate_motion(prev_gray, gray)
-            prev_gray = gray
-
-            # YOLO 탐지 (belt/fan)
-            results = await asyncio.to_thread(model.predict, frames[i], conf=0.45, verbose=False)
-            belt_boxes = []
-            for r in results:
-                for box in r.boxes:
-                    cls = model.names[int(box.cls)]
-                    if "belt" in cls.lower() or "fan" in cls.lower():
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        belt_boxes.append((cls, (x1, y1, x2, y2)))
-
-            if not belt_boxes:
-                frame_idx += 1
-                continue
-
-            for (cls, (x1, y1, x2, y2)) in belt_boxes:
-                roi_prev = prev_gray[y1:y2, x1:x2]
-                roi_gray = gray[y1:y2, x1:x2]
-                if roi_prev.size == 0 or roi_gray.size == 0:
-                    continue
-
-                mag_roi = mag[y1:y2, x1:x2]
-                mag_valid = mag_roi[mag_roi > MAG_THRESH]
-                mag_mean = np.mean(mag_valid) if mag_valid.size > 0 else 0
-
-                bid = f"{cls}_{i}"
-                if bid not in belts:
-                    belts[bid] = {
-                        "mag_buf": deque(maxlen=SMOOTH_WINDOW),
-                        "trend_buf": deque(maxlen=TREND_WINDOW),
-                        "state_hist": deque(maxlen=STATE_SMOOTH),
-                        "prev_state": "E_NORMAL",
-                        "results": []
-                    }
-
-                b = belts[bid]
-                b["mag_buf"].append(mag_mean)
-                smooth_mag = np.mean(b["mag_buf"])
-                std_motion = np.std(b["mag_buf"])
-                b["trend_buf"].append(smooth_mag)
-                avg_mag = np.mean(b["trend_buf"])
-                ratio = smooth_mag / (avg_mag + 1e-5)
-                delta = smooth_mag - avg_mag
-
-                if frame_idx <= INIT_IGNORE:
-                    state = "E_NORMAL"
-                else:
-                    raw = classify_state(smooth_mag, avg_mag, ratio, delta, b["prev_state"], std_motion)
-                    b["state_hist"].append(raw)
-                    state = max(Counter(b["state_hist"]), key=lambda k: Counter(b["state_hist"])[k])
-
-                b["prev_state"] = state
-                b["results"].append(state)
-            frame_idx += 1
-
-        if not belts:
-            return {"type": "fan_belt", "status": "not_found", "message": "팬/벨트 미검출"}
-
-        # -------------------------------
-        # 상태 요약
-        # -------------------------------
-        summary = {}
-        for bid, b in belts.items():
-            cnt = Counter(b["results"])
-            total = max(len(b["results"]), 1)
-            n, s, a, v, st = [cnt.get(k, 0)/total*100 for k in
-                              ["E_NORMAL", "E_BELT_SLOWDOWN", "E_BELT_ACCELERATE", "E_BELT_VIBRATION", "E_BELT_STOP"]]
-            dom = max(cnt, key=cnt.get)
-            if (n <= 20 and abs(s - a) <= 20) or v >= 25:
-                dom = "E_BELT_VIBRATION"
-            summary[bid] = dict(normal=n, slow=s, accel=a, vib=v, stop=st, result=dom)
-
-        logger.info(f"[fan_belt] 결과 요약: {summary}")
-        return {"type": "fan_belt", "status": "done", "results": summary}
+        if yolo_ctx is None:
+            async with acquire_yolo_context() as ctx:
+                return await _analyze_with_context(ctx, frames)
+        return await _analyze_with_context(yolo_ctx, frames)
 
     except Exception as e:
         logger.exception(f"[fan_belt] 분석 중 오류: {e}")
         return {"type": "fan_belt", "status": "error", "message": str(e)}
+
+
+async def _analyze_with_context(
+    ctx: YOLOContext,
+    frames,
+):
+    """YOLO 모델을 사용한 팬/벨트 이상 탐지"""
+    global _fan_belt_model
+    
+    # 모델 로드 (lazy load) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
+    if _fan_belt_model is None:
+        def _load_model():
+            global _fan_belt_model
+            try:
+                if Path(MODEL_PATH).exists():
+                    _fan_belt_model = YOLO(MODEL_PATH)
+                    _fan_belt_model.fuse()
+                    logger.info("✅ [fan_belt] YOLO 모델 로드 완료")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [fan_belt] 모델 파일이 없습니다: {MODEL_PATH}")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [fan_belt] 모델 로드 실패: {e}")
+                return False
+        
+        load_success = await ctx.run(_load_model)
+        if not load_success:
+            return {"type": "fan_belt", "status": "error", "message": "모델 로드 실패"}
+    
+    # Optical Flow 기반 이상 탐지
+    gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
+    motion_mags = []
+    
+    for i in range(1, len(gray_frames)):
+        mag = estimate_motion(gray_frames[i-1], gray_frames[i])
+        motion_mags.append(mag.mean())
+    
+    if len(motion_mags) < 3:
+        return {"type": "fan_belt", "status": "unknown", "message": "프레임 부족"}
+    
+    # 상태 분류
+    avg_mag = np.mean(motion_mags)
+    std_mag = np.std(motion_mags)
+    cur_mag = motion_mags[-1]
+    ratio = cur_mag / (avg_mag + 1e-5)
+    delta = cur_mag - avg_mag
+    
+    state = classify_state(cur_mag, avg_mag, ratio, delta, "E_NORMAL", std_mag)
+    
+    has_anomaly = state != "E_NORMAL"
+    
+    return {
+        "type": "fan_belt",
+        "status": "anomaly" if has_anomaly else "normal",
+        "message": f"상태: {state}",
+        "state": state,
+        "motion_magnitude": float(cur_mag),
+        "avg_magnitude": float(avg_mag),
+    }
+
+
+def _get_fan_belt_model():
+    global _fan_belt_model
+    return _fan_belt_model

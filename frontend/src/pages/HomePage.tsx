@@ -100,8 +100,8 @@ function HomePage() {
     },
     {
       isGraph: true,
-      numInfo: onlineEmployees, // 변경: totalEmployees → onlineEmployees
-      totalInfo: totalEmployees, // 추가: 전체 인원 수
+      numInfo: onlineEmployees,
+      totalInfo: totalEmployees,
       title: "작업 인원 수", // 변경: "전체 작업 인원" → "작업 인원 수"
       value: onlinePercentage,
       icon: "icons/profile.png",
@@ -124,7 +124,7 @@ function HomePage() {
 
   return (
     <div className="home-wrapper">
-      <div className="component-wrapper">
+      <div className="home-row home-small-row">
         {loading ? (
           <div>로딩 중...</div>
         ) : (
@@ -141,7 +141,7 @@ function HomePage() {
           ))
         )}
       </div>
-      <div className="component-wrapper">
+      <div className="home-row home-big-row">
         <HomeBig
           title="오늘의 작업 목록"
           icon="icons/check.png"

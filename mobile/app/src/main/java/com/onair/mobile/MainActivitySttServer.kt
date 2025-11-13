@@ -64,6 +64,8 @@ class MainActivitySttServer : AppCompatActivity() {
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
+        private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
+        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
     }
     
     // 서버 URL 설정
@@ -313,6 +315,17 @@ class MainActivitySttServer : AppCompatActivity() {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
                             addLog("✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            
+                            // FastAPI 서버로 재생 완료 이벤트 전송 (CV 로직 실행 트리거)
+                            val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
+                            if (success) {
+                                Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
+                                addLog("📤 재생 완료 이벤트 전송 완료")
+                            } else {
+                                Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                                addLog("❌ 재생 완료 이벤트 전송 실패")
+                            }
+                            
                             // 음성 파일 재생 완료 후에도 "오류 탐지 중..." 화면은 CV 결과를 받을 때까지 유지됨
                         }
                         
@@ -325,12 +338,32 @@ class MainActivitySttServer : AppCompatActivity() {
                     
                     IntentType.OPERATOR -> {
                         Log.i(TAG, "✅ OPERATOR 분기 처리 시작")
+                        addLog("✅ OPERATOR 분기 처리 시작")
                         
-                        // 1. 오디오 재생: "통신이 시작됩니다."
-                        ttsRepository.speakText("통신이 시작됩니다.")
-                        
-                        // 2. UI 업데이트: "통신 중..." 화면 표시
+                        // 1. UI 업데이트: "통신 중..." 화면 표시
                         updateIntentUI(IntentType.OPERATOR, "통신 중...")
+                        
+                        // 2. 로컬 음성 파일 재생: "통신 연결을 시작합니다."
+                        Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
+                        addLog("🔊 OPERATOR 음성 파일 재생: $OPERATOR_AUDIO_FILE")
+                        
+                        lifecycleScope.launch {
+                            mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
+                                // 재생 완료 콜백
+                                Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
+                                addLog("✅ OPERATOR 음성 파일 재생 완료")
+                                
+                                // FastAPI 서버로 재생 완료 이벤트 전송
+                                val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
+                                if (success) {
+                                    Log.i(TAG, "📤 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 완료")
+                                    addLog("📤 재생 완료 이벤트 전송 완료")
+                                } else {
+                                    Log.e(TAG, "❌ 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 실패")
+                                    addLog("❌ 재생 완료 이벤트 전송 실패")
+                                }
+                            }
+                        }
                         
                         // 3. Spring 서버 WebRTC API 연결 요청
                         // ACCESS_TOKEN이 만료되었을 수 있으므로 갱신 시도
@@ -470,6 +503,26 @@ class MainActivitySttServer : AppCompatActivity() {
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
                 addLog("📱 UI: CV 탐지 실패 메시지")
                 
+                // CV 탐지 실패 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
+                addLog("🔊 CV 탐지 실패 음성 파일 재생: $CV_DETECTION_FAILED_AUDIO_FILE")
+                
+                mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
+                    addLog("✅ CV 탐지 실패 음성 파일 재생 완료")
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 완료")
+                        addLog("📤 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패")
+                        addLog("❌ 재생 완료 이벤트 전송 실패")
+                    }
+                }
+                
                 // 라즈베리파이 제어는 FastAPI 서버에서 cv_detection_failed 이벤트와 함께 처리됨
                 // (라즈베리파이에 마이크 켜고 Streaming STT 세션 시작)
             } catch (e: Exception) {
@@ -510,7 +563,24 @@ class MainActivitySttServer : AppCompatActivity() {
                 // TTS 음성 파일 재생
                 if (qaTurn.audio_content != null && qaTurn.audio_content.isNotBlank()) {
                     addLog("🔊 TTS 재생 시작")
-                    ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding)
+                    ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding) {
+                        // 재생 완료 콜백
+                        Log.i(TAG, "✅ Clarify Q&A 턴 TTS 재생 완료")
+                        addLog("✅ Clarify Q&A 턴 TTS 재생 완료")
+                        
+                        // FastAPI 서버로 재생 완료 이벤트 전송
+                        val success = socketIoSttClient.sendClarifyQaTurnAudioCompleted(
+                            qaTurn.session_id ?: "",
+                            qaTurn.turn_id ?: 1
+                        )
+                        if (success) {
+                            Log.i(TAG, "📤 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송 완료")
+                            addLog("📤 재생 완료 이벤트 전송 완료")
+                        } else {
+                            Log.e(TAG, "❌ 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송 실패")
+                            addLog("❌ 재생 완료 이벤트 전송 실패")
+                        }
+                    }
                 }
                 
                 // need_clarify가 false면 최종 답변 대기 (final_answer 이벤트 수신 대기)
@@ -664,16 +734,25 @@ class MainActivitySttServer : AppCompatActivity() {
     private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
         Log.i(TAG, "✅ 최종 답변: $answer")
         
+        // UI에 답변 표시
+        runOnUiThread {
+            finalAnswerText.text = answer
+            updateStatus("최종 답변 수신 완료")
+        }
+        addLog("✅ 최종 답변: ${answer.take(100)}...")
+        
         // 오디오 재생
         if (audioContent != null && audioContent.isNotBlank()) {
             lifecycleScope.launch {
-                ttsRepository.playAudio(audioContent, mimeType)
+                ttsRepository.playAudio(audioContent, mimeType) {
+                    // 재생 완료 콜백 (최종 답변이므로 재생 완료 이벤트는 선택적)
+                    Log.i(TAG, "✅ 최종 답변 TTS 재생 완료")
+                    addLog("✅ 최종 답변 TTS 재생 완료")
+                }
             }
         } else {
             Log.w(TAG, "⚠️ 오디오 파일이 포함되지 않음")
         }
-        
-        // TODO: UI에 답변 표시
     }
     
     /**
