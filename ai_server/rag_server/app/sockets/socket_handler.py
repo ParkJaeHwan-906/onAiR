@@ -1560,9 +1560,9 @@ async def handle_start_communication(sid, data):
         return
 
     # === raspi로 "andle_audio_stream" 이벤트 전송 ===
-    await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
+    # await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
-# 웹에서 통신 요청 수락 이벤트 전달
+# 웹/모바일에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
 async def accept_communication(sid, data):
     """
