@@ -24,7 +24,7 @@ from app.services.tts_service import text_to_speech
 from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
-from app.services.cv.redis_util import save_frame_to_sliding_window, get_latest_frames, get_redis
+# Redis 의존성 제거됨 - 메모리 버퍼 사용
 from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
@@ -393,18 +393,28 @@ async def handle_intent_audio_completed(sid, data):
             print("🔍 [단계 9] CV 모델 실행 시작")
             print("=" * 60)
             
-            # Redis에서 최근 프레임들 가져오기 (최대 20프레임)
+            # CV 분석용 프레임 수집 시작
             print("=" * 60)
-            print("📸 [단계 9-1] Redis에서 최근 프레임 가져오기 시작")
+            print("📸 [단계 9-1] CV 분석용 프레임 수집 시작")
             print("=" * 60)
-            redis = await get_redis()
-            frames = await get_latest_frames(redis, limit=20)
-            print(f"✅ Redis에서 가져온 프레임 수: {len(frames)}장")
+            from app.services.cv.frame_collector import (
+                start_cv_collection,
+                collect_recent_frames,
+                stop_cv_collection,
+            )
+            # CV 수집 시작 (이후 들어오는 프레임들을 수집)
+            await start_cv_collection()
+            # 약간의 지연 후 수집 (프레임이 들어올 시간 확보)
+            await asyncio.sleep(0.1)
+            # 현재까지 수집된 프레임 + 기본 버퍼에서 최근 프레임 수집
+            frames = await collect_recent_frames(duration_seconds=1.0, max_frames=20, min_frames=3)
+            print(f"✅ 프레임 스트림에서 수집한 프레임 수: {len(frames)}장")
             
             if not frames:
                 print("=" * 60)
                 print("⚠️ [단계 9-1 완료] CV 분석할 프레임이 없습니다.")
                 print("=" * 60)
+                await stop_cv_collection()  # 수집 중지
                 cv_result = {
                     "detected": False,
                     "device_type": "unknown",
@@ -414,10 +424,10 @@ async def handle_intent_audio_completed(sid, data):
                 }
             else:
                 print("=" * 60)
-                print(f"✅ [단계 9-1 완료] Redis에서 {len(frames)}장의 프레임을 성공적으로 가져왔습니다.")
+                print(f"✅ [단계 9-1 완료] 프레임 스트림에서 {len(frames)}장의 프레임을 성공적으로 수집했습니다.")
                 print(f"   프레임 크기: {frames[0].shape if frames else 'N/A'}")
                 print("=" * 60)
-                await wait_for_next_step("Redis 프레임 가져오기 완료", "9-1")
+                await wait_for_next_step("프레임 스트림 수집 완료", "9-1")
                 
                 # CV 모델 실행
                 print("=" * 60)
@@ -449,6 +459,9 @@ async def handle_intent_audio_completed(sid, data):
                                 print(f"     - {module_name}: {module_status} ({module_msg})")
                 print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
+            
+            # CV 분석 완료 후 수집 중지
+            await stop_cv_collection()
             
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
@@ -608,6 +621,9 @@ async def handle_intent_audio_completed(sid, data):
             print(f"❌ CV 모델 실행 오류: {e}")
             import traceback
             traceback.print_exc()
+            # CV 수집 중지
+            from app.services.cv.frame_collector import stop_cv_collection
+            await stop_cv_collection()
             # CV 모델 오류 시에도 탐지 실패로 처리
             await broadcast_to("mobile", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
@@ -1464,7 +1480,6 @@ async def handle_video_frame(sid, data):
             frame = cv2.flip(frame, 1)
         except Exception as e:
             print(f"⚠️ Frame rotation error: {e}")
-
     # 회전 실패 시 원본 프레임으로 계속 진행
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
@@ -1478,12 +1493,12 @@ async def handle_video_frame(sid, data):
 
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
-    # --- ③ Redis sliding window 저장 ---
+    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
     try:
-        redis = await get_redis()
-        await save_frame_to_sliding_window(redis, frame, ttl=30)
+        from app.services.cv.frame_collector import add_frame
+        await add_frame(frame)
     except Exception as e:
-        print(f"⚠️ Redis 프레임 저장 오류: {e}")
+        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
     result = await motion_core.process_frame(frame, sid=sid)
