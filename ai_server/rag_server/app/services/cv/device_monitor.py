@@ -35,26 +35,65 @@ async def background_device_detector():
 
     # YOLO 모델 로드 (한 번만) - 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
     if _yolo_device_model is None:
+        print("🔍 [device_monitor] YOLO 모델 로딩 시작...")
         # 첫 번째 YOLO 컨텍스트를 사용하여 모델 로드
-        async with acquire_yolo_context() as ctx:
-            def _load_model():
-                global _yolo_device_model
-                try:
-                    model_path = "/app/models/device_best.pt"
-                    if not Path(model_path).exists():
-                        print(f"⚠️ [device_monitor] 모델 파일이 없습니다: {model_path}")
-                        _yolo_device_model = False
-                        return False
-                    else:
+        try:
+            async with acquire_yolo_context() as ctx:
+                def _load_model():
+                    global _yolo_device_model
+                    try:
+                        # Docker 컨테이너 내부 경로 시도
+                        model_path = "/app/models/device_best.pt"
+                        print(f"🔍 [device_monitor] 모델 경로 확인: {model_path}")
+                        print(f"🔍 [device_monitor] 파일 존재 여부: {Path(model_path).exists()}")
+                        
+                        # 현재 작업 디렉토리 확인
+                        import os
+                        print(f"🔍 [device_monitor] 현재 작업 디렉토리: {os.getcwd()}")
+                        print(f"🔍 [device_monitor] /app 디렉토리 존재: {Path('/app').exists()}")
+                        if Path('/app').exists():
+                            print(f"🔍 [device_monitor] /app 디렉토리 내용: {list(Path('/app').iterdir())}")
+                        if Path('/app/models').exists():
+                            print(f"🔍 [device_monitor] /app/models 디렉토리 내용: {list(Path('/app/models').iterdir())}")
+                        
+                        if not Path(model_path).exists():
+                            print(f"⚠️ [device_monitor] 모델 파일이 없습니다: {model_path}")
+                            # 상대 경로도 시도 (로컬 개발 환경용)
+                            alt_paths = [
+                                "app/models/device_best.pt",
+                                "./app/models/device_best.pt",
+                                "../app/models/device_best.pt",
+                                "/app/app/models/device_best.pt",  # Docker 내부에서 가능한 경로
+                            ]
+                            for alt_path in alt_paths:
+                                if Path(alt_path).exists():
+                                    print(f"✅ [device_monitor] 대체 경로에서 모델 발견: {alt_path}")
+                                    model_path = alt_path
+                                    break
+                            else:
+                                print(f"❌ [device_monitor] 모든 경로에서 모델 파일을 찾을 수 없습니다.")
+                                print(f"❌ [device_monitor] 모델 파일이 Docker 이미지에 포함되지 않았거나 볼륨 마운트가 필요합니다.")
+                                _yolo_device_model = False
+                                return False
+                        
+                        print(f"📦 [device_monitor] 모델 로딩 시도: {model_path}")
                         _yolo_device_model = load_yolo_model(model_path)
                         print("✅ [device_monitor] YOLO 장비 모델 로드 완료")
                         return True
-                except Exception as e:
-                    print(f"❌ [device_monitor] YOLO 모델 로드 실패: {e}")
-                    _yolo_device_model = False
-                    return False
-            
-            await ctx.run(_load_model)
+                    except Exception as e:
+                        import traceback
+                        print(f"❌ [device_monitor] YOLO 모델 로드 실패: {e}")
+                        print(f"❌ [device_monitor] 상세 에러:\n{traceback.format_exc()}")
+                        _yolo_device_model = False
+                        return False
+                
+                result = await ctx.run(_load_model)
+                print(f"🔍 [device_monitor] 모델 로딩 결과: {result}, 모델 상태: {_yolo_device_model}")
+        except Exception as e:
+            import traceback
+            print(f"❌ [device_monitor] YOLO 컨텍스트 획득 실패: {e}")
+            print(f"❌ [device_monitor] 상세 에러:\n{traceback.format_exc()}")
+            _yolo_device_model = False
 
     print("✅ [device_monitor] 장비 모니터링 시작됨 (주기: 2초)")
 
