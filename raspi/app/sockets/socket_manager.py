@@ -38,8 +38,7 @@ class CameraService:
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameRate": 13},
-            transform=Transform(rotation=270)  # 반시계 방향 회전
+            controls={"FrameRate": 13}
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
@@ -73,11 +72,14 @@ class CameraService:
 
 # ===== 오디오 제어 클래스 =====
 class AudioService:
-    def __init__(self, rate=16000, chunk=1024):
+    def __init__(self, rate=16000, chunk=1024, send_chunk=4):
         self.rate = rate
         self.chunk = chunk
+        self.send_chunk = send_chunk
         self.is_streaming = False
         self.stream = None  # 스트림 객체 저장용
+        self.buffer = np.zeros((chunk*send_chunk,), dtype=np.float32)
+        self.buffer_index = 0
     
     def start_streaming(self):
         if not self.is_streaming:
@@ -102,13 +104,21 @@ class AudioService:
 
     def stream_audio(self):
         def callback(indata, frames, time_info, status):
-            if self.is_streaming:
-                # float32 그대로 전송 (클라이언트에서 바로 사용 가능)
-                audio_bytes = indata.astype(np.float32).tobytes()
+            if not self.is_streaming: return
+
+            length = len(indata)
+            if self.buffer_index + length >= len(self.buffer):
+                # 버퍼 채워짐 → 서버로 전송
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:,0]
                 try:
-                    sio.emit("audio_frame", audio_bytes)
+                    sio.emit("audio_frame", self.buffer.tobytes())
                 except Exception as e:
                     print("⚠️ Audio emit error:", e)
+                self.buffer_index = 0
+            else:
+                # 아직 버퍼 채우기
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:,0]
+                self.buffer_index += length
 
         try:
             self.stream = sd.InputStream(
