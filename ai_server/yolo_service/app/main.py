@@ -23,8 +23,9 @@ class ModelInfo(Dict[str, Optional[object]]):
 
 app = FastAPI(title="YOLO Inference Service", version="0.1.0")
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-MODEL_DIR = BASE_DIR / "rag_server" / "app" / "models"
+# 모델 파일 경로: yolo_service/models/
+BASE_DIR = Path(__file__).resolve().parents[2]  # /app/ai_server/yolo_service/
+MODEL_DIR = BASE_DIR / "models"
 
 MODEL_PATHS = {
     "device": MODEL_DIR / "device_best.pt",

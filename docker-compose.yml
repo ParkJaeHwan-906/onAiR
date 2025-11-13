@@ -50,7 +50,15 @@ services:
       - "3000"
     networks:
       - onair-network # 커스텀 네트워크 사용
-
+  vision:
+    container_name: yolo
+    build:
+      context: .  # 프로젝트 루트를 빌드 컨텍스트로 사용 (Dockerfile에서 ai_server/yolo_service 경로 필요)
+      dockerfile: ./ai_server/yolo_service/Dockerfile
+    expose:
+      - "9000"
+    networks:
+      - onair-network # 커스텀 네트워크 사용
   ai_server:
     container_name: fastapi
     build: ./ai_server/rag_server
@@ -99,6 +107,8 @@ services:
       # 🐛 디버그 모드 ON: 아래 주석 해제, OFF: 주석 처리
       # - DEBUG_STEP_BY_STEP=true
       - DEBUG_STEP_BY_STEP=false
+      # YOLO
+      - YOLO_SERVICE_URL=http://vision:9000
 
 
 # 도커 네트워크 설정 

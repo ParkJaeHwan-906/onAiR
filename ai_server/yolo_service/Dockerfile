@@ -21,8 +21,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (retain package structure for shared modules)
-COPY ai_server /app/ai_server
+# Copy only yolo_service code and models (avoid copying entire ai_server)
+COPY ai_server/yolo_service /app/ai_server/yolo_service
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
