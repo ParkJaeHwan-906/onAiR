@@ -15,7 +15,6 @@ import os
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional
-from concurrent.futures import ThreadPoolExecutor
 from app.services.intent_service import classify_intent
 from app.services import memory
 from app.services.retrieve_service import hybrid_retrieve, rerank
@@ -54,9 +53,6 @@ clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, his
 
 # Intent 결과 저장 (CV 로직 실행 대기용)
 pending_intents: Dict[str, str] = {}  # { session_id 또는 임시 키: "AI_SUPPORTER" | "OPERATOR" }
-
-# 프레임 처리용 ThreadPoolExecutor (블로킹 작업 분리)
-_frame_processing_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="frame-processing")
 
 
 # ========================================
@@ -1450,35 +1446,6 @@ async def handle_clarify_response(sid, data):
         await sio.emit("error", {"msg": "응답 텍스트가 비어있습니다."}, to=sid)
 
 # ========================================
-# 프레임 처리 헬퍼 함수 (블로킹 작업 분리)
-# ========================================
-
-def _decode_frame_sync(frame_bytes: bytes) -> Optional[np.ndarray]:
-    """JPEG 디코딩 및 회전 (동기 함수)"""
-    try:
-        np_data = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        if frame is None:
-            return None
-        try:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        except Exception:
-            pass  # 회전 실패 시 원본 프레임 사용
-        return frame
-    except Exception:
-        return None
-
-
-def _encode_frame_sync(frame: np.ndarray) -> Optional[bytes]:
-    """JPEG 인코딩 (동기 함수)"""
-    try:
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        return jpeg_bytes.tobytes()
-    except Exception:
-        return None
-
-
-# ========================================
 # Raspberry Pi 비디오 프레임 처리
 # ========================================
 @sio.on("video_frame")
@@ -1501,12 +1468,6 @@ async def handle_video_frame(sid, data):
         print("⚠️ Empty frame data received")
         return
 
-    # --- ② JPEG → OpenCV 이미지 디코딩 (별도 스레드) ---
-    loop = asyncio.get_event_loop()
-    frame = await loop.run_in_executor(_frame_pr0ocessing_executor, _decode_frame_sync, frame_bytes)
-
-    if frame is None:
-        print("⚠️ Failed to decode frame bytes")
     # --- ② JPEG → OpenCV 이미지 디코딩 ---
     try:
         np_data = np.frombuffer(frame_bytes, np.uint8)
@@ -1514,14 +1475,22 @@ async def handle_video_frame(sid, data):
         if frame is None:
             print("⚠️ Failed to decode frame bytes")
             return
-        # try:
-        #     frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        # except Exception as e:
-        #     print(f"⚠️ Frame rotation error: {e}")
+        try:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        except Exception as e:
+            print(f"⚠️ Frame rotation error: {e}")
     # 회전 실패 시 원본 프레임으로 계속 진행
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
+
+    # timestamp (ms) → YYYYMMDD HH:MM:SS
+    # if timestamp:
+    #     ts_str = datetime.fromtimestamp(timestamp / 1000).strftime("%Y%m%d %H:%M:%S")
+    # else:
+    #     ts_str = datetime.now().strftime("%Y%m%d %H:%M:%S")
+
+    # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
     try:
@@ -1530,23 +1499,11 @@ async def handle_video_frame(sid, data):
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
-    # --- ④ 모션 추정 및 AR 업데이트 (별도 스레드에서 async 함수 실행) ---
-    # motion_core.process_frame은 async이지만 내부에서 많은 cv2 블로킹 작업을 수행
-    # 별도 스레드에서 실행하여 메인 이벤트 루프 블로킹 방지
-    def _run_motion_in_thread():
-        """별도 스레드에서 async 함수 실행"""
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        try:
-            return new_loop.run_until_complete(motion_core.process_frame(frame, sid=None))
-        finally:
-            new_loop.close()
-    
-    result = await loop.run_in_executor(_frame_processing_executor, _run_motion_in_thread)
+    # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
+    result = await motion_core.process_frame(frame, sid=sid)
     if result["status"] not in ("ok", "init"):
-        jpeg_bytes = await loop.run_in_executor(_frame_processing_executor, _encode_frame_sync, frame)
-        if jpeg_bytes:
-            await broadcast_to("pc", "video_frame", jpeg_bytes)
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1572,10 +1529,9 @@ async def handle_video_frame(sid, data):
         ar_markers[:] = updated_markers
         await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # --- ⑥ PC로 프레임 전송 (디버그 표시용, 별도 스레드) ---
-    jpeg_bytes = await loop.run_in_executor(_frame_processing_executor, _encode_frame_sync, frame)
-    if jpeg_bytes:
-        await broadcast_to("pc", "video_frame", jpeg_bytes)
+    # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
