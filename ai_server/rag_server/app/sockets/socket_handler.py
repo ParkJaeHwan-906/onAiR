@@ -1460,7 +1460,6 @@ async def handle_video_frame(sid, data):
         timestamp = data.get("timestamp")
         frame_bytes = data.get("frame")
     else:
-        # 예전 버전 호환: 바이너리만 온 경우
         timestamp = int(time.time() * 1000)
         frame_bytes = data
 
@@ -1475,62 +1474,65 @@ async def handle_video_frame(sid, data):
         if frame is None:
             print("⚠️ Failed to decode frame bytes")
             return
+
         try:
             frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            # frame = cv2.flip(frame, 1)
-        except Exception as e:
-            print(f"⚠️ Frame rotation error: {e}")
-    # 회전 실패 시 원본 프레임으로 계속 진행
+        except:
+            pass
+
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
 
-    # timestamp (ms) → YYYYMMDD HH:MM:SS
-    # if timestamp:
-    #     ts_str = datetime.fromtimestamp(timestamp / 1000).strftime("%Y%m%d %H:%M:%S")
-    # else:
-    #     ts_str = datetime.now().strftime("%Y%m%d %H:%M:%S")
-
-    # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
-
-    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
+    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
     try:
         from app.services.cv.frame_collector import add_frame
         await add_frame(frame)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
-    # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
-    result = await motion_core.process_frame(frame, sid=sid)
-    if result["status"] not in ("ok", "init"):
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-        return
+    # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
+    result = motion_core.process_frame(frame)
 
-    # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
+    # result 예:
+    # {
+    #   "tracked": int,
+    #   "inliers": int,
+    #   "ransac_ratio": float,
+    #   "size": size_acc,
+    #   "flow_mean": (dx,dy),
+    # }
+
+    # --- ⑤ AR 마커 업데이트 ---
     if ar_markers:
-        updated_markers = []
+        updated = []
         for m in ar_markers:
             info = m.get("info", {})
             u = float(info.get("x", 0.0))
             v = float(info.get("y", 0.0))
-            u_new, v_new, z_new = motion_core.update_marker_position(u, v)
+
+            # Optical Flow + Essential 기반 업데이트
+            u_new, v_new, z_size = motion_core.update_marker_position(u, v)
+
+            # 화면 상에서 크게/작게 보이는 사이즈 반영
             base_size = 30.0
-            scale_factor = 20.0
-            size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
-            updated_markers.append({
+            size_factor = 20.0
+            size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
+
+            updated.append({
                 "idx": m["idx"],
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
-                    "z": round(z_new, 3),
+                    "z": round(z_size, 4),
                     "size": round(size_px, 3),
                 }
             })
-        ar_markers[:] = updated_markers
+
+        ar_markers[:] = updated
         await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
+    # --- ⑥ PC로 프레임 전송 ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
@@ -1655,38 +1657,32 @@ ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": floa
 
 async def handle_ar_marker(sid, data):
     """
-    웹페이지에서 AR 마커 생성을 요청하면,
-    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)를 계산하고
-    상대 크기(size)를 추정해 저장 및 클라이언트로 전송합니다.
+    AR 마커 생성:
+    - x, y: Optical Flow 기반 화면 좌표
+    - size: Essential Matrix 기반 z-scale
     """
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
-        # print("⚠️ Unknown sender")
         return
 
-    marker_x = data.get("marker_x")
-    marker_y = data.get("marker_y")
+    u = float(data.get("marker_x"))
+    v = float(data.get("marker_y"))
 
-    # === 1️⃣ Optical Flow + Essential 기반 좌표/깊이 업데이트 ===
-    u_new, v_new, z_new = motion_core.update_marker_position(marker_x, marker_y)
+    # 현재 프레임의 위치를 기준점으로 한다.
+    # 이후 motion_core.process_frame()에서 Optical Flow로 자동 갱신됨
+    u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
 
-    # === 2️⃣ 크기 계산 (z 클수록 커짐)
-    base_size = 30.0
-    scale_factor = 10.0
-    size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
+    # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
+    size_px = motion_core.compute_marker_size(z_scale)
 
-    # === 3️⃣ 마커 저장 ===
-    marker_info = {
+    marker = {
         "idx": len(ar_markers) + 1,
         "info": {
             "x": u_new,
             "y": v_new,
-            "z": z_new,
-            "size": round(size_px, 2),
+            "size": size_px
         }
     }
-    ar_markers.append(marker_info)
+    ar_markers.append(marker)
 
-    # === 4️⃣ 로그 및 전송 ===
-    # print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
     await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
