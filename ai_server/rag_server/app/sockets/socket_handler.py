@@ -1762,4 +1762,5 @@ async def handle_ar_marker(sid, data):
     }
     ar_markers.append(marker)
 
-    await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
+    # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
+    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
