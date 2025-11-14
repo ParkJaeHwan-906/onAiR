@@ -1542,8 +1542,8 @@ async def handle_video_frame(sid, data):
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    # _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    # await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
     # if result["status"] not in ("ok", "init"):
     #     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     #     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
@@ -1574,9 +1574,12 @@ async def handle_video_frame(sid, data):
         # ar_markers[:] = updated
         # await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # --- ⑥ PC로 프레임 전송 ---
+    # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    await broadcast_to("pc", "video_frame", {
+        "timestamp": timestamp,
+        "frame": jpeg_bytes.tobytes()
+    })
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
