@@ -88,11 +88,11 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   useEffect(() => {
     if (!socket) return;
 
-    const handleVideoFrame = (data: ArrayBuffer) => {
+    const handleVideoFrame = (data: { timestamp: number; frame: ArrayBuffer }) => {
       // 2. 리렌더링 없이 DOM 조작으로 이미지 교체
       if (imgRef.current) {
         // ArrayBuffer를 Blob으로 변환
-        const blob = new Blob([data], { type: "image/jpeg" });
+        const blob = new Blob([data.frame], { type: "image/jpeg" });
         // 이전 Blob URL 정리 (메모리 누수 방지)
         if (imgRef.current.src.startsWith("blob:")) {
           URL.revokeObjectURL(imgRef.current.src);

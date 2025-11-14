@@ -1573,9 +1573,12 @@ async def handle_video_frame(sid, data):
         ar_markers[:] = updated
         await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # --- ⑥ PC로 프레임 전송 ---
+    # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    await broadcast_to("pc", "video_frame", {
+        "timestamp": timestamp,
+        "frame": jpeg_bytes.tobytes()
+    })
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
