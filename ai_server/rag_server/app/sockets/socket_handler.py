@@ -1542,17 +1542,15 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
-    # result = motion_core.process_frame(frame)
-    # result 예:
-    # {
-    #   "tracked": int,
-    #   "inliers": int,
-    #   "ransac_ratio": float,
-    #   "size": size_acc,
-    #   "flow_mean": (dx,dy),
-    # }
+    result = motion_core.process_frame(frame)
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    # if result["status"] not in ("ok", "init"):
+    #     _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    #     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    #     return
 
-    # --- ⑤ AR 마커 업데이트 ---
+    # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
     # if ar_markers:
     #     updated = []
     #     for m in ar_markers:
