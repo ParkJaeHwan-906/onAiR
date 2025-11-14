@@ -158,6 +158,7 @@ def init_socketio():
     sio.on("video_frame")(handle_video_frame)
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
+    sio.on("delete-marker")(delete_marker)
     
     # # CV device_monitor 백그라운드 태스크 시작
     # try:
@@ -1796,4 +1797,29 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
+    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+
+async def delete_marker(sid, data):
+    """
+    전달받은 idx에 해당하는 AR 마커 삭제
+    """
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown":
+        return
+
+    target_idx = data.get("idx")
+    if target_idx is None:
+        print("⚠️ delete_marker: idx 값이 없습니다.")
+        return
+
+    global ar_markers
+    # 기존 리스트에서 target_idx가 아닌 것만 남긴다
+    ar_markers = [m for m in ar_markers if m.get("idx") != target_idx]
+
+
+    # 삭제 이후 남아있는 모든 마커 idx를 다시 1부터 정렬할 필요가 있다면:
+    for i, marker in enumerate(ar_markers, start=1):
+        marker["idx"] = i
+    
+    # 전송을 하긴 하는데, 없어도 될듯?
     await broadcast_to("pc", "ar-info", {"markers": ar_markers})
