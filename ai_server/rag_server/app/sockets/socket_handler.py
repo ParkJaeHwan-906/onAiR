@@ -25,7 +25,7 @@ from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
-# from app.services.cv.device_monitor import background_device_detector
+from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -162,7 +162,7 @@ def init_socketio():
     # CV device_monitor 백그라운드 태스크 시작
     try:
         asyncio.create_task(background_device_detector())
-        # print("✅ CV device_monitor 백그라운드 태스크 시작됨")
+        print("✅ CV device_monitor 백그라운드 태스크 시작됨")
     except Exception as e:
         print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
     
@@ -639,16 +639,11 @@ async def handle_intent_audio_completed(sid, data):
                 "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
             })
     elif intent == "OPERATOR":
-        # OPERATOR인 경우 WebRTC 오디오 스트리밍 목적으로 음성 수집 시작
+        # OPERATOR인 경우 별도 처리 없음 (모바일에서 WebRTC 연결 요청 처리)
         print("=" * 60)
         print(f"✅ [단계 8-1 완료] OPERATOR Intent 음성 파일 재생 완료 확인")
-        print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
-        print("=" * 60)
-        
-        # 라즈베리파이 별도 프로세스로 handle_audio_stream 이벤트 전송
-        # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
-        await broadcast_to("raspi", "handle_audio_stream", {"start": True})
-        print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료: WebRTC 오디오 스트리밍 시작")
+        print("   OPERATOR는 CV 로직을 실행하지 않습니다.")
+        print("   모바일에서 WebRTC 연결 요청을 처리합니다.")
         print("=" * 60)
     else:
         print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
@@ -1325,14 +1320,20 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
             print(f"   최종 답변 생성 완료 [session={session_id}]")
-            print("   모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
-            # 주의: 문서에 따르면 final_answer 전송 후 service_completed를 보내지 않고,
-            # audio_playback_completed (type: "final_answer") 수신 후에만
-            # mic_on과 wakeword_start_waiting을 전송합니다.
-            # 이는 handle_audio_playback_completed에서 처리됩니다.
+            # 서비스 완료: 라즈베리파이로 서비스 종료 이벤트 전송 (wakeword 재활성화 신호)
+            print("=" * 60)
+            print(f"📤 [단계 13-11] 라즈베리파이로 서비스 완료 이벤트 전송 시작")
+            print("=" * 60)
+            await broadcast_to("raspi", "service_completed", {
+                "session_id": session_id,
+                "status": "completed"
+            })
+            print("=" * 60)
+            print(f"✅ [단계 13-11 완료] 라즈베리파이로 서비스 완료 이벤트 전송 완료")
+            print("=" * 60)
             
     except Exception as e:
         print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
@@ -1533,48 +1534,45 @@ async def handle_video_frame(sid, data):
 
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
-    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
-    # try:
-    #     from app.services.cv.frame_collector import add_frame
-    #     await add_frame(frame)
-    # except Exception as e:
-    #     print(f"⚠️ 프레임 스트림 추가 오류: {e}")
+    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
+    try:
+        from app.services.cv.frame_collector import add_frame
+        await add_frame(frame)
+    except Exception as e:
+        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-    # if result["status"] not in ("ok", "init"):
-    #     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    #     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-    #     return
+
+    if result["status"] not in ("ok", "init"):
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
     # if ar_markers:
-    #     updated = []
+    #     updated_markers = []
     #     for m in ar_markers:
     #         info = m.get("info", {})
     #         u = float(info.get("x", 0.0))
     #         v = float(info.get("y", 0.0))
-    #         # Optical Flow + Essential 기반 업데이트
-    #         u_new, v_new, z_size = motion_core.update_marker_position(u, v)
-    #         # 화면 상에서 크게/작게 보이는 사이즈 반영
+    #         u_new, v_new, z_new = motion_core.update_marker_position(u, v)
     #         base_size = 30.0
-    #         size_factor = 20.0
-    #         size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
-    #         updated.append({
+    #         scale_factor = 20.0
+    #         size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
+    #         updated_markers.append({
     #             "idx": m["idx"],
     #             "info": {
     #                 "x": round(u_new, 2),
     #                 "y": round(v_new, 2),
-    #                 "z": round(z_size, 4),
+    #                 "z": round(z_new, 3),
     #                 "size": round(size_px, 3),
     #             }
     #         })
-        # ar_markers[:] = updated
-        # await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    #     ar_markers[:] = updated_markers
+    #     await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
-    # --- ⑥ PC로 프레임 전송 ---
+    # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
 
@@ -1591,6 +1589,20 @@ async def handle_audio_frame(sid, data):
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
     # print("[DEBUG] 오디오 프레임 수신됨")
     await broadcast_to("pc", "audio_frame", data)
+
+# 모바일에서 '통신 요청중입니다' 음성 종료 이벤트 전달
+@sio.on("intent_audio_completed") 
+async def handle_start_communication(sid, data):
+    """
+    오퍼레이터 통신 시작 이벤트
+    """
+    # print("[DEBUG] intent_audio_completed 이벤트 발생")
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown":
+        return
+
+    # === raspi로 "andle_audio_stream" 이벤트 전송 ===
+    await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
@@ -1650,25 +1662,13 @@ async def communication_close(sid, data):
     if sender_device == "unknown":
         return
 
-    print("=" * 60)
-    print("📞 통신 종료: WebRTC 오디오 스트리밍 중지 및 STT 목적 음성 수집 재개")
-    print("=" * 60)
-    
-    # WebRTC 오디오 스트리밍 목적 음성 수집 중지
     print("[DEBUG] handle_audio_stream (start:False) emit")
-    await broadcast_to("raspi", "handle_audio_stream", {"start": False})
+    # === raspi로 "handle_audio_stream" 이벤트 전송 ===
+    await broadcast_to("raspi", "handle_audio_stream", {"start" : False})
     
-    # STT 목적 음성 수집 재개
-    # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
-    print("[DEBUG] mic_on 이벤트 emit")
-    await broadcast_to("raspi", "mic_on", {})
-    
-    # Wakeword 감지 대기 시작
+    # === 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송 ===
     print("[DEBUG] wakeword_start_waiting 이벤트 emit")
     await broadcast_to("raspi", "wakeword_start_waiting", {})
-    
-    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작")
-    print("=" * 60)
 
 
 # ========================================
@@ -1733,29 +1733,38 @@ ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": floa
 
 async def handle_ar_marker(sid, data):
     """
-    AR 마커 생성:
-    - x, y: Optical Flow 기반 화면 좌표
-    - size: Essential Matrix 기반 z-scale
+    웹페이지에서 AR 마커 생성을 요청하면,
+    클릭된 (x, y) 좌표를 기반으로 월드좌표(x, y, z)를 계산하고
+    상대 크기(size)를 추정해 저장 및 클라이언트로 전송합니다.
     """
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
+        # print("⚠️ Unknown sender")
         return
 
-    u = float(data.get("marker_x"))
-    v = float(data.get("marker_y"))
-    # 현재 프레임의 위치를 기준점으로 한다.
-    # 이후 motion_core.process_frame()에서 Optical Flow로 자동 갱신됨
-    u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
-    # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
-    size_px = motion_core.compute_marker_size(z_scale)
-    marker = {
+    marker_x = data.get("marker_x")
+    marker_y = data.get("marker_y")
+
+    # === 1️⃣ Optical Flow + Essential 기반 좌표/깊이 업데이트 ===
+    u_new, v_new, z_new = motion_core.update_marker_position(marker_x, marker_y)
+
+    # === 2️⃣ 크기 계산 (z 클수록 커짐)
+    base_size = 30.0
+    scale_factor = 10.0
+    size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
+
+    # === 3️⃣ 마커 저장 ===
+    marker_info = {
         "idx": len(ar_markers) + 1,
         "info": {
             "x": u_new,
             "y": v_new,
-            "size": size_px
+            "z": z_new,
+            "size": round(size_px, 2),
         }
     }
-    ar_markers.append(marker)
-    # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    ar_markers.append(marker_info)
+
+    # === 4️⃣ 로그 및 전송 ===
+    # print(f"📍 Marker idx={marker_info['idx']} | pos=({u_new:.1f},{v_new:.1f}) | z={z_new:.3f} | size={size_px:.1f}")
+    await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
