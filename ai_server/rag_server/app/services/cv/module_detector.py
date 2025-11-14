@@ -1,48 +1,122 @@
 """
-모듈 탐지 서비스 (YOLO 서비스 연동)
-- 최근 프레임(보통 1~3장)을 YOLO 전용 서비스로 전달하여 fan, belt, gauge 등 모듈 감지
+모듈 탐지 서비스
+- 최근 프레임(보통 1~3장)을 받아 YOLO로 fan, belt, gauge 등 모듈 감지
 - 가장 확신(confidence)이 높은 결과만 추출
 """
 
-from typing import List
-
-import numpy as np
 from loguru import logger
+import numpy as np
+import os
+from pathlib import Path
+from ultralytics import YOLO
 
-from app.services.cv.yolo_client import YOLOServiceError, infer_module
+from app.services.cv.yolo_executor import YOLOContext, acquire_yolo_context
+
+# YOLO 모델 캐시
+_yolo_module_model = None
+
+
+def get_module_model():
+    """YOLO 모듈 탐지 모델 (lazy load, 단일 인스턴스)"""
+    global _yolo_module_model
+    if _yolo_module_model is None:
+        try:
+            model_path = "/app/models/module_best.pt"
+            if not Path(model_path).exists():
+                logger.warning(f"⚠️ [module_detector] 모델 파일이 없습니다: {model_path}")
+                _yolo_module_model = False
+            else:
+                _yolo_module_model = YOLO(model_path)
+                _yolo_module_model.fuse()
+                logger.info("✅ [module_detector] YOLO 모듈 모델 로드 완료")
+        except Exception as e:
+            logger.error(f"❌ [module_detector] YOLO 모델 로드 실패: {e}")
+            _yolo_module_model = False
+    return _yolo_module_model
 
 
 async def detect_modules_from_recent_frames(
-    frames: List[np.ndarray],
+    frames: list[np.ndarray],
+    yolo_ctx: YOLOContext | None = None,
 ):
     """
     최근 프레임에서 모듈(fan, belt, gauge 등) 탐지
     Args:
         frames: 최근 프레임 리스트
+        yolo_ctx: 단일 YOLO 스레드 컨텍스트 (없으면 내부에서 생성)
     Returns:
         detections: [{"label": str, "confidence": float}]
     """
     if not frames:
         return []
 
-    try:
-        response = await infer_module(frames)
-    except YOLOServiceError as err:
-        logger.warning(
-            "[module_detector] YOLO 서비스 오류(code=%s, message=%s)",
-            err.code,
-            err.message,
-        )
-        return []
+    if yolo_ctx is None:
+        async with acquire_yolo_context() as ctx:
+            # 모델 로드도 별도 스레드에서 실행
+            model = await _get_module_model_async(ctx)
+            if not model:
+                logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
+                return []
+            return await _detect_with_context(ctx, model, frames)
+    else:
+        # 모델 로드도 별도 스레드에서 실행
+        model = await _get_module_model_async(yolo_ctx)
+        if not model:
+            logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
+            return []
+        return await _detect_with_context(yolo_ctx, model, frames)
 
-    raw_frames = response.get("frames", [])
-    top_detections = response.get("top_detections", [])
 
-    if top_detections:
-        return _filter_top_detections(top_detections)
+async def _get_module_model_async(ctx: YOLOContext):
+    """모델 로드를 별도 스레드에서 실행"""
+    global _yolo_module_model
+    if _yolo_module_model is not None and _yolo_module_model is not False:
+        return _yolo_module_model
+    
+    def _load_model():
+        global _yolo_module_model
+        try:
+            model_path = "/app/models/module_best.pt"
+            if not Path(model_path).exists():
+                logger.warning(f"⚠️ [module_detector] 모델 파일이 없습니다: {model_path}")
+                _yolo_module_model = False
+                return False
+            else:
+                _yolo_module_model = YOLO(model_path)
+                _yolo_module_model.fuse()
+                logger.info("✅ [module_detector] YOLO 모듈 모델 로드 완료")
+                return True
+        except Exception as e:
+            logger.error(f"❌ [module_detector] YOLO 모델 로드 실패: {e}")
+            _yolo_module_model = False
+            return False
+    
+    success = await ctx.run(_load_model)
+    return _yolo_module_model if success else None
 
-    flattened = [det for frame_dets in raw_frames for det in frame_dets]
-    return _filter_top_detections(flattened)
+
+async def _detect_with_context(
+    ctx: YOLOContext,
+    model,
+    frames: list[np.ndarray],
+):
+    """YOLO 모델로 프레임에서 모듈 탐지"""
+    detections = []
+    
+    def _infer():
+        nonlocal detections
+        for frame in frames:
+            results = model.predict(frame, imgsz=640, conf=0.35, verbose=False)
+            for res in results:
+                for box in res.boxes:
+                    label = model.names[int(box.cls)]
+                    conf = float(box.conf)
+                    detections.append({"label": label, "confidence": conf})
+    
+    await ctx.run(_infer)
+    
+    # 중복 제거 및 최고 신뢰도 선택
+    return _filter_top_detections(detections)
 
 
 def _filter_top_detections(detections, min_conf=0.4):
@@ -54,10 +128,10 @@ def _filter_top_detections(detections, min_conf=0.4):
 
     result = {}
     for det in detections:
-        label = det.get("label")
-        conf = float(det.get("confidence", 0.0))
-        if not label or conf < min_conf:
+        label = det["label"]
+        conf = det["confidence"]
+        if conf < min_conf:
             continue
         if label not in result or conf > result[label]["confidence"]:
-            result[label] = {"label": label, "confidence": conf}
+            result[label] = det
     return list(result.values())
