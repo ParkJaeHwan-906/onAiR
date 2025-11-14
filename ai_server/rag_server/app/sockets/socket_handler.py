@@ -25,7 +25,7 @@ from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
-# from app.services.cv.device_monitor import background_device_detector
+from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -1542,36 +1542,37 @@ async def handle_video_frame(sid, data):
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    
-    if result["status"] not in ("ok", "init"):
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-        return
+    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    # if result["status"] not in ("ok", "init"):
+    #     _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    #     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+    #     return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
-    if ar_markers:
-        updated = []
-        for m in ar_markers:
-            info = m.get("info", {})
-            u = float(info.get("x", 0.0))
-            v = float(info.get("y", 0.0))
-            # Optical Flow + Essential 기반 업데이트
-            u_new, v_new, z_size = motion_core.update_marker_position(u, v)
-            # 화면 상에서 크게/작게 보이는 사이즈 반영
-            base_size = 15.0
-            size_factor = 20.0
-            size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
-            updated.append({
-                "idx": m["idx"],
-                "info": {
-                    "x": round(u_new, 2),
-                    "y": round(v_new, 2),
-                    "z": round(z_size, 4),
-                    "size": round(size_px, 3),
-                }
-            })
-        ar_markers[:] = updated
-        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    # if ar_markers:
+    #     updated = []
+    #     for m in ar_markers:
+    #         info = m.get("info", {})
+    #         u = float(info.get("x", 0.0))
+    #         v = float(info.get("y", 0.0))
+    #         # Optical Flow + Essential 기반 업데이트
+    #         u_new, v_new, z_size = motion_core.update_marker_position(u, v)
+    #         # 화면 상에서 크게/작게 보이는 사이즈 반영
+    #         base_size = 30.0
+    #         size_factor = 20.0
+    #         size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
+    #         updated.append({
+    #             "idx": m["idx"],
+    #             "info": {
+    #                 "x": round(u_new, 2),
+    #                 "y": round(v_new, 2),
+    #                 "z": round(z_size, 4),
+    #                 "size": round(size_px, 3),
+    #             }
+    #         })
+        # ar_markers[:] = updated
+        # await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -1590,6 +1591,20 @@ async def handle_audio_frame(sid, data):
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
     # print("[DEBUG] 오디오 프레임 수신됨")
     await broadcast_to("pc", "audio_frame", data)
+
+# 모바일에서 '통신 요청중입니다' 음성 종료 이벤트 전달
+@sio.on("intent_audio_completed") 
+async def handle_start_communication(sid, data):
+    """
+    오퍼레이터 통신 시작 이벤트
+    """
+    # print("[DEBUG] intent_audio_completed 이벤트 발생")
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown":
+        return
+
+    # === raspi로 "andle_audio_stream" 이벤트 전송 ===
+    # await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
