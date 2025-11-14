@@ -127,7 +127,7 @@ def update_marker_position(u, v):
 
     size = float(size_acc)
 
-    print(f"[MARKER] prev=({u:.1f}, {v:.1f}), flow=({dx:.3f},{dy:.3f}) → new=({u_new:.1f}, {v_new:.1f}), size={size:.3f}")
+    # print(f"[MARKER] prev=({u:.1f}, {v:.1f}), flow=({dx:.3f},{dy:.3f}) → new=({u_new:.1f}, {v_new:.1f}), size={size:.3f}")
 
     return u_new, v_new, size
 
