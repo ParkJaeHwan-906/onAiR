@@ -28,11 +28,7 @@ async def detect_modules_from_recent_frames(
     try:
         response = await infer_module(frames)
     except YOLOServiceError as err:
-        logger.warning(
-            "[module_detector] YOLO 서비스 오류(code=%s, message=%s)",
-            err.code,
-            err.message,
-        )
+        logger.warning(f"[module_detector] YOLO 서비스 오류(code={err.code}, message={err.message})")
         return []
 
     raw_frames = response.get("frames", [])
