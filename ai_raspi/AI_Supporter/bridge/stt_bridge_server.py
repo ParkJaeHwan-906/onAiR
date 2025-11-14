@@ -127,6 +127,8 @@ def handle_wakeword_audio_completed(sid, data):
 wakeword_start_waiting_callback = None
 mic_off_callback = None
 mic_on_callback = None
+mic_release_callback = None  # 마이크 장치 해제 콜백 (WebRTC 프로세스가 마이크를 사용할 수 있도록)
+mic_acquire_callback = None  # 마이크 장치 재점유 콜백 (WebRTC 프로세스가 마이크를 해제한 후)
 
 def set_wakeword_start_waiting_callback(callback):
     """Wakeword 감지 대기 시작 콜백 등록"""
@@ -145,6 +147,18 @@ def set_mic_on_callback(callback):
     global mic_on_callback
     mic_on_callback = callback
     logger.info("✅ STT 목적 음성 수집 재개 콜백이 등록되었습니다")
+
+def set_mic_release_callback(callback):
+    """마이크 장치 해제 콜백 등록 (WebRTC 프로세스가 마이크를 사용할 수 있도록)"""
+    global mic_release_callback
+    mic_release_callback = callback
+    logger.info("✅ 마이크 장치 해제 콜백이 등록되었습니다")
+
+def set_mic_acquire_callback(callback):
+    """마이크 장치 재점유 콜백 등록 (WebRTC 프로세스가 마이크를 해제한 후)"""
+    global mic_acquire_callback
+    mic_acquire_callback = callback
+    logger.info("✅ 마이크 장치 재점유 콜백이 등록되었습니다")
 
 @sio.on('wakeword_start_waiting')
 def handle_wakeword_start_waiting(sid, data):
@@ -211,6 +225,51 @@ def handle_mic_on(sid, data):
         logger.warning("=" * 60)
         logger.warning("⚠️ 마이크 ON 콜백이 등록되지 않았습니다")
         logger.warning("=" * 60)
+
+@sio.on('handle_audio_stream')
+def handle_audio_stream(sid, data):
+    """WebRTC 오디오 스트리밍 시작/중지 이벤트 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: WebRTC 오디오 스트리밍 제어 이벤트 수신")
+    logger.info(f"   데이터: {data}")
+    logger.info("=" * 60)
+    
+    if data and data.get("start", False):
+        # WebRTC 오디오 스트리밍 시작: 마이크 장치 해제
+        logger.info("🎙️ WebRTC 오디오 스트리밍 시작 신호 수신")
+        logger.info("   Python 3.10 프로세스가 마이크 장치를 해제합니다.")
+        if mic_release_callback:
+            try:
+                mic_release_callback()
+                logger.info("=" * 60)
+                logger.info(f"✅ 브리지 서버: 마이크 장치 해제 완료 (WebRTC 프로세스가 사용할 수 있음)")
+                logger.info("=" * 60)
+            except Exception as e:
+                logger.error("=" * 60)
+                logger.error(f"❌ 브리지 서버: 마이크 장치 해제 실패: {e}")
+                logger.error("=" * 60)
+        else:
+            logger.warning("=" * 60)
+            logger.warning("⚠️ 마이크 장치 해제 콜백이 등록되지 않았습니다")
+            logger.warning("=" * 60)
+    else:
+        # WebRTC 오디오 스트리밍 중지: 마이크 장치 재점유
+        logger.info("🛑 WebRTC 오디오 스트리밍 중지 신호 수신")
+        logger.info("   Python 3.10 프로세스가 마이크 장치를 재점유합니다.")
+        if mic_acquire_callback:
+            try:
+                mic_acquire_callback()
+                logger.info("=" * 60)
+                logger.info(f"✅ 브리지 서버: 마이크 장치 재점유 완료")
+                logger.info("=" * 60)
+            except Exception as e:
+                logger.error("=" * 60)
+                logger.error(f"❌ 브리지 서버: 마이크 장치 재점유 실패: {e}")
+                logger.error("=" * 60)
+        else:
+            logger.warning("=" * 60)
+            logger.warning("⚠️ 마이크 장치 재점유 콜백이 등록되지 않았습니다")
+            logger.warning("=" * 60)
 
 # Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
 def send_wakeword_detected():

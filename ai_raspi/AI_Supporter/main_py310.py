@@ -10,6 +10,8 @@ import asyncio
 import logging
 import os
 import time
+import subprocess
+import fcntl
 from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.gcp_stt_stream import GcpStreamingStt
@@ -18,7 +20,8 @@ from bridge.stt_bridge_server import (
     run_server, send_stt_result, set_start_streaming_stt_callback, 
     set_service_completed_callback, send_wakeword_detected, 
     set_wakeword_audio_completed_callback,
-    set_wakeword_start_waiting_callback, set_mic_off_callback, set_mic_on_callback
+    set_wakeword_start_waiting_callback, set_mic_off_callback, set_mic_on_callback,
+    set_mic_release_callback, set_mic_acquire_callback
 )
 from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
@@ -104,8 +107,50 @@ def run_stt_loop():
     logger.info("   Python 3.13에서 브리지 클라이언트가 연결할 수 있습니다.")
     
     # 브리지 서버가 시작될 때까지 잠시 대기
-    import time
     time.sleep(1)
+    
+    # WebRTC 프로세스 확인 및 오디오 스트리밍 상태 확인
+    logger.info("🔍 WebRTC 프로세스 및 오디오 스트리밍 상태 확인 중...")
+    
+    # WebRTC 프로세스(socket_manager.py) 실행 중인지 확인
+    # 주의: WebRTC 프로세스는 OPERATOR Intent나 통신 요청 시에만 오디오 스트리밍을 시작함
+    # 평소에는 실행 중이어도 마이크를 점유하지 않아야 함
+    webrtc_pids = []
+    try:
+        result = subprocess.run(['pgrep', '-f', 'socket_manager.py'], capture_output=True, text=True)
+        if result.returncode == 0:
+            pids = result.stdout.strip().split('\n')
+            webrtc_pids = [pid for pid in pids if pid]
+            if webrtc_pids:
+                logger.info(f"ℹ️ WebRTC 프로세스(socket_manager.py)가 실행 중입니다 (PID: {', '.join(webrtc_pids)})")
+                logger.info("   평소에는 마이크를 점유하지 않아야 합니다.")
+                
+                # WebRTC 프로세스가 마이크를 점유하고 있는지 확인
+                # lsof를 사용하여 /dev/snd 디바이스를 사용 중인 프로세스 확인
+                try:
+                    lsof_result = subprocess.run(['lsof', '/dev/snd/*'], capture_output=True, text=True, timeout=2)
+                    if lsof_result.returncode == 0 and lsof_result.stdout:
+                        # WebRTC 프로세스 PID가 lsof 결과에 있는지 확인
+                        for pid in webrtc_pids:
+                            if pid in lsof_result.stdout:
+                                logger.warning("=" * 60)
+                                logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 마이크를 점유하고 있습니다!")
+                                logger.warning("   FastAPI 서버에서 'handle_audio_stream' (start: False) 이벤트를 전송하여")
+                                logger.warning("   WebRTC 오디오 스트리밍을 중지해야 합니다.")
+                                logger.warning("=" * 60)
+                                logger.warning("   임시 해결 방법: WebRTC 프로세스 재시작")
+                                logger.warning(f"   $ pkill -f socket_manager.py")
+                                logger.warning("=" * 60)
+                except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+                    logger.debug(f"lsof 확인 실패 (무시 가능): {e}")
+                
+                time.sleep(0.5)  # 잠시 대기
+    except Exception as e:
+        logger.warning(f"⚠️ WebRTC 프로세스 확인 실패: {e}")
+    
+    # 주의: 마이크 점유 확인은 MicStream.start()에서 직접 수행됩니다.
+    # MicStream.start()는 자동으로 장치를 선택하고 마이크를 열며,
+    # WebRTC 프로세스가 마이크를 점유하고 있으면 적절한 오류 메시지를 출력합니다.
     
     # 마이크 초기화 및 시작 (항상 켜져있음)
     mic = MicStream()
@@ -118,8 +163,21 @@ def run_stt_loop():
         mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
         logger.info("✅ Wakeword 감지기가 MicStream에 연결되었습니다")
     
-    mic.start()  # 스트림 생성 및 시작 (마이크 ON)
-    logger.info("🔊 마이크 ON (항상 활성 상태)")
+    # 마이크 시작 (마이크 점유 확인 및 오류 처리 포함)
+    # 주의: WebRTC 프로세스는 평소에 마이크를 점유하지 않으므로,
+    # 마이크를 열 때 문제가 발생하면 MicStream.start()에서 적절한 오류 메시지가 출력됩니다.
+    try:
+        mic.start()  # 스트림 생성 및 시작 (마이크 ON)
+        logger.info("🔊 마이크 ON (항상 활성 상태)")
+    except Exception as e:
+        logger.error("❌ 마이크 시작 실패")
+        logger.error("   해결 방법:")
+        logger.error("   1. WebRTC 오디오 스트리밍이 실행 중인지 확인:")
+        logger.error("      FastAPI 서버에서 'handle_audio_stream' (start: False) 이벤트 전송")
+        logger.error("   2. 다른 프로세스가 마이크를 사용 중인지 확인: $ lsof | grep -i audio")
+        logger.error("   3. ALSA 레벨에서 마이크 확인: $ arecord -l")
+        logger.error("   4. WebRTC 프로세스 중지 (최후의 수단): $ pkill -f socket_manager.py")
+        raise RuntimeError("마이크를 사용할 수 없습니다. WebRTC 오디오 스트리밍이나 다른 프로세스가 마이크를 점유하고 있을 수 있습니다.") from e
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
@@ -249,6 +307,31 @@ def run_stt_loop():
             logger.info("ℹ️ STT 목적 음성 수집이 이미 활성화되어 있습니다")
     
     set_mic_on_callback(handle_mic_on)
+    
+    # 마이크 장치 해제 콜백 등록 (WebRTC 프로세스가 마이크를 사용할 수 있도록)
+    def handle_mic_release():
+        """마이크 장치 해제 처리 (WebRTC 프로세스가 마이크를 사용할 수 있도록)"""
+        logger.info("=" * 60)
+        logger.info("🔇 마이크 장치 해제 (WebRTC 프로세스가 사용할 수 있음)")
+        logger.info("   주의: 마이크는 하나이며, WebRTC 프로세스가 마이크를 점유합니다.")
+        logger.info("=" * 60)
+        mic.release()  # 마이크 스트림을 완전히 닫아서 장치를 해제
+    
+    set_mic_release_callback(handle_mic_release)
+    
+    # 마이크 장치 재점유 콜백 등록 (WebRTC 프로세스가 마이크를 해제한 후)
+    def handle_mic_acquire():
+        """마이크 장치 재점유 처리 (WebRTC 프로세스가 마이크를 해제한 후)"""
+        logger.info("=" * 60)
+        logger.info("🔊 마이크 장치 재점유 (WebRTC 프로세스가 마이크를 해제한 후)")
+        logger.info("   주의: 마이크는 하나이며, Python 3.10 프로세스가 마이크를 점유합니다.")
+        logger.info("=" * 60)
+        mic.acquire()  # 마이크 스트림을 다시 시작해서 장치를 재점유
+        # 재점유 후 논리적으로도 ON 상태로 설정
+        if mic.is_paused:
+            mic.resume()
+    
+    set_mic_acquire_callback(handle_mic_acquire)
     
     logger.info("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
     logger.info("📌 Python 3.10에서 실행 중 (wakeword + STT)")

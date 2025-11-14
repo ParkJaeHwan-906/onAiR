@@ -18,10 +18,25 @@ class AudioProcessor extends AudioWorkletProcessor {
     this.adjustRate = 0.0001;         // 보정 속도 (너무 크면 끊김)
 
     this.port.onmessage = (event) => {
-      if (event.data?.type === "audio_frame") {
+      if (!event.data) return;
+    
+      if (event.data.type === "audio_frame") {
         this.enqueue(event.data.frame);
+      } else if (event.data.type === "clock") {
+        this.syncClock(event.data.time);
       }
     };
+    
+  }
+  syncClock(clockTime) {
+    // clockTime은 ms 단위라고 가정
+    const bufferTime = (this.availableSamples / sampleRate) * 1000; // ms 단위
+    const targetTime = clockTime; // timeline 기준
+    const audioTime = this.readIndex / sampleRate * 1000; 
+  
+    const drift = audioTime - targetTime; // +: 오디오 느림, -: 오디오 빠름
+    this.slowdownFactor = 1 - drift * 0.00005; // 조절 계수는 실험 필요
+    this.slowdownFactor = Math.max(0.97, Math.min(1.03, this.slowdownFactor));
   }
 
   enqueue(frame) {
