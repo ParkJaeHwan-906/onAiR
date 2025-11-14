@@ -50,21 +50,11 @@ async def detect_modules_from_recent_frames(
     if not frames:
         return []
 
-    if yolo_ctx is None:
-        async with acquire_yolo_context() as ctx:
-            # 모델 로드도 별도 스레드에서 실행
-            model = await _get_module_model_async(ctx)
-            if not model:
-                logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
-                return []
-            return await _detect_with_context(ctx, model, frames)
-    else:
-        # 모델 로드도 별도 스레드에서 실행
-        model = await _get_module_model_async(yolo_ctx)
-        if not model:
-            logger.info("⏭️ [module_detector] YOLO 모델이 로드되지 않아 탐지 스킵")
-            return []
-        return await _detect_with_context(yolo_ctx, model, frames)
+    try:
+        response = await infer_module(frames)
+    except YOLOServiceError as err:
+        logger.warning(f"[module_detector] YOLO 서비스 오류(code={err.code}, message={err.message})")
+        return []
 
 
 async def _get_module_model_async(ctx: YOLOContext):
