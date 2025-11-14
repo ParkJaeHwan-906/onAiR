@@ -315,3 +315,15 @@ def process_frame(frame_bgr, sid=None):
         "flow_mean": (float(flow_mean[0]), float(flow_mean[1])),
         "pose_ok": pose_ok,
     }
+def compute_marker_size(z_scale):
+    """
+    Essential Matrix 기반 z_scale 값을 UI size(px)로 변환.
+    z_scale은 상대 깊이 변화량(1.0=기준).
+    """
+    base_size = 30.0         # 기준 크기
+    scale_factor = 20.0      # 깊이 변화에 따른 확대/축소 정도
+
+    size_px = base_size + (z_scale * scale_factor)
+
+    # 안전 클램프
+    return float(np.clip(size_px, 10.0, 120.0))
