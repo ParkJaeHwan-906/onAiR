@@ -191,129 +191,127 @@ def process_frame(frame_bgr, sid=None):
         frame = frame_bgr
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    pts, method = extract_features(gray)
-    print(f"[{method} - {len(pts)}]")
-    # # --- 2) 첫 프레임: 특징점만 추출 ---
-    # if prev_gray is None:
-    #     pts, method = extract_features(gray)
-    #     if pts is None:
-    #         pts = np.empty((0, 1, 2), dtype=np.float32)
+    
+    # --- 2) 첫 프레임: 특징점만 추출 ---
+    if prev_gray is None:
+        pts, method = extract_features(gray)
+        if pts is None:
+            pts = np.empty((0, 1, 2), dtype=np.float32)
 
-    #     prev_gray = gray.copy()
-    #     prev_pts = pts
+        prev_gray = gray.copy()
+        prev_pts = pts
 
-    #     # 초기 상태 리포트
-    #     return {
-    #         "status": "init",
-    #         "tracked": int(len(pts)),
-    #         "inliers": int(len(pts)),
-    #         "ransac_ratio": 100.0 if len(pts) > 0 else 0.0,
-    #         "size": float(size_acc),
-    #         "flow_mean": (0.0, 0.0),
-    #         "pose_ok": False,
-    #     }
+        # 초기 상태 리포트
+        return {
+            "status": "init",
+            "tracked": int(len(pts)),
+            "inliers": int(len(pts)),
+            "ransac_ratio": 100.0 if len(pts) > 0 else 0.0,
+            "size": float(size_acc),
+            "flow_mean": (0.0, 0.0),
+            "pose_ok": False,
+        }
 
-    # # --- 3) Optical Flow 추적 ---
-    # prev_valid, next_valid, _ = track_features(
-    #     prev_gray,
-    #     gray,
-    #     prev_pts,
-    #     fb_thresh=2.0,
-    #     blur_var_thresh=12.0,
-    #     lk_win_size=(25, 25),
-    #     lk_max_level=4,
-    #     frame=frame,
-    # )
+    # --- 3) Optical Flow 추적 ---
+    prev_valid, next_valid, _ = track_features(
+        prev_gray,
+        gray,
+        prev_pts,
+        fb_thresh=2.0,
+        blur_var_thresh=12.0,
+        lk_win_size=(25, 25),
+        lk_max_level=4,
+        frame=frame,
+    )
 
-    # if prev_valid is None or len(prev_valid) == 0:
-    #     # 특징점 상실 → 다음 프레임에서 재추출
-    #     prev_gray = gray.copy()
-    #     prev_pts = None
-    #     last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
-    #     return {
-    #         "status": "no_tracks",
-    #         "tracked": 0,
-    #         "inliers": 0,
-    #         "ransac_ratio": 0.0,
-    #         "size": float(size_acc),
-    #         "flow_mean": (0.0, 0.0),
-    #         "pose_ok": False,
-    #     }
+    if prev_valid is None or len(prev_valid) == 0:
+        # 특징점 상실 → 다음 프레임에서 재추출
+        prev_gray = gray.copy()
+        prev_pts = None
+        last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+        return {
+            "status": "no_tracks",
+            "tracked": 0,
+            "inliers": 0,
+            "ransac_ratio": 0.0,
+            "size": float(size_acc),
+            "flow_mean": (0.0, 0.0),
+            "pose_ok": False,
+        }
 
-    # # Optical Flow 평균 이동량
-    # flow_mean = compute_flow_mean(prev_valid, next_valid)
-    # last_flow_mean = flow_mean
+    # Optical Flow 평균 이동량
+    flow_mean = compute_flow_mean(prev_valid, next_valid)
+    last_flow_mean = flow_mean
 
-    # # --- 4) RANSAC 필터링 ---
-    # in_prev, in_next, F, mask = ransac_filter(
-    #     prev_valid,
-    #     next_valid,
-    #     threshold=1.0,
-    #     prob=0.999,
-    #     frame_shape=frame.shape,
-    #     grid_size=(8, 6),
-    #     dir_cos_thresh=0.5,
-    #     sigma_scale=2.0,
-    # )
+    # --- 4) RANSAC 필터링 ---
+    in_prev, in_next, F, mask = ransac_filter(
+        prev_valid,
+        next_valid,
+        threshold=1.0,
+        prob=0.999,
+        frame_shape=frame.shape,
+        grid_size=(8, 6),
+        dir_cos_thresh=0.5,
+        sigma_scale=2.0,
+    )
 
-    # if mask is not None:
-    #     inlier_count = int(np.count_nonzero(mask))
-    #     total = len(mask)
-    #     ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
-    # else:
-    #     # RANSAC 실패 시 전체를 inlier 로 사용
-    #     in_prev = prev_valid
-    #     in_next = next_valid
-    #     inlier_count = len(in_prev)
-    #     total = len(in_prev)
-    #     ransac_ratio = 0.0
+    if mask is not None:
+        inlier_count = int(np.count_nonzero(mask))
+        total = len(mask)
+        ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
+    else:
+        # RANSAC 실패 시 전체를 inlier 로 사용
+        in_prev = prev_valid
+        in_next = next_valid
+        inlier_count = len(in_prev)
+        total = len(in_prev)
+        ransac_ratio = 0.0
 
-    # # --- 5) Essential 기반 Motion 추정 (size = z proxy) ---
-    # pose_ok = False
-    # try:
-    #     R, t, size_meas, stats = estimate_motion(in_prev, in_next, K)
+    # --- 5) Essential 기반 Motion 추정 (size = z proxy) ---
+    pose_ok = False
+    try:
+        R, t, size_meas, stats = estimate_motion(in_prev, in_next, K)
 
-    #     if stats.get("pose_ok", False):
-    #         pose_ok = True
-    #         # size_meas 를 안정화 / 클램프 후 EMA 누적
-    #         size_clamped = max(0.5, min(2.0, float(size_meas)))
-    #         size_acc_local = 0.9 * float(size_acc) + 0.1 * size_clamped
-    #         size_acc_local = float(size_acc_local)
+        if stats.get("pose_ok", False):
+            pose_ok = True
+            # size_meas 를 안정화 / 클램프 후 EMA 누적
+            size_clamped = max(0.5, min(2.0, float(size_meas)))
+            size_acc_local = 0.9 * float(size_acc) + 0.1 * size_clamped
+            size_acc_local = float(size_acc_local)
 
-    #         # 전역 갱신
-    #         size_acc = size_acc_local
+            # 전역 갱신
+            size_acc = size_acc_local
 
-    #         # 카메라 전체 pose 누적 (원하면 활용)
-    #         R_total[:] = R @ R_total
-    #         t_total[:] = t_total + (R_total @ t)
-    #     else:
-    #         # 포즈 불안정 → size_acc 그대로 유지
-    #         pass
+            # 카메라 전체 pose 누적 (원하면 활용)
+            R_total[:] = R @ R_total
+            t_total[:] = t_total + (R_total @ t)
+        else:
+            # 포즈 불안정 → size_acc 그대로 유지
+            pass
 
-    # except Exception as e:
-    #     # Essential 계산 실패해도 크래시 나지 않게 보호
-    #     print(f"⚠️ [motion_core] estimate_motion 실패: {e}")
-    #     pose_ok = False
+    except Exception as e:
+        # Essential 계산 실패해도 크래시 나지 않게 보호
+        print(f"⚠️ [motion_core] estimate_motion 실패: {e}")
+        pose_ok = False
 
-    # # --- 6) 다음 프레임용 특징점 준비 ---
-    # if len(in_next) < 300:
-    #     new_pts, _ = extract_features(gray)
-    #     if new_pts is not None and len(new_pts) > 0:
-    #         prev_pts = np.vstack([in_next, new_pts])
-    #     else:
-    #         prev_pts = in_next
-    # else:
-    #     prev_pts = in_next
+    # --- 6) 다음 프레임용 특징점 준비 ---
+    if len(in_next) < 300:
+        new_pts, _ = extract_features(gray)
+        if new_pts is not None and len(new_pts) > 0:
+            prev_pts = np.vstack([in_next, new_pts])
+        else:
+            prev_pts = in_next
+    else:
+        prev_pts = in_next
 
-    # prev_gray = gray.copy()
+    prev_gray = gray.copy()
 
-    # return {
-    #     "status": "ok",
-    #     "tracked": int(len(prev_valid)),
-    #     "inliers": int(inlier_count),
-    #     "ransac_ratio": float(ransac_ratio),
-    #     "size": float(size_acc),
-    #     "flow_mean": (float(flow_mean[0]), float(flow_mean[1])),
-    #     "pose_ok": pose_ok,
-    # }
-    return None
+    return {
+        "status": "ok",
+        "tracked": int(len(prev_valid)),
+        "inliers": int(inlier_count),
+        "ransac_ratio": float(ransac_ratio),
+        "size": float(size_acc),
+        "flow_mean": (float(flow_mean[0]), float(flow_mean[1])),
+        "pose_ok": pose_ok,
+    }
