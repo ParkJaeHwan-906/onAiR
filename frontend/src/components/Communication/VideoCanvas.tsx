@@ -4,6 +4,7 @@ import { OverlayCanvas } from "./OverlayCanvas";
 import { useSocket } from "../../utils/socketContext";
 import { useEffect, useRef, useState } from "react";
 import { VideoBuffer } from "../../utils/VideoBuffer";
+import { PlaybackClock } from "../../utils/PlaybackClock";
 import "../../styles/Communication/VideoFrame.css";
 
 interface VideoProps {
@@ -20,9 +21,13 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
   // 오디오 재생을 위한 ref
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
 
   // 🎬 비디오 버퍼 관리
   const videoBufferRef = useRef<VideoBuffer | null>(null);
+
+  // 비디오/오디오 동기화를 위한 clock
+  const clockRef = useRef<PlaybackClock | null>(null);
 
   // 연결 상태만 최소한으로 관리 (UI 표시용)
   const [isConnected, setIsConnected] = useState(false);
@@ -48,6 +53,7 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   // 오디오 재생용 useEffect
   useEffect(() => {
     if (!socket) return;
+    let workletNode: AudioWorkletNode;
 
     // 1️⃣ AudioContext 생성 (오디오 처리를 담당하는 컨텍스트)
     const audioContext = new AudioContext({
@@ -58,7 +64,8 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
     // AudioWorklet 모듈 등록
     audioContext.audioWorklet.addModule("/audio-processor.js").then(() => {
-      const workletNode = new AudioWorkletNode(audioContext, "audio-processor");
+      workletNode = new AudioWorkletNode(audioContext, "audio-processor");
+      audioWorkletNodeRef.current = workletNode;
       workletNode.connect(audioContext.destination);
 
       // 소켓 이벤트 수신
@@ -80,9 +87,9 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
       // 6️⃣ cleanup: 컴포넌트 언마운트 시 연결 해제 및 메모리 정리
       return () => {
-        socket.off("audio_frame", handleAudioFrame);
-        workletNode.disconnect();
+        if (workletNode) workletNode.disconnect();
         audioContext.close();
+        socket.off("audio_frame", handleAudioFrame);
       };
     });
   }, [socket]);
@@ -94,11 +101,7 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
     // 🎬 VideoBuffer 초기화
     const videoBuffer = new VideoBuffer({
-      minBufferSize: 3,      // 최소 3프레임 확보
-      targetBufferSize: 5,   // 목표 5프레임
       maxBufferSize: 10,     // 최대 10프레임
-      targetFPS: 30,         // 30fps 목표
-      
       // 프레임 준비 완료 시 콜백
       onFrameReady: (blobUrl: string) => {
         if (imgRef.current) {
@@ -109,11 +112,6 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
           imgRef.current.src = blobUrl;
         }
       },
-      
-      // 버퍼 상태 변경 시 콜백
-      onBufferStatus: (status) => {
-        console.log(`[VideoBuffer] 상태: 재생중=${status.isPlaying}, 버퍼=${status.bufferLength}, FPS=${status.currentFPS}, 드롭=${status.droppedFrames}`);
-      }
     });
     
     videoBufferRef.current = videoBuffer;
@@ -147,6 +145,36 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
       }
     };
   }, [socket, isConnected]);
+
+
+  // 비디오/오디오 동기화용 useEffect
+  useEffect(() => {
+    // clock 생성
+    const clock = new PlaybackClock();
+    clock.start();
+    clockRef.current = clock;
+  
+    // 타이머 루프 생성 (60fps)
+    const interval = setInterval(() => {
+      const now = clock.now();
+  
+      // ⏱ video worker로 clock 전달
+      if (videoBufferRef.current) {
+        videoBufferRef.current.updateClock(now);
+      }
+  
+      // ⏱ audio processor로 clock 전달
+      if (audioWorkletNodeRef.current) {
+        audioWorkletNodeRef.current.port.postMessage({
+          type: "clock",
+          time: now
+        });
+      }
+    }, 16); // 약 60fps
+  
+    return () => clearInterval(interval);
+  }, []);
+
 
   return (
     <div className="video-canvas">
