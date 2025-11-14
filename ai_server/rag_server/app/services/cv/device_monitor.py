@@ -41,15 +41,13 @@ async def background_device_detector():
                 response = await infer_device(latest_frame)
             except YOLOServiceError as err:
                 logger.warning(
-                    "[device_monitor] YOLO 서비스 호출 실패 (code=%s, msg=%s)",
-                    err.code,
-                    err.message,
+                    f"[device_monitor] YOLO 서비스 호출 실패 (code={err.code}, msg={err.message})",                   
                 )
             else:
                 device_label = response.get("label")
                 if device_label:
                     current_device_type = device_label
-                    logger.info("🔍 [device_monitor] 감지된 장비: %s", device_label)
+                    logger.info(f"🔍 [device_monitor] 감지된 장비: {device_label}" )
                 else:
                     logger.debug("[device_monitor] 장비 탐지 실패, 이전 상태 유지")
 
