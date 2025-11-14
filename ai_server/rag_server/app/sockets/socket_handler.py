@@ -159,12 +159,12 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     
-    # CV device_monitor 백그라운드 태스크 시작
-    try:
-        asyncio.create_task(background_device_detector())
-        # print("✅ CV device_monitor 백그라운드 태스크 시작됨")
-    except Exception as e:
-        print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
+    # # CV device_monitor 백그라운드 태스크 시작
+    # try:
+    #     asyncio.create_task(background_device_detector())
+    #     # print("✅ CV device_monitor 백그라운드 태스크 시작됨")
+    # except Exception as e:
+    #     print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
     
     # print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
