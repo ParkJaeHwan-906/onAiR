@@ -192,7 +192,7 @@ def process_frame(frame_bgr, sid=None):
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     pts, method = extract_features(gray)
-    print(f"[{method} - {pts}]")
+    print(f"[{method} - {len(pts)}]")
     # # --- 2) 첫 프레임: 특징점만 추출 ---
     # if prev_gray is None:
     #     pts, method = extract_features(gray)
