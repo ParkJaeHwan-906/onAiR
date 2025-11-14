@@ -85,7 +85,7 @@ async def _post_form(
     except YOLOServiceError:
         raise
     except Exception as exc:
-        logger.exception("[yolo-client] YOLO 서비스 호출 오류: %s", exc)
+        logger.exception(f"[yolo-client] YOLO 서비스 호출 오류: {exc}")
         raise YOLOServiceError("YOLO_REQUEST_ERROR", "YOLO 서비스 호출 실패", {"path": path}) from exc
 
 
@@ -116,6 +116,6 @@ async def get_health() -> Dict[str, Any]:
         async with session.get(url) as resp:
             return await resp.json(content_type=None)
     except Exception as exc:
-        logger.exception("[yolo-client] YOLO 헬스체크 실패: %s", exc)
+        logger.exception(f"[yolo-client] YOLO 헬스체크 실패: {exc}")
         raise YOLOServiceError("YOLO_HEALTH_ERROR", "YOLO 헬스체크 실패") from exc
 

@@ -107,24 +107,28 @@ async def background_device_detector():
                 await asyncio.sleep(2)
                 continue
 
-            # 2️⃣ YOLO로 장비 타입 탐지 (프레임은 처리 후 버림)
-            latest_frame = frames[0]  # 최신 프레임 1장만 사용
-            
-            if not _yolo_device_model:
-                print("⏭️ [device_monitor] YOLO 모델이 로드되지 않아 탐지를 스킵합니다.")
+            frames_to_use = frames[-3:] if len(frames) >= 3 else frames
+            latest_frame = select_sharpest_frame(frames_to_use)
+
+            try:
+                response = await infer_device(latest_frame)
+            except YOLOServiceError as err:
+                logger.warning(
+                    f"[device_monitor] YOLO 서비스 호출 실패 (code={err.code}, msg={err.message})",                   
+                )
             else:
                 async with acquire_yolo_context() as ctx:
                     device_label = await ctx.run(yolo_infer, _yolo_device_model, latest_frame)
                 if device_label:
-                    current_device_type = device_label  # 전역변수에 장비 명칭만 저장
-                    print(f"🔍 [device_monitor] 감지된 장비: {device_label}")
+                    current_device_type = device_label
+                    logger.info(f"🔍 [device_monitor] 감지된 장비: {device_label}" )
                 else:
                     print("⚠️ [device_monitor] 장비 탐지 실패, 이전 상태 유지")
             
             # 프레임은 여기서 버려짐 (저장 안함)
 
-        except Exception as e:
-            print(f"❌ [device_monitor] 오류 발생: {e}")
+        except Exception as exc:  # pragma: no cover
+            logger.exception(f"❌ [device_monitor] 루프 오류: {exc}")
 
         # 2초 주기로 재시도
         await asyncio.sleep(2)
