@@ -97,7 +97,82 @@ async def analyze_panel(
                 return await _analyze_with_context(ctx, sharpest_frame, best_score)
         return await _analyze_with_context(yolo_ctx, sharpest_frame, best_score)
 
-    except Exception as e:
+        panel_box = None
+        for det in module_dets:
+            if "panel" in det.get("label", "").lower():
+                panel_box = det.get("box")
+                break
+
+        if not panel_box:
+            return {
+                "type": "panel",
+                "status": "not_found",
+                "sharpness": best_score,
+                "message": "제어판 미검출",
+            }
+
+        x1, y1, x2, y2 = [int(v) for v in panel_box]
+        panel_roi = sharpest_frame[y1:y2, x1:x2]
+        if panel_roi.size == 0:
+            return {
+                "type": "panel",
+                "status": "not_found",
+                "sharpness": best_score,
+                "message": "제어판 ROI가 비어있습니다",
+            }
+
+        panel_resp = await infer_panel(panel_roi)
+        panel_dets = panel_resp.get("detections", [])
+
+        leds = {}
+        temp = None
+
+        for det in panel_dets:
+            label = det.get("label", "")
+            conf = float(det.get("confidence", 0.0))
+            box = det.get("box", None)
+            if not box:
+                continue
+
+            px1, py1, px2, py2 = [int(v) for v in box]
+            roi = panel_roi[py1:py2, px1:px2]
+            if roi.size == 0:
+                continue
+
+            label_lower = label.lower()
+
+            if "led" in label_lower or "button" in label_lower:
+                is_on, color = led_color_status(roi)
+                leds[label] = {"status": "on" if is_on else "off", "color": color, "confidence": conf}
+            elif "temp" in label_lower or "temperature" in label_lower:
+                temp_value = ocr_temperature(roi)
+                if temp_value is not None:
+                    temp = temp_value
+
+        has_anomaly = False
+        if temp is not None and (temp > 80 or temp < 5):
+            has_anomaly = True
+
+        for led_info in leds.values():
+            if led_info["status"] == "on" and led_info["color"] == "red":
+                has_anomaly = True
+                break
+
+        return {
+            "type": "panel",
+            "status": "anomaly" if has_anomaly else "normal",
+            "sharpness": best_score,
+            "message": "이상 탐지됨" if has_anomaly else "정상",
+            "results": {
+                "leds": leds,
+                "temp": temp,
+            },
+        }
+
+    except YOLOServiceError as err:
+        logger.warning(f"[panel] YOLO 서비스 오류: {err.code} ({err.message})")
+        return {"type": "panel", "status": "error", "message": err.message}
+    except Exception as e:  # pragma: no cover
         logger.exception(f"[panel] 분석 중 오류: {e}")
         return {"type": "panel", "status": "error", "message": str(e)}
 

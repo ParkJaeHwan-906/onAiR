@@ -123,7 +123,72 @@ async def analyze_gauge(
                 return await _analyze_with_context(ctx, sharpest_frame, best_score)
         return await _analyze_with_context(yolo_ctx, sharpest_frame, best_score)
 
-    except Exception as e:
+        gauge_detections = []
+        for det in detections:
+            label = det.get("label", "")
+            if any(key in label.lower() for key in ("gauge", "thermometer", "pressure")):
+                box = det.get("box")
+                if box:
+                    x1, y1, x2, y2 = [int(v) for v in box]
+                    roi = sharpest_frame[y1:y2, x1:x2]
+                    if roi.size > 0:
+                        gauge_detections.append({"type": label, "roi": roi})
+
+        if not gauge_detections:
+            return {
+                "type": "gauge",
+                "status": "not_found",
+                "message": "게이지 미검출",
+                "sharpness": best_score,
+                "results": {},
+            }
+
+        results = {}
+        has_anomaly = False
+
+        for det in gauge_detections:
+            gauge_type = det["type"]
+            roi = det["roi"]
+
+            angle, _ = detect_gauge_value_fast(roi)
+            if angle is None:
+                continue
+
+            if "thermometer" in gauge_type.lower():
+                value = (angle / 360.0) * 100
+            elif "pressure" in gauge_type.lower():
+                value = (angle / 360.0) * 2.0
+            else:
+                value = angle / 360.0
+
+            msg, status = judge_abnormal(gauge_type, value)
+
+            results[gauge_type] = {
+                "value": float(value),
+                "angle": float(angle),
+                "status": status,
+                "message": msg,
+            }
+
+            if status != "normal":
+                has_anomaly = True
+
+        return {
+            "type": "gauge",
+            "status": "anomaly" if has_anomaly else "normal",
+            "sharpness": best_score,
+            "results": results,
+            "message": "이상 탐지됨" if has_anomaly else "정상",
+        }
+
+    except YOLOServiceError as err:
+        logger.warning(f"[gauge] YOLO 서비스 오류: {err.code} ({err.message})")
+        return {
+            "type": "gauge",
+            "status": "error",
+            "message": err.message,
+        }
+    except Exception as e:  # pragma: no cover
         logger.exception(f"[gauge] 분석 중 오류: {e}")
         return {
             "type": "gauge",
