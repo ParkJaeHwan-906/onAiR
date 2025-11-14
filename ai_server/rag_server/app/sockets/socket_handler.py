@@ -1543,37 +1543,36 @@ async def handle_video_frame(sid, data):
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-    # if result["status"] not in ("ok", "init"):
-    #     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    #     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
-    #     return
+    
+    if result["status"] not in ("ok", "init"):
+        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
-    # if ar_markers:
-    #     updated = []
-    #     for m in ar_markers:
-    #         info = m.get("info", {})
-    #         u = float(info.get("x", 0.0))
-    #         v = float(info.get("y", 0.0))
-    #         # Optical Flow + Essential 기반 업데이트
-    #         u_new, v_new, z_size = motion_core.update_marker_position(u, v)
-    #         # 화면 상에서 크게/작게 보이는 사이즈 반영
-    #         base_size = 30.0
-    #         size_factor = 20.0
-    #         size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
-    #         updated.append({
-    #             "idx": m["idx"],
-    #             "info": {
-    #                 "x": round(u_new, 2),
-    #                 "y": round(v_new, 2),
-    #                 "z": round(z_size, 4),
-    #                 "size": round(size_px, 3),
-    #             }
-    #         })
-        # ar_markers[:] = updated
-        # await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    if ar_markers:
+        updated = []
+        for m in ar_markers:
+            info = m.get("info", {})
+            u = float(info.get("x", 0.0))
+            v = float(info.get("y", 0.0))
+            # Optical Flow + Essential 기반 업데이트
+            u_new, v_new, z_size = motion_core.update_marker_position(u, v)
+            # 화면 상에서 크게/작게 보이는 사이즈 반영
+            base_size = 15.0
+            size_factor = 20.0
+            size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
+            updated.append({
+                "idx": m["idx"],
+                "info": {
+                    "x": round(u_new, 2),
+                    "y": round(v_new, 2),
+                    "z": round(z_size, 4),
+                    "size": round(size_px, 3),
+                }
+            })
+        ar_markers[:] = updated
+        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
