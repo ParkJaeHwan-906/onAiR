@@ -21,7 +21,7 @@ from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
-# from app.services.cv_service import run_cv_model
+from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
@@ -1591,20 +1591,6 @@ async def handle_audio_frame(sid, data):
     # === 클라이언트로 전송 (바이너리 오디오 데이터 그대로 전달) ===
     # print("[DEBUG] 오디오 프레임 수신됨")
     await broadcast_to("pc", "audio_frame", data)
-
-# 모바일에서 '통신 요청중입니다' 음성 종료 이벤트 전달
-@sio.on("intent_audio_completed") 
-async def handle_start_communication(sid, data):
-    """
-    오퍼레이터 통신 시작 이벤트
-    """
-    # print("[DEBUG] intent_audio_completed 이벤트 발생")
-    sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown":
-        return
-
-    # === raspi로 "andle_audio_stream" 이벤트 전송 ===
-    # await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
