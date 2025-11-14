@@ -14,7 +14,7 @@ from app.services.cv.yolo_client import YOLOServiceError, infer_device
 from app.services.cv.utils import select_sharpest_frame
 
 # # 현재 감지된 장비 타입 (다른 서비스에서 참조)
-# current_device_type: str = "unknown"
+current_device_type: str = "unknown"
 
 
 async def background_device_detector():
@@ -34,8 +34,8 @@ async def background_device_detector():
                 await asyncio.sleep(2)
                 continue
 
-#             frames_to_use = frames[-3:] if len(frames) >= 3 else frames
-#             latest_frame = select_sharpest_frame(frames_to_use)
+            frames_to_use = frames[-3:] if len(frames) >= 3 else frames
+            latest_frame = select_sharpest_frame(frames_to_use)
 
             try:
                 response = await infer_device(latest_frame)
@@ -51,7 +51,7 @@ async def background_device_detector():
                 else:
                     logger.debug("[device_monitor] 장비 탐지 실패, 이전 상태 유지")
 
-#         except Exception as exc:  # pragma: no cover
-#             logger.exception(f"❌ [device_monitor] 루프 오류: {exc}")
+        except Exception as exc:  # pragma: no cover
+            logger.exception(f"❌ [device_monitor] 루프 오류: {exc}")
 
         await asyncio.sleep(2)
