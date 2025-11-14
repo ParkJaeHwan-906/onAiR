@@ -1542,33 +1542,33 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
-    result = await motion_core.process_frame(frame, sid=sid)
+    # result = await motion_core.process_frame(frame, sid=sid)
     if result["status"] not in ("ok", "init"):
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
         await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
-    if ar_markers:
-        updated_markers = []
-        for m in ar_markers:
-            info = m.get("info", {})
-            u = float(info.get("x", 0.0))
-            v = float(info.get("y", 0.0))
-            u_new, v_new, z_new = motion_core.update_marker_position(u, v)
-            base_size = 30.0
-            scale_factor = 20.0
-            size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
-            updated_markers.append({
-                "idx": m["idx"],
-                "info": {
-                    "x": round(u_new, 2),
-                    "y": round(v_new, 2),
-                    "z": round(z_new, 3),
-                    "size": round(size_px, 3),
-                }
-            })
-        ar_markers[:] = updated_markers
+    # if ar_markers:
+    #     updated_markers = []
+    #     for m in ar_markers:
+    #         info = m.get("info", {})
+    #         u = float(info.get("x", 0.0))
+    #         v = float(info.get("y", 0.0))
+    #         u_new, v_new, z_new = motion_core.update_marker_position(u, v)
+    #         base_size = 30.0
+    #         scale_factor = 20.0
+    #         size_px = np.clip(base_size + (z_new * scale_factor), 10.0, 100.0)
+    #         updated_markers.append({
+    #             "idx": m["idx"],
+    #             "info": {
+    #                 "x": round(u_new, 2),
+    #                 "y": round(v_new, 2),
+    #                 "z": round(z_new, 3),
+    #                 "size": round(size_px, 3),
+    #             }
+    #         })
+    #     ar_markers[:] = updated_markers
         await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
