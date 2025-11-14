@@ -1535,11 +1535,11 @@ async def handle_video_frame(sid, data):
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지, 영구 저장 안함) ---
-    try:
-        from app.services.cv.frame_collector import add_frame
-        await add_frame(frame)
-    except Exception as e:
-        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
+    # try:
+    #     from app.services.cv.frame_collector import add_frame
+    #     await add_frame(frame)
+    # except Exception as e:
+    #     print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
