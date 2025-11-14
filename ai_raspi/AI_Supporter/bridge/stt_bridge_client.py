@@ -104,6 +104,7 @@ class SttBridgeClient:
                     logger.error(f"❌ Failed to forward wakeword_detected to FastAPI: {e}")
             else:
                 logger.warning("⚠️ FastAPI Socket.IO 클라이언트가 연결되지 않음, 전송 대기")
+        
 
     def set_fastapi_socketio_client(self, socketio_client):
         """FastAPI 서버 Socket.IO 클라이언트 주입"""

@@ -645,9 +645,17 @@ async def handle_intent_audio_completed(sid, data):
         print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
         print("=" * 60)
         
-        # 라즈베리파이 별도 프로세스로 handle_audio_stream 이벤트 전송
-        # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
+        # 주의: 마이크는 하나이며, STT 프로세스가 마이크를 해제한 후 WebRTC가 시작되어야 합니다.
+        # 버퍼링 STT 완료 후 이미 mic.pause()가 호출되어 STT 목적 음성 수집은 OFF 상태입니다.
+        # 하지만 실제 마이크 장치는 여전히 점유 중이므로, 장치를 해제해야 합니다.
+        
+        # Python 3.10 프로세스에 마이크 장치 해제 신호 전송
+        # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
+        # mic.release()가 호출됩니다.
         await broadcast_to("raspi", "handle_audio_stream", {"start": True})
+        
+        # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
+        await asyncio.sleep(0.3)
         print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료: WebRTC 오디오 스트리밍 시작")
         print("=" * 60)
     else:
@@ -1645,15 +1653,19 @@ async def accept_communication(sid, data):
         clarify_sessions.clear()
         print("✅ 모든 Streaming STT 세션 종료 완료")
     
-    # STT 목적으로 음성 수집 중지 이벤트 전송 (AI_Supporter/OPERATOR 기능 중지)
+    # STT 목적으로 음성 수집 중지 이벤트 전송 (논리적 OFF)
     # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-    print("[DEBUG] STT 목적 음성 수집 중지 이벤트 전송")
+    print("[DEBUG] STT 목적 음성 수집 중지 이벤트 전송 (논리적 OFF)")
     await broadcast_to("raspi", "mic_off", {})
     
-    # === raspi로 "handle_audio_stream" 이벤트 전송 (WebRTC 오디오 스트리밍 목적으로 음성 수집 시작) ===
-    # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
-    print("[DEBUG] handle_audio_stream(True) 이벤트 emit (WebRTC 오디오 스트리밍 목적)")
-    await broadcast_to("raspi", "handle_audio_stream", {"start" : True})
+    # 주의: 마이크는 하나이며, STT 프로세스가 마이크 장치를 해제한 후 WebRTC가 시작되어야 합니다.
+    # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
+    # mic.release()가 호출되어 실제 마이크 장치가 해제됩니다.
+    print("[DEBUG] handle_audio_stream(True) 이벤트 emit (WebRTC 오디오 스트리밍 목적, 마이크 장치 해제)")
+    await broadcast_to("raspi", "handle_audio_stream", {"start": True})
+    
+    # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
+    await asyncio.sleep(0.3)
     
     print("✅ 통신 요청 수락 처리 완료: AI_Supporter/OPERATOR 기능 중지, WebRTC 오디오 스트리밍 시작")
     print("=" * 60)
@@ -1674,12 +1686,17 @@ async def communication_close(sid, data):
     print("=" * 60)
     
     # WebRTC 오디오 스트리밍 목적 음성 수집 중지
-    print("[DEBUG] handle_audio_stream (start:False) emit")
+    # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
+    # mic.acquire()가 호출되어 실제 마이크 장치를 재점유합니다.
+    print("[DEBUG] handle_audio_stream (start:False) emit (WebRTC 오디오 스트리밍 중지, 마이크 장치 재점유)")
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
     
-    # STT 목적 음성 수집 재개
+    # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
+    await asyncio.sleep(0.3)
+    
+    # STT 목적 음성 수집 재개 (논리적 ON)
     # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
-    print("[DEBUG] mic_on 이벤트 emit")
+    print("[DEBUG] mic_on 이벤트 emit (논리적 ON)")
     await broadcast_to("raspi", "mic_on", {})
     
     # Wakeword 감지 대기 시작
