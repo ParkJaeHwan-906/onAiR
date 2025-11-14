@@ -88,5 +88,5 @@ pytz==2025.2
 python-multipart>=0.0.9
 
 
-pytesseract==0.3.10
+
 tqdm==4.67.1

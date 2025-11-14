@@ -1,27 +1,42 @@
 """
-게이지 이상 탐지 (YOLO 서비스 연동 + Sharpness 기반 단일 프레임 분석)
-- 프레임 중 가장 선명한 이미지를 선택
-- YOLO 서비스로 thermometer / pressure_gauge 영역 추출
-- 단일 프레임 기준으로 이상 여부를 판단
+게이지 이상 탐지 (local YOLO + Sharpness)
+- 가장 선명한 frame 1장 선택
+- module_best.pt 모델로 gauge/thermometer/pressure 영역 추출
+- ROI 기반 지침 각도 계산 → 값 변환 → 이상 판단
 """
 
+import os
 import cv2
 import numpy as np
+from pathlib import Path
 from loguru import logger
-
-from app.services.cv.yolo_client import YOLOServiceError, infer_module
-
-MIN_SHARPNESS = 70.0  # 흐림 필터 기준값
+from ultralytics import YOLO
 
 
-def calc_sharpness(frame: np.ndarray) -> float:
-    """Laplacian variance 기반 선명도 계산"""
+# ------------------------------
+# 모델 경로
+# ------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+MODULE_MODEL_PATH = BASE_DIR / "../models/module_best.pt"
+
+# ------------------------------
+# 하이퍼파라미터
+# ------------------------------
+MIN_SHARPNESS = 70.0
+
+_module_model = None   # lazy-loaded YOLO
+
+
+# ------------------------------
+# 유틸 함수들
+# ------------------------------
+def calc_sharpness(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return cv2.Laplacian(gray, cv2.CV_64F).var()
 
 
 def detect_gauge_value_fast(img: np.ndarray):
-    """Hough 원 기반 지침 각도 계산"""
+    """Hough 기반 게이지 바늘 각도 추출 (rough)."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
@@ -36,7 +51,7 @@ def detect_gauge_value_fast(img: np.ndarray):
         maxRadius=0,
     )
     if circles is None:
-        return None, None
+        return None
 
     x0, y0, R = np.uint16(np.around(circles[0][0]))
     edges = cv2.Canny(blur, 50, 150)
@@ -44,135 +59,158 @@ def detect_gauge_value_fast(img: np.ndarray):
 
     thetas = np.deg2rad(np.arange(0, 360, 2))
     scores = []
+
     for th in thetas:
         xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
         ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-        xs, ys = np.clip(xs, 0, w - 1), np.clip(ys, 0, h - 1)
+        xs = np.clip(xs, 0, w - 1)
+        ys = np.clip(ys, 0, h - 1)
         scores.append(edges[ys, xs].sum())
 
     if not scores:
-        return None, None
+        return None
 
     angle = np.rad2deg(thetas[np.argmax(scores)]) % 360
-    return angle, None
+    return angle
 
 
-def judge_abnormal(sensor_type: str, value: float):
-    """온도계 / 압력계별 임계값 판단"""
-    if sensor_type == "thermometer":
+def judge_abnormal(gauge_type: str, value: float):
+    """온도 / 압력 기준 이상 판단"""
+
+    if "thermometer" in gauge_type.lower():
         if value > 80:
-            return "온도 과열 경고", "high"
+            return "온도 과열", "high"
         if value < 5:
             return "온도 너무 낮음", "low"
         return "정상", "normal"
-    if sensor_type == "pressure_gauge":
+
+    if "pressure" in gauge_type.lower():
         if value > 1.5:
             return "압력 과다", "high"
         if value < 0.2:
             return "압력 부족", "low"
         return "정상", "normal"
+
     return "Unknown type", "unknown"
 
 
-async def analyze_gauge(
-    frames: list[np.ndarray],
-):
+# ------------------------------
+# 모델 초기화
+# ------------------------------
+def _load_model_once():
+    global _module_model
+    if _module_model is None:
+        _module_model = YOLO(str(MODULE_MODEL_PATH))
+        _module_model.fuse()
+        logger.info("📦 gauge_anomaly: Module YOLO 로드 완료")
+
+
+# ------------------------------
+# 메인 함수
+# ------------------------------
+async def analyze_gauge(frames):
     """
-    게이지 이상 탐지
-    - 가장 선명한 1장만 YOLO에 입력
-    - thermometer / pressure_gauge 분석
+    게이지 이상 탐지 (단일 프레임 기준)
+    run_anomaly_detection()에서 frames = list[np.ndarray] 전달됨
     """
     try:
         if not frames:
             return {
                 "type": "gauge",
                 "status": "unknown",
-                "message": "입력 프레임 없음",
+                "message": "입력 프레임 없음"
             }
 
-        sharpness_scores = [calc_sharpness(f) for f in frames]
-        valid_frames = [(f, s) for f, s in zip(frames, sharpness_scores) if s > MIN_SHARPNESS]
-        if not valid_frames:
+        # ------------------------------
+        # 1. sharpest frame 선택
+        # ------------------------------
+        sharp_list = [(f, calc_sharpness(f)) for f in frames]
+        sharp_list = [(f, s) for f, s in sharp_list if s > MIN_SHARPNESS]
+
+        if not sharp_list:
             return {
                 "type": "gauge",
                 "status": "low_confidence",
-                "message": "모든 프레임이 흐림 (선명도 부족)",
+                "message": "모든 프레임이 흐림"
             }
 
-        sharpest_frame, best_score = max(valid_frames, key=lambda x: x[1])
+        sharpest_frame, best_score = max(sharp_list, key=lambda x: x[1])
 
-        module_resp = await infer_module([sharpest_frame])
-        detections = module_resp.get("frames", [[]])[0] if module_resp.get("frames") else []
+        # ------------------------------
+        # 2. YOLO 모델 로드
+        # ------------------------------
+        _load_model_once()
 
-        gauge_detections = []
-        for det in detections:
-            label = det.get("label", "")
-            if any(key in label.lower() for key in ("gauge", "thermometer", "pressure")):
-                box = det.get("box")
-                if box:
-                    x1, y1, x2, y2 = [int(v) for v in box]
+        # ------------------------------
+        # 3. YOLO로 gauge/thermometer/pressure ROI 추출
+        # ------------------------------
+        yolo_results = _module_model.predict(sharpest_frame, conf=0.5, verbose=False)
+
+        detections = []
+        for r in yolo_results:
+            for box in r.boxes:
+                label = _module_model.names[int(box.cls)]
+                if any(k in label.lower() for k in ["gauge", "thermometer", "pressure"]):
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     roi = sharpest_frame[y1:y2, x1:x2]
                     if roi.size > 0:
-                        gauge_detections.append({"type": label, "roi": roi})
+                        detections.append({"type": label, "roi": roi})
 
-        if not gauge_detections:
+        if not detections:
             return {
                 "type": "gauge",
                 "status": "not_found",
-                "message": "게이지 미검출",
                 "sharpness": best_score,
-                "results": {},
+                "message": "게이지 미검출",
+                "results": {}
             }
 
-        results = {}
-        has_anomaly = False
+        # ------------------------------
+        # 4. ROI 기반 값 분석
+        # ------------------------------
+        final_results = {}
+        found_anomaly = False
 
-        for det in gauge_detections:
+        for det in detections:
             gauge_type = det["type"]
             roi = det["roi"]
 
-            angle, _ = detect_gauge_value_fast(roi)
+            angle = detect_gauge_value_fast(roi)
             if angle is None:
                 continue
 
+            # 값으로 변환
             if "thermometer" in gauge_type.lower():
-                value = (angle / 360.0) * 100
+                value = (angle / 360.0) * 100    # 0–100도
             elif "pressure" in gauge_type.lower():
-                value = (angle / 360.0) * 2.0
+                value = (angle / 360.0) * 2.0    # 0–2.0 bar
             else:
                 value = angle / 360.0
 
             msg, status = judge_abnormal(gauge_type, value)
 
-            results[gauge_type] = {
+            final_results[gauge_type] = {
                 "value": float(value),
                 "angle": float(angle),
                 "status": status,
-                "message": msg,
+                "message": msg
             }
 
             if status != "normal":
-                has_anomaly = True
+                found_anomaly = True
 
         return {
             "type": "gauge",
-            "status": "anomaly" if has_anomaly else "normal",
+            "status": "anomaly" if found_anomaly else "normal",
             "sharpness": best_score,
-            "results": results,
-            "message": "이상 탐지됨" if has_anomaly else "정상",
+            "results": final_results,
+            "message": "이상 탐지됨" if found_anomaly else "정상"
         }
 
-    except YOLOServiceError as err:
-        logger.warning(f"[gauge] YOLO 서비스 오류: {err.code} ({err.message})")
-        return {
-            "type": "gauge",
-            "status": "error",
-            "message": err.message,
-        }
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         logger.exception(f"[gauge] 분석 중 오류: {e}")
         return {
             "type": "gauge",
             "status": "error",
-            "message": str(e),
+            "message": str(e)
         }
