@@ -165,7 +165,7 @@ async def infer_device(file: UploadFile = File(...)):
         code = str(exc).split(":", 1)[0]
         return _error_response(code, "YOLO 모델이 준비되지 않았습니다.", {"model": "device"})
     except Exception as exc:  # pragma: no cover
-        logger.exception("[yolo-service] device inference error: %s", exc)
+        logger.exception(f"[yolo-service] device inference error: {exc}")
         return _error_response("YOLO_INFERENCE_ERROR", "YOLO 추론 중 오류", {"detail": str(exc)}, 500)
 
     if not result:
@@ -203,7 +203,7 @@ async def infer_module(files: List[UploadFile] = File(...)):
             code = str(exc).split(":", 1)[0]
             return _error_response(code, "YOLO 모델이 준비되지 않았습니다.", {"model": "module"})
         except Exception as exc:  # pragma: no cover
-            logger.exception("[yolo-service] module inference error: %s", exc)
+            logger.exception(f"[yolo-service] module inference error: {exc}")
             return _error_response("YOLO_INFERENCE_ERROR", "YOLO 추론 중 오류", {"detail": str(exc)}, 500)
 
         detections_all.append(boxes or [])
@@ -229,7 +229,7 @@ async def infer_panel(file: UploadFile = File(...)):
         code = str(exc).split(":", 1)[0]
         return _error_response(code, "YOLO 모델이 준비되지 않았습니다.", {"model": "panel"})
     except Exception as exc:  # pragma: no cover
-        logger.exception("[yolo-service] panel inference error: %s", exc)
+        logger.exception(f"[yolo-service] panel inference error: {exc}")
         return _error_response("YOLO_INFERENCE_ERROR", "YOLO 추론 중 오류", {"detail": str(exc)}, 500)
 
     payload = {
