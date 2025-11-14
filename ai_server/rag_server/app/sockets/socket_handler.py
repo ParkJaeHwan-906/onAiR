@@ -21,11 +21,11 @@ from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
-from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
+from ai_server.yolo_service.anomaly import run_anomaly_detection
 from app.ar import motion_core
+from ai_server.yolo_service.app.main import stop_device_detector_task, start_device_detector_task
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
-from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -292,7 +292,9 @@ async def handle_wakeword_detected(sid, data):
     print(f"   SID: {sid[:15]}...")
     print(f"   현재 device_map: {dict(device_map)}")
     print("=" * 60)
-    
+
+    await stop_device_detector_task()
+    print(" 기기 탐지 종료")
     sender_device = device_map.get(sid, "unknown")
     print(f"   발신자 디바이스: {sender_device}")
     
@@ -392,76 +394,48 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 60)
             print("🔍 [단계 9] CV 모델 실행 시작")
             print("=" * 60)
-            
-            # CV 분석용 프레임 수집 시작
-            print("=" * 60)
-            print("📸 [단계 9-1] CV 분석용 프레임 수집 시작")
-            print("=" * 60)
-            from app.services.cv.frame_collector import (
-                start_cv_collection,
-                collect_recent_frames,
-                stop_cv_collection,
-            )
-            # CV 수집 시작 (이후 들어오는 프레임들을 수집)
-            await start_cv_collection()
-            # 약간의 지연 후 수집 (프레임이 들어올 시간 확보)
-            await asyncio.sleep(0.1)
-            # 현재까지 수집된 프레임 + 기본 버퍼에서 최근 프레임 수집
-            frames = await collect_recent_frames(duration_seconds=1.0, max_frames=20, min_frames=3)
-            print(f"✅ 프레임 스트림에서 수집한 프레임 수: {len(frames)}장")
-            
-            if not frames:
-                print("=" * 60)
-                print("⚠️ [단계 9-1 완료] CV 분석할 프레임이 없습니다.")
-                print("=" * 60)
-                await stop_cv_collection()  # 수집 중지
-                cv_result = {
-                    "detected": False,
-                    "device_type": "unknown",
-                    "modules": [],
-                    "anomalies": [],
-                    "message": "분석할 프레임이 없습니다."
-                }
-            else:
-                print("=" * 60)
-                print(f"✅ [단계 9-1 완료] 프레임 스트림에서 {len(frames)}장의 프레임을 성공적으로 수집했습니다.")
-                print(f"   프레임 크기: {frames[0].shape if frames else 'N/A'}")
-                print("=" * 60)
-                await wait_for_next_step("프레임 스트림 수집 완료", "9-1")
+
+            cv_raw = await run_anomaly_detection()
+
+            modules = cv_raw.get("modules", [])
+            anomalies = cv_raw.get("anomalies", {}).get("results", {})
+            has_anomaly = cv_raw.get("anomalies", {}).get("status") == "anomaly_detected"
+
+            cv_result = {
+                "detected": has_anomaly,
+                "device_type": cv_raw.get("device_type"),
+                "modules": modules,
+                "anomalies": {
+                    "status": "anomaly_detected" if has_anomaly else "no_anomaly",
+                    "results": anomalies
+                },
+                "message": cv_raw.get("message", "")
+            }
+
                 
-                # CV 모델 실행
-                print("=" * 60)
-                print("🤖 [단계 9-2] CV 모델 파이프라인 실행 시작")
-                print(f"   입력 프레임 수: {len(frames)}장")
-                print("=" * 60)
-                cv_result = await run_cv_model(frames)
-                
-                # CV 결과 상세 출력
-                print("=" * 60)
-                print("📊 [단계 9-2 완료] CV 모델 실행 결과")
-                print(f"   탐지 여부: {cv_result.get('detected', False)}")
-                print(f"   장비 타입: {cv_result.get('device_type', 'unknown')}")
-                print(f"   탐지된 모듈 수: {len(cv_result.get('modules', []))}")
-                if cv_result.get('modules'):
-                    module_names = [m.get('label', 'unknown') for m in cv_result.get('modules', [])]
-                    print(f"   모듈 목록: {', '.join(module_names)}")
-                anomalies = cv_result.get('anomalies', {})
-                if anomalies:
-                    anomaly_status = anomalies.get('status', 'unknown')
-                    print(f"   이상 탐지 상태: {anomaly_status}")
-                    if isinstance(anomalies.get('results'), dict):
-                        anomaly_results = anomalies.get('results', {})
-                        print(f"   이상 탐지 모듈 수: {len(anomaly_results)}개")
-                        for module_name, module_result in anomaly_results.items():
-                            if isinstance(module_result, dict):
-                                module_status = module_result.get('status', 'unknown')
-                                module_msg = module_result.get('message', '')
-                                print(f"     - {module_name}: {module_status} ({module_msg})")
-                print(f"   메시지: {cv_result.get('message', '')}")
-                print("=" * 60)
-            
-            # CV 분석 완료 후 수집 중지
-            await stop_cv_collection()
+            # CV 결과 상세 출력
+            print("=" * 60)
+            print("📊 [단계 9-2 완료] CV 모델 실행 결과")
+            print(f"   탐지 여부: {cv_result.get('detected', False)}")
+            print(f"   장비 타입: {cv_result.get('device_type', 'unknown')}")
+            print(f"   탐지된 모듈 수: {len(cv_result.get('modules', []))}")
+            if cv_result.get('modules'):
+                module_names = [m.get('label', 'unknown') for m in cv_result.get('modules', [])]
+                print(f"   모듈 목록: {', '.join(module_names)}")
+            anomalies = cv_result.get('anomalies', {})
+            if anomalies:
+                anomaly_status = anomalies.get('status', 'unknown')
+                print(f"   이상 탐지 상태: {anomaly_status}")
+                if isinstance(anomalies.get('results'), dict):
+                    anomaly_results = anomalies.get('results', {})
+                    print(f"   이상 탐지 모듈 수: {len(anomaly_results)}개")
+                    for module_name, module_result in anomaly_results.items():
+                        if isinstance(module_result, dict):
+                            module_status = module_result.get('status', 'unknown')
+                            module_msg = module_result.get('message', '')
+                            print(f"     - {module_name}: {module_status} ({module_msg})")
+            print(f"   메시지: {cv_result.get('message', '')}")
+            print("=" * 60)
             
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
@@ -628,9 +602,7 @@ async def handle_intent_audio_completed(sid, data):
             print(f"❌ CV 모델 실행 오류: {e}")
             import traceback
             traceback.print_exc()
-            # CV 수집 중지
-            from app.services.cv.frame_collector import stop_cv_collection
-            await stop_cv_collection()
+    
             # CV 모델 오류 시에도 탐지 실패로 처리
             await broadcast_to("mobile", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
@@ -1534,11 +1506,11 @@ async def handle_video_frame(sid, data):
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
-    try:
-        from app.services.cv.frame_collector import add_frame
-        await add_frame(frame)
-    except Exception as e:
-        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
+    # try:
+    #     from app.services.cv.frame_collector import add_frame
+    #     await add_frame(frame)
+    # except Exception as e:
+    #     print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
@@ -1685,8 +1657,10 @@ async def communication_close(sid, data):
     # Wakeword 감지 대기 시작
     print("[DEBUG] wakeword_start_waiting 이벤트 emit")
     await broadcast_to("raspi", "wakeword_start_waiting", {})
-    
-    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작")
+
+    await start_device_detector_task()
+
+    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
     print("=" * 60)
 
 
