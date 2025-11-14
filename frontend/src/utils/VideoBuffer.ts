@@ -3,7 +3,7 @@
  */
 
 interface VideoFrame {
-  timestamp: number;
+  timestamp: number; // 상대 시간(ms)
   blobUrl: string;
 }
 
@@ -24,8 +24,9 @@ export class VideoBuffer {
   private maxBufferSize: number;
   private onFrameReady?: (blobUrl: string) => void;
   private onBufferStatus?: (status: BufferStatus) => void;
-
   private droppedFrames = 0;
+
+  private startTime: number | null = null; // 서버 첫 프레임 timestamp 기준
 
   constructor(config: VideoBufferConfig = {}) {
     this.maxBufferSize = config.maxBufferSize ?? 20;
@@ -41,17 +42,27 @@ export class VideoBuffer {
 
   /** 버퍼에 비디오 프레임 추가 */
   enqueue(timestamp: number, frame: ArrayBuffer) {
+    // 첫 프레임이면 startTime 설정
+    if (this.startTime === null) {
+      this.startTime = timestamp;
+    }
+
+    // 서버 절대 timestamp → 상대 timestamp
+    const relativeTimestamp = timestamp - this.startTime;
+
     // 버퍼 오버플로우 방지
     if (this.buffer.length >= this.maxBufferSize) {
       const drop = this.buffer.shift();
-      drop && URL.revokeObjectURL(drop.blobUrl);
+      if(drop){
+        URL.revokeObjectURL(drop.blobUrl);
+      }
       this.droppedFrames++;
     }
 
     const blob = new Blob([frame], { type: "image/jpeg" });
     const blobUrl = URL.createObjectURL(blob);
 
-    this.buffer.push({ timestamp, blobUrl });
+    this.buffer.push({ timestamp: relativeTimestamp, blobUrl });
   }
 
   /** timeline 기준으로 프레임을 재생 */
@@ -95,5 +106,7 @@ export class VideoBuffer {
   clear() {
     this.buffer.forEach(f => URL.revokeObjectURL(f.blobUrl));
     this.buffer = [];
+    this.startTime = null;
+    this.droppedFrames = 0;
   }
 }
