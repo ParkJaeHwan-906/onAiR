@@ -3,6 +3,7 @@ import type { DrawingLine } from "../../types/DrawingLine";
 import { OverlayCanvas } from "./OverlayCanvas";
 import { useSocket } from "../../utils/socketContext";
 import { useEffect, useRef, useState } from "react";
+import { VideoBuffer } from "../../utils/VideoBuffer";
 import "../../styles/Communication/VideoFrame.css";
 
 interface VideoProps {
@@ -19,6 +20,9 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
 
   // 오디오 재생을 위한 ref
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // 🎬 비디오 버퍼 관리
+  const videoBufferRef = useRef<VideoBuffer | null>(null);
 
   // 연결 상태만 최소한으로 관리 (UI 표시용)
   const [isConnected, setIsConnected] = useState(false);
@@ -84,27 +88,44 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   }, [socket]);
 
 
-  // 비디오 재생용 useEffect
+  // 비디오 재생용 useEffect (버퍼링 적용)
   useEffect(() => {
     if (!socket) return;
 
+    // 🎬 VideoBuffer 초기화
+    const videoBuffer = new VideoBuffer({
+      minBufferSize: 3,      // 최소 3프레임 확보
+      targetBufferSize: 5,   // 목표 5프레임
+      maxBufferSize: 10,     // 최대 10프레임
+      targetFPS: 30,         // 30fps 목표
+      
+      // 프레임 준비 완료 시 콜백
+      onFrameReady: (blobUrl: string) => {
+        if (imgRef.current) {
+          // 이전 Blob URL 정리
+          if (imgRef.current.src.startsWith("blob:")) {
+            URL.revokeObjectURL(imgRef.current.src);
+          }
+          imgRef.current.src = blobUrl;
+        }
+      },
+      
+      // 버퍼 상태 변경 시 콜백
+      onBufferStatus: (status) => {
+        console.log(`[VideoBuffer] 상태: 재생중=${status.isPlaying}, 버퍼=${status.bufferLength}, FPS=${status.currentFPS}, 드롭=${status.droppedFrames}`);
+      }
+    });
+    
+    videoBufferRef.current = videoBuffer;
+
+    // 비디오 프레임 수신 핸들러
     const handleVideoFrame = (data: { timestamp: number; frame: ArrayBuffer }) => {
-      // 2. 리렌더링 없이 DOM 조작으로 이미지 교체
-      if (imgRef.current) {
-        // ArrayBuffer를 Blob으로 변환
-        const blob = new Blob([data.frame], { type: "image/jpeg" });
-        // 이전 Blob URL 정리 (메모리 누수 방지)
-        if (imgRef.current.src.startsWith("blob:")) {
-          URL.revokeObjectURL(imgRef.current.src);
-        }
-        const imageUrl = URL.createObjectURL(blob);
+      // 🎬 버퍼에 프레임 추가 (버퍼가 알아서 재생 관리)
+      videoBuffer.enqueue(data.timestamp, data.frame);
 
-        imgRef.current.src = imageUrl;
-
-        // 첫 프레임 수신 시 연결 상태 업데이트(한번만 실행됨)
-        if (!isConnected) {
-          setIsConnected(true);
-        }
+      // 첫 프레임 수신 시 연결 상태 업데이트
+      if (!isConnected) {
+        setIsConnected(true);
       }
     };
 
@@ -115,7 +136,10 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
     const currentImgRef = imgRef.current;
 
     return () => {
-      socket.off("video_frame", handleVideoFrame); // clean up
+      socket.off("video_frame", handleVideoFrame);
+      
+      // 🎬 비디오 버퍼 정리
+      videoBuffer.clear();
 
       // Blob URL 정리 (메모리 누수 방지)
       if (currentImgRef && currentImgRef.src.startsWith("blob:")) {
