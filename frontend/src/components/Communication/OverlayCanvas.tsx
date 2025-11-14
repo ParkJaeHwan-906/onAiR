@@ -112,7 +112,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
   };
 
   const throttledSendDrawMove = throttle(
-    (tool: String, x: number, y: number) => sendDrawingData({ event: "draw-move", tool, x, y }),
+    (tool: String, color: String, x: number, y: number) => sendDrawingData({ event: "draw-move", color, tool, x, y }),
     10
   );
 
@@ -270,7 +270,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
 
     if (tool === "eraser") {
       setEraserPos(pos);
-      throttledSendDrawMove(tool, pos.x, pos.y);
+      throttledSendDrawMove(tool, "eraser", pos.x, pos.y);
       return;
     }
 
@@ -283,7 +283,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
-      throttledSendDrawMove(tool, pos.x, pos.y);
+      throttledSendDrawMove(tool, penColor, pos.x, pos.y);
     }
     
     if (tool === "marker") {
