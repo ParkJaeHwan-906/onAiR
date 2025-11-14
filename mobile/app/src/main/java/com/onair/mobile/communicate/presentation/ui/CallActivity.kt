@@ -309,7 +309,7 @@ fun ArMarker(marker: MarkerInfo) {
 
     val scale by transition.animateFloat(
         initialValue = 1.0f,
-        targetValue = 1.6f,
+        targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -326,8 +326,8 @@ fun ArMarker(marker: MarkerInfo) {
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         drawCircle(
-            color = marker.color.copy(alpha = pulseAlpha),
-            radius = 1.0f,
+            color = marker.color,
+            radius = 40 * 1.0f,
             center = Offset(marker.x, marker.y)
         )
 

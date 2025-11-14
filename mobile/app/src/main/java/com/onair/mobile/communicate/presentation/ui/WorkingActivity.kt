@@ -47,6 +47,7 @@ import com.onair.mobile.assistant.data.task.SseTaskClient
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
+    private var aiOnDialog: AiOnDialog? = null
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
         val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
@@ -365,6 +366,8 @@ class WorkingActivity : AppCompatActivity() {
                     IntentType.AI_SUPPORTER -> {
                         Log.i(TAG, "✅ AI_SUPPORTER 분기 처리 시작")
 
+//                        showModal(intentType)
+
                         // UI 업데이트: "AI Supporter on" (1초간)
                         runOnUiThread {
                             binding.taskName.text = "AI Supporter on"
@@ -652,4 +655,14 @@ class WorkingActivity : AppCompatActivity() {
             sseTaskClient?.connect()
         }
     }
+    private fun showModal(status: IntentType) {
+        if (aiOnDialog?.isVisible == true) return
+        aiOnDialog = AiOnDialog(status)
+        aiOnDialog?.show(supportFragmentManager, "waiting call")
+    }
+    private fun hideModal() {
+        aiOnDialog?.dismiss()
+        aiOnDialog = null
+    }
+
 }
