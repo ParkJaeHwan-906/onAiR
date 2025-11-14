@@ -7,8 +7,15 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -17,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.ReusableComposition
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -36,7 +42,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.core.view.WindowCompat
@@ -59,6 +65,18 @@ data class TimedPath(
     val color: Color,
     val timestamp: Long = System.currentTimeMillis()
 )
+data class RawArMarker(
+    val idx: Int,
+    val info: MarkerInfo
+)
+data class MarkerInfo(
+    val id: Long,
+    val x: Float,
+    val y: Float,
+    val color: Color,
+    val pulseScale: Float = 1f,
+    val pulseOpacity: Float = 0.5f
+)
 class CallActivity : ComponentActivity() {
     private val viewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
@@ -71,7 +89,6 @@ class CallActivity : ComponentActivity() {
             application = application
         )
     }
-    private lateinit var composeView: ComposeView
 
     private val screenCaptureIntentLauncher =
         registerForActivityResult(
@@ -131,8 +148,24 @@ fun WhiteboardCanvas(
     var currentColor by remember { mutableStateOf(Color.White) }
     var pathTrigger by remember { mutableIntStateOf(0) }
 
+    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
 
     val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(100)
+            markers = markers.map { marker ->
+                val newScale = marker.pulseScale + 0.03f
+                val newOpacity = marker.pulseOpacity - 0.2f
+                if (newScale > 1.6f) {
+                    marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+                } else {
+                    marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.dataReceived.collect { jsonString ->
@@ -171,17 +204,6 @@ fun WhiteboardCanvas(
                         }
                     }
                 }
-// 앞에서부터 사라지기
-//                if (tool == "pen") {
-//                    when (eventType) {
-//                        "draw-start" -> {
-//                            points.add(Points(x = x, y = y, isStart = true, color = color))
-//                        }
-//                        "draw-move" -> {
-//                            points.add(Points(x = x, y = y, isStart = false, color = color))
-//                        }
-//                    }
-//                }
             } catch (e: Exception){
                 Log.e("json parsing", e.message.toString())
             }
@@ -211,7 +233,19 @@ fun WhiteboardCanvas(
     }
     Box(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val newMarker = MarkerInfo(
+                        id = System.currentTimeMillis(),
+                        x = offset.x,
+                        y = offset.y,
+                        color = Color.Red
+                    )
+                    markers = markers + newMarker
+                }
+            }
+        ,
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = modifier) {
@@ -220,32 +254,7 @@ fun WhiteboardCanvas(
             val shadowRadius = 15f
 
             drawRect(Color.Black)
-            //앞에서부터 사라지기 >>>>>
-//            points.forEach { point ->
-//
-//                if (point.isStart && !path.isEmpty) {
-//                    drawPath(
-//                        path = path,
-//                        color = currentColor ?: Color.White
-//                    )
-//                    path.reset()
-//                }
-//                currentColor = point.color
-//
-//                if (point.isStart) {
-//                    path.moveTo(point.x, point.y)
-//                } else {
-//                    path.lineTo(point.x, point.y)
-//                }
-//            }
-//            if (!path.isEmpty) {
-//                drawPath(
-//                    path = path,
-//                    color = currentColor ?: Color.White,
-//                    style = Stroke(width = 5F, cap = StrokeCap.Round, join = StrokeJoin.Round)
-//                )
-//            }
-            // <<<<
+
             val trigger = pathTrigger
             val now = System.currentTimeMillis()
             val fadeDurationMillis = 1000L
@@ -262,18 +271,8 @@ fun WhiteboardCanvas(
                         timedPath.color.copy(alpha = alpha).toArgb()
                     )
                     canvas.drawPath(timedPath.path, linePaint)
-//                    drawPath(
-//                        path = timedPath.path,
-//                        color = timedPath.color.copy(alpha = alpha),
-//                        style = Stroke(width = 5F, cap = StrokeCap.Round, join = StrokeJoin.Round)
-//                    )
                 }
                 currentPath?.let {
-//                    drawPath(
-//                        path = it,
-//                        color = currentColor ?: Color.White,
-//                        style = Stroke(width = 5F, cap = StrokeCap.Round, join = StrokeJoin.Round)
-//                    )
                     linePaint.color = Color.White
                     frameworkPaint.setShadowLayer(
                         shadowRadius, 0f, 0f,
@@ -282,8 +281,18 @@ fun WhiteboardCanvas(
                     canvas.drawPath(it, linePaint)
                 }
             }
-
-
+//            markers.forEach { marker ->
+//                ArMarker(marker = marker)
+////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
+////                drawCircle(
+////                    color = marker.color.copy(alpha = alpha),
+////                    radius = 100 * marker.pulseOpacity,
+////                    center = Offset(marker.x, marker.y)
+////                )
+//            }
+        }
+        markers.forEach { marker ->
+                ArMarker(marker = marker)
         }
         SmallFloatingActionButton(
             onClick = { (context as? Activity)?.finish() },
@@ -292,5 +301,41 @@ fun WhiteboardCanvas(
         ) {
             Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
         }
+    }
+}
+@Composable
+fun ArMarker(marker: MarkerInfo) {
+    val transition = rememberInfiniteTransition()
+
+    val scale by transition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    val pulseAlpha by transition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawCircle(
+            color = marker.color.copy(alpha = pulseAlpha),
+            radius = 1.0f,
+            center = Offset(marker.x, marker.y)
+        )
+
+        drawCircle(
+            color = marker.color.copy(alpha = pulseAlpha),
+            radius = 100 * scale,
+            center = Offset(marker.x, marker.y),
+            style = Stroke(width = 4f)
+        )
     }
 }

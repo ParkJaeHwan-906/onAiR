@@ -123,7 +123,7 @@ class CallViewModel(
 //                    options = ConnectOptions(autoSubscribe = false)
                 )
 
-                room.localParticipant.setMicrophoneEnabled(true)
+                room.localParticipant.setMicrophoneEnabled(false)
                 room.localParticipant.setCameraEnabled(true)
             } catch (e: Throwable) {
                 Log.e("connectToRoom", "연결 중 오류 발생"+e.message.toString())
