@@ -112,7 +112,8 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
   };
 
   const throttledSendDrawMove = throttle(
-    (tool: String, color: String, x: number, y: number) => sendDrawingData({ event: "draw-move", color, tool, x, y }),
+    (tool: String, color: String, x: number, y: number) =>
+      sendDrawingData({ event: "draw-move", color, tool, x, y }),
     10
   );
 
@@ -202,19 +203,16 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
 
     // 지우개
     if (tool == "eraser") {
-      setArMarkers((prev) =>
-        prev.filter(
-          (m) =>
-            Math.hypot(m.info.x - pos.x, m.info.y - pos.y) > m.info.size + 10
-        )
+      const target = arMarkers.find(
+        (m) =>
+          Math.hypot(m.info.x - pos.x, m.info.y - pos.y) <= m.info.size + 10
       );
-      sendDrawingData({
-        event: "draw-start",
-        tool,
-        color: penColor,
-        x: pos.x,
-        y: pos.y,
-      });
+
+      if (target) {
+        console.log("emit delete-marker -> idx:", target.idx);
+
+        socket.emit("delete-marker", { idx: target.idx });
+      }
       return;
     }
 
@@ -269,6 +267,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     if (!pos) return;
 
     if (tool === "eraser") {
+      if (!isDrawing.current) return;
       setEraserPos(pos);
       throttledSendDrawMove(tool, "eraser", pos.x, pos.y);
       return;
@@ -285,19 +284,6 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       });
       throttledSendDrawMove(tool, penColor, pos.x, pos.y);
     }
-    
-    if (tool === "marker") {
-      
-    }
-
-    // 도형 (주석처리)
-    // else if (startPos.current && currentShape) {
-    //   setCurrentShape({
-    //     ...currentShape,
-    //     endX: pos.x,
-    //     endY: pos.y,
-    //   });
-    // }
   };
 
   // ------------------------------- 마우스 클릭 끝 -------------------------------
