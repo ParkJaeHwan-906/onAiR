@@ -26,6 +26,7 @@ from app.services.llm_service import clarify_query
 from app.ar import motion_core
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
 from app.services.cv.device_monitor import background_device_detector
+from app.services.cv.device_monitor import background_device_detector
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
