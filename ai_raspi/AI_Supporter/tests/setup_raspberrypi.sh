@@ -8,7 +8,7 @@ echo "========================================"
 echo ""
 echo "📦 시스템 패키지 업데이트 중..."
 sudo apt-get update
-sudo apt-get install -y portaudio19-dev python3-pyaudio python3-venv
+sudo apt-get install -y python3-venv
 
 # 2. 오디오 권한 확인
 echo ""
@@ -25,18 +25,17 @@ fi
 echo ""
 echo "🎤 마이크 디바이스 확인 중..."
 python3 -c "
-import pyaudio
-p = pyaudio.PyAudio()
+import sounddevice as sd
+devices = sd.query_devices()
 print('사용 가능한 오디오 입력 디바이스:')
 found = False
-for i in range(p.get_device_count()):
-    info = p.get_device_info_by_index(i)
-    if info['maxInputChannels'] > 0:
-        print(f\"  [{i}] {info['name']} - {info['maxInputChannels']} channels\")
+for idx, dev in enumerate(devices):
+    if dev['max_input_channels'] > 0:
+        print(f\"  [{idx}] {dev['name']} - {dev['max_input_channels']} channels\")
         found = True
 if not found:
     print('  ⚠️  마이크가 감지되지 않았습니다.')
-p.terminate()
+    print('  💡 ALSA 레벨에서 확인: python3 check_alsa_devices.py')
 "
 
 # 4. Python 가상환경 생성
