@@ -163,7 +163,7 @@ async def analyze_gauge(
         }
 
     except YOLOServiceError as err:
-        logger.warning("[gauge] YOLO 서비스 오류: %s (%s)", err.code, err.message)
+        logger.warning(f"[gauge] YOLO 서비스 오류: {err.code} ({err.message})")
         return {
             "type": "gauge",
             "status": "error",

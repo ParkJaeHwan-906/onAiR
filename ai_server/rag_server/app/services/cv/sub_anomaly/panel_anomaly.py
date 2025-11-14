@@ -141,7 +141,7 @@ async def analyze_panel(
         }
 
     except YOLOServiceError as err:
-        logger.warning("[panel] YOLO 서비스 오류: %s (%s)", err.code, err.message)
+        logger.warning(f"[panel] YOLO 서비스 오류: {err.code} ({err.message})")
         return {"type": "panel", "status": "error", "message": err.message}
     except Exception as e:  # pragma: no cover
         logger.exception(f"[panel] 분석 중 오류: {e}")

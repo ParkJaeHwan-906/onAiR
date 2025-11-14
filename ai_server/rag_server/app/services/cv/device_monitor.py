@@ -52,6 +52,6 @@ async def background_device_detector():
                     logger.debug("[device_monitor] 장비 탐지 실패, 이전 상태 유지")
 
         except Exception as exc:  # pragma: no cover
-            logger.exception("❌ [device_monitor] 루프 오류: %s", exc)
+            logger.exception(f"❌ [device_monitor] 루프 오류: {exc}")
 
         await asyncio.sleep(2)
