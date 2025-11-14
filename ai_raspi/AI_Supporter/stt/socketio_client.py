@@ -118,6 +118,27 @@ class SocketIOClient:
                     mic.pause()
                     logger.info("🔇 STT 목적 음성 수집 중지 (Streaming STT 세션 종료)")
         
+        @self.sio.on("handle_audio_stream")
+        async def handle_handle_audio_stream(data):
+            """WebRTC 오디오 스트리밍 제어 이벤트 수신 (FastAPI 서버에서 전송)"""
+            logger.info("=" * 60)
+            logger.info(f"📩 라즈베리파이(Python 3.13): handle_audio_stream 이벤트 수신")
+            logger.info(f"   데이터: {data}")
+            logger.info("=" * 60)
+            
+            # 브리지 클라이언트를 통해 브리지 서버로 전달
+            if self.manager and hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                try:
+                    logger.info("📡 브리지 서버로 handle_audio_stream 이벤트 전달...")
+                    self.manager.bridge_client.sio.emit('handle_audio_stream', data)
+                    logger.info("=" * 60)
+                    logger.info("✅ 브리지 서버로 handle_audio_stream 이벤트 전달 완료")
+                    logger.info("=" * 60)
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward handle_audio_stream to bridge server: {e}")
+            else:
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+        
         @self.sio.on("start_streaming_stt")
         async def handle_start_streaming_stt(data):
             """Streaming STT 시작 신호 수신 (FastAPI 서버에서 전송)"""
