@@ -91,7 +91,7 @@ def init(K_in: np.ndarray | None = None, D_in: np.ndarray | None = None):
     size_acc = 1.0
     last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
 
-    print("✅ motion_core 초기화 완료")
+    print("✅ [motion_core] 초기화 완료")
 
 
 # ==========================================================
@@ -191,12 +191,15 @@ def process_frame(frame_bgr, sid=None):
         frame = frame_bgr
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    
+
     # --- 2) 첫 프레임: 특징점만 추출 ---
     if prev_gray is None:
+        print("[DEBUG] [STEP1] 첫 번째 프레임 - 특징점 추출")
         pts, method = extract_features(gray)
         if pts is None:
+            print("[DEBUG]  ▶ 특징점 0개 (None) → 빈 배열로 대체")
             pts = np.empty((0, 1, 2), dtype=np.float32)
+        print(f"[DEBUG]  ▶ 특징점 추출 방법: {method}, 개수: {len(pts)}")
 
         prev_gray = gray.copy()
         prev_pts = pts
@@ -213,6 +216,9 @@ def process_frame(frame_bgr, sid=None):
         }
 
     # --- 3) Optical Flow 추적 ---
+    print("[DEBUG] [STEP2] Optical Flow 추적 시작")
+    print(f"[DEBUG]  ▶ 입력 특징점 수: {0 if prev_pts is None else len(prev_pts)}")
+
     prev_valid, next_valid, _ = track_features(
         prev_gray,
         gray,
@@ -224,16 +230,42 @@ def process_frame(frame_bgr, sid=None):
         frame=frame,
     )
 
+    if prev_valid is None:
+        print("[DEBUG]  ▶ Optical Flow 결과: prev_valid=None")
+    else:
+        print(f"[DEBUG]  ▶ Optical Flow 유효 포인트 수: {len(prev_valid)}")
+
+    # ---- Optical Flow 실패 시: 즉시 재초기화 시도 ----
     if prev_valid is None or len(prev_valid) == 0:
-        # 특징점 상실 → 다음 프레임에서 재추출
+        print("[DEBUG]  ▶ Optical Flow 추적 실패 → 특징점 재추출 시도")
+        pts, method = extract_features(gray)
+
+        if pts is None or len(pts) == 0:
+            print("[DEBUG]  ▶ 재추출도 실패 → no_tracks 상태 반환")
+            prev_gray = gray.copy()
+            prev_pts = None
+            last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+            return {
+                "status": "no_tracks",
+                "tracked": 0,
+                "inliers": 0,
+                "ransac_ratio": 0.0,
+                "size": float(size_acc),
+                "flow_mean": (0.0, 0.0),
+                "pose_ok": False,
+            }
+
+        # 재추출 성공 → init 상태로 복귀
+        print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
         prev_gray = gray.copy()
-        prev_pts = None
+        prev_pts = pts
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+
         return {
-            "status": "no_tracks",
-            "tracked": 0,
-            "inliers": 0,
-            "ransac_ratio": 0.0,
+            "status": "init",
+            "tracked": int(len(pts)),
+            "inliers": int(len(pts)),
+            "ransac_ratio": 100.0 if len(pts) > 0 else 0.0,
             "size": float(size_acc),
             "flow_mean": (0.0, 0.0),
             "pose_ok": False,
@@ -242,8 +274,10 @@ def process_frame(frame_bgr, sid=None):
     # Optical Flow 평균 이동량
     flow_mean = compute_flow_mean(prev_valid, next_valid)
     last_flow_mean = flow_mean
+    print(f"[DEBUG]  ▶ Optical Flow 평균 이동량: dx={flow_mean[0]:.3f}, dy={flow_mean[1]:.3f}")
 
     # --- 4) RANSAC 필터링 ---
+    print("[DEBUG] [STEP3] RANSAC 필터링 시작")
     in_prev, in_next, F, mask = ransac_filter(
         prev_valid,
         next_valid,
@@ -259,8 +293,10 @@ def process_frame(frame_bgr, sid=None):
         inlier_count = int(np.count_nonzero(mask))
         total = len(mask)
         ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
+        print(f"[DEBUG]  ▶ RANSAC 결과: inliers={inlier_count}/{total} ({ransac_ratio:.1f}%)")
     else:
         # RANSAC 실패 시 전체를 inlier 로 사용
+        print("[DEBUG]  ▶ RANSAC 실패 → 모든 포인트를 inlier로 사용")
         in_prev = prev_valid
         in_next = next_valid
         inlier_count = len(in_prev)
@@ -268,9 +304,12 @@ def process_frame(frame_bgr, sid=None):
         ransac_ratio = 0.0
 
     # --- 5) Essential 기반 Motion 추정 (size = z proxy) ---
+    print("[DEBUG] [STEP4] Essential 기반 Motion 추정 시작")
     pose_ok = False
     try:
+        print(f"[DEBUG]  ▶ estimate_motion 입력 포인트 수: {len(in_prev)}")
         R, t, size_meas, stats = estimate_motion(in_prev, in_next, K)
+        print(f"[DEBUG]  ▶ estimate_motion 결과: pose_ok={stats.get('pose_ok', False)}, size_meas={size_meas}")
 
         if stats.get("pose_ok", False):
             pose_ok = True
@@ -281,13 +320,13 @@ def process_frame(frame_bgr, sid=None):
 
             # 전역 갱신
             size_acc = size_acc_local
+            print(f"[DEBUG]  ▶ size_acc 업데이트: {size_acc:.4f}")
 
             # 카메라 전체 pose 누적 (원하면 활용)
             R_total[:] = R @ R_total
             t_total[:] = t_total + (R_total @ t)
         else:
-            # 포즈 불안정 → size_acc 그대로 유지
-            pass
+            print("[DEBUG]  ▶ pose_ok=False → size_acc 유지")
 
     except Exception as e:
         # Essential 계산 실패해도 크래시 나지 않게 보호
@@ -295,16 +334,28 @@ def process_frame(frame_bgr, sid=None):
         pose_ok = False
 
     # --- 6) 다음 프레임용 특징점 준비 ---
+    print("[DEBUG] [STEP5] 다음 프레임용 특징점 준비")
     if len(in_next) < 300:
-        new_pts, _ = extract_features(gray)
+        print(f"[DEBUG]  ▶ in_next={len(in_next)} < 300 → 신규 특징점 추가 추출")
+        new_pts, method = extract_features(gray)
         if new_pts is not None and len(new_pts) > 0:
+            print(f"[DEBUG]  ▶ 신규 특징점 {len(new_pts)}개 추가 (method={method})")
             prev_pts = np.vstack([in_next, new_pts])
         else:
+            print("[DEBUG]  ▶ 신규 특징점 추출 실패 → in_next만 사용")
             prev_pts = in_next
     else:
+        print(f"[DEBUG]  ▶ in_next={len(in_next)} ≥ 300 → 그대로 사용")
         prev_pts = in_next
 
     prev_gray = gray.copy()
+
+    print(
+        f"[DEBUG] [RESULT] status=ok, "
+        f"tracked={len(prev_valid)}, inliers={inlier_count}, "
+        f"size={size_acc:.4f}, flow_mean=({flow_mean[0]:.3f},{flow_mean[1]:.3f}), "
+        f"pose_ok={pose_ok}"
+    )
 
     return {
         "status": "ok",
@@ -315,6 +366,8 @@ def process_frame(frame_bgr, sid=None):
         "flow_mean": (float(flow_mean[0]), float(flow_mean[1])),
         "pose_ok": pose_ok,
     }
+
+
 def compute_marker_size(z_scale):
     """
     Essential Matrix 기반 z_scale 값을 UI size(px)로 변환.

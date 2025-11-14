@@ -1542,7 +1542,7 @@ async def handle_video_frame(sid, data):
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    
+    print(f"[DEBUG] 모션 추정 결과 : {result}")
     if result["status"] not in ("ok", "init"):
         print("[DEBUG] 모션 추적에 실패했습니다.")
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
