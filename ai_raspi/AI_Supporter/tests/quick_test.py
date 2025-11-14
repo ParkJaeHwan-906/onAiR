@@ -18,7 +18,7 @@ def check_dependencies():
     """필수 패키지 확인"""
     print_section("📦 의존성 확인")
     
-    required = ['fastapi', 'uvicorn', 'pyaudio', 'sounddevice']
+    required = ['fastapi', 'uvicorn', 'sounddevice']
     missing = []
     
     for pkg in required:
