@@ -1541,8 +1541,9 @@ async def handle_video_frame(sid, data):
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
-    # --- ④ 모션 추정 및 AR 업데이트 (기존 로직 유지) ---
-    # result = await motion_core.process_frame(frame, sid=sid)
+    # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
+    result = motion_core.process_frame(frame)
+
     if result["status"] not in ("ok", "init"):
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
         await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
@@ -1569,7 +1570,7 @@ async def handle_video_frame(sid, data):
     #             }
     #         })
     #     ar_markers[:] = updated_markers
-        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    #     await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (디버그 표시용) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
