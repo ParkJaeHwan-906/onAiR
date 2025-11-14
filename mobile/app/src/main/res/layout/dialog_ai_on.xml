@@ -35,7 +35,6 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/ai_on_text"
                 android:id="@+id/ai_status_text"
                 android:layout_gravity="center"
                 android:paddingHorizontal="20dp"
