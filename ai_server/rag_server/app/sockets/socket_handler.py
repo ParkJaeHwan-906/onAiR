@@ -21,7 +21,7 @@ from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
-from app.services.cv_service import run_cv_model
+# from app.services.cv_service import run_cv_model
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 # Redis 의존성 제거됨 - 메모리 버퍼 사용
@@ -1535,11 +1535,11 @@ async def handle_video_frame(sid, data):
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
     # --- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
-    try:
-        from app.services.cv.frame_collector import add_frame
-        await add_frame(frame)
-    except Exception as e:
-        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
+    # try:
+    #     from app.services.cv.frame_collector import add_frame
+    #     await add_frame(frame)
+    # except Exception as e:
+    #     print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
