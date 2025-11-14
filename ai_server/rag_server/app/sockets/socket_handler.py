@@ -639,11 +639,16 @@ async def handle_intent_audio_completed(sid, data):
                 "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
             })
     elif intent == "OPERATOR":
-        # OPERATOR인 경우 별도 처리 없음 (모바일에서 WebRTC 연결 요청 처리)
+        # OPERATOR인 경우 WebRTC 오디오 스트리밍 목적으로 음성 수집 시작
         print("=" * 60)
         print(f"✅ [단계 8-1 완료] OPERATOR Intent 음성 파일 재생 완료 확인")
-        print("   OPERATOR는 CV 로직을 실행하지 않습니다.")
-        print("   모바일에서 WebRTC 연결 요청을 처리합니다.")
+        print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
+        print("=" * 60)
+        
+        # 라즈베리파이 별도 프로세스로 handle_audio_stream 이벤트 전송
+        # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
+        await broadcast_to("raspi", "handle_audio_stream", {"start": True})
+        print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료: WebRTC 오디오 스트리밍 시작")
         print("=" * 60)
     else:
         print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
@@ -1320,20 +1325,14 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
             print(f"   최종 답변 생성 완료 [session={session_id}]")
+            print("   모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
-            # 서비스 완료: 라즈베리파이로 서비스 종료 이벤트 전송 (wakeword 재활성화 신호)
-            print("=" * 60)
-            print(f"📤 [단계 13-11] 라즈베리파이로 서비스 완료 이벤트 전송 시작")
-            print("=" * 60)
-            await broadcast_to("raspi", "service_completed", {
-                "session_id": session_id,
-                "status": "completed"
-            })
-            print("=" * 60)
-            print(f"✅ [단계 13-11 완료] 라즈베리파이로 서비스 완료 이벤트 전송 완료")
-            print("=" * 60)
+            # 주의: 문서에 따르면 final_answer 전송 후 service_completed를 보내지 않고,
+            # audio_playback_completed (type: "final_answer") 수신 후에만
+            # mic_on과 wakeword_start_waiting을 전송합니다.
+            # 이는 handle_audio_playback_completed에서 처리됩니다.
             
     except Exception as e:
         print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
@@ -1665,13 +1664,25 @@ async def communication_close(sid, data):
     if sender_device == "unknown":
         return
 
-    print("[DEBUG] handle_audio_stream (start:False) emit")
-    # === raspi로 "handle_audio_stream" 이벤트 전송 ===
-    await broadcast_to("raspi", "handle_audio_stream", {"start" : False})
+    print("=" * 60)
+    print("📞 통신 종료: WebRTC 오디오 스트리밍 중지 및 STT 목적 음성 수집 재개")
+    print("=" * 60)
     
-    # === 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송 ===
+    # WebRTC 오디오 스트리밍 목적 음성 수집 중지
+    print("[DEBUG] handle_audio_stream (start:False) emit")
+    await broadcast_to("raspi", "handle_audio_stream", {"start": False})
+    
+    # STT 목적 음성 수집 재개
+    # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
+    print("[DEBUG] mic_on 이벤트 emit")
+    await broadcast_to("raspi", "mic_on", {})
+    
+    # Wakeword 감지 대기 시작
     print("[DEBUG] wakeword_start_waiting 이벤트 emit")
     await broadcast_to("raspi", "wakeword_start_waiting", {})
+    
+    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작")
+    print("=" * 60)
 
 
 # ========================================
