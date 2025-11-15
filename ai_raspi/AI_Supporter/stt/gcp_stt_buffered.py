@@ -281,9 +281,8 @@ class GcpBufferedStt:
         print("=" * 60)
         await wait_for_next_step_async("GCP STT 요청 전송 준비 완료", "3-1")
         
-        # STT 요청 직후 마이크 종료 (더 이상 음성 수집 불필요)
-        mic.pause()
-        print("🔇 마이크 OFF (STT 요청 전송 완료, Intent 분류 대기 중)")
+        # 주의: 마이크는 계속 ON 상태로 유지됨
+        # 버퍼링 STT 세션 종료는 FastAPI에서 stop_buffered_stt 이벤트로 처리됨
 
         def blocking_recognize():
             try:
@@ -332,7 +331,7 @@ class GcpBufferedStt:
                     print("✅ [단계 4 완료] 브리지 서버로 STT 결과 전송 완료")
                     print("=" * 60)
                     await wait_for_next_step_async("브리지 서버로 STT 결과 전송 완료", "4-완료")
-                    # 텍스트 전송 완료 → 마이크는 이미 OFF 상태 (Intent 분류 중간)
+                    # 텍스트 전송 완료 → 마이크는 계속 ON 상태로 유지됨
             else:
                 print("⚠️ STT 결과가 없습니다.")
                 print("   GCP STT API 응답이 비어있습니다. 오디오 데이터를 확인하세요.")
@@ -340,7 +339,7 @@ class GcpBufferedStt:
                     "type": "info",
                     "text": "음성이 인식되지 않았습니다."
                 })
-                # 마이크는 이미 OFF 상태
+                # 마이크는 계속 ON 상태로 유지됨
                 
         except Exception as e:
             error_msg = str(e)
@@ -349,5 +348,5 @@ class GcpBufferedStt:
                 "type": "error",
                 "text": error_msg
             })
-            # 마이크는 이미 OFF 상태
+            # 마이크는 계속 ON 상태로 유지됨
 
