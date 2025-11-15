@@ -41,7 +41,10 @@ public class SseManager {
         // SseEmitter timeout 발생
         emitter.onTimeout(emitter::complete);
         // SseEmitter error 발생
-        emitter.onError(throwable -> emitter.complete());
+        emitter.onError(throwable -> {
+            log.error("UnExpected SSE Disconnect [{}]", user.getUserInfo().getEmail());
+            emitter.complete();
+        });
 
         emitters.put(user.getUserAccountId(), emitter);
         companies.computeIfAbsent(user.getCompanyId(), k -> new ArrayList<>());
@@ -89,6 +92,7 @@ public class SseManager {
                     break;
                 }
             }
+            log.error("[SSE] Failed Send Message : [{}]", request);
             emitter.complete();
             retrySendMessage(disConnectedUserAccountId, request);
             throw new IllegalArgumentException("SSE 전송에 실패했습니다.");
@@ -220,6 +224,7 @@ public class SseManager {
             log.error("Cannot Found User");
             return;
         }
+        log.info("Message Stored : {}", request);
         pendingMessages.computeIfAbsent(userAccountId, k -> new ArrayList<>()).add(request);
     }
 
