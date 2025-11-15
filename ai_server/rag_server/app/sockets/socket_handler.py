@@ -450,8 +450,8 @@ async def handle_intent_audio_completed(sid, data):
             print("CV 결과:", cv_raw)
 
             modules = cv_raw.get("modules", [])
-            anomalies = cv_raw.get("anomalies", {}).get("results", {})
-            has_anomaly = cv_raw.get("anomalies", {}).get("status") == "anomaly_detected"
+            anomalies = cv_raw.get("anomalies", {})
+            has_anomaly = cv_raw.get("detected", False)
 
             cv_result = {
                 "detected": has_anomaly,
