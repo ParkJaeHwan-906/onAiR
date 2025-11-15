@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 # Redis 연결
-redis = redis.from_url("redis://localhost:6379", decode_responses=False)
+redis = redis.from_url("redis://redis:6379/0", decode_responses=False)
 
 # 전역 상태
 _cv_collection_active = False
