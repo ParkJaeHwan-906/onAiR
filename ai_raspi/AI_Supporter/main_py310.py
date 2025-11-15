@@ -21,7 +21,7 @@ from bridge.stt_bridge_server import (
     set_service_completed_callback, send_wakeword_detected, 
     set_wakeword_audio_completed_callback,
     set_wakeword_start_waiting_callback, set_mic_off_callback, set_mic_on_callback,
-    set_mic_release_callback, set_mic_acquire_callback
+    set_mic_release_callback, set_mic_acquire_callback, set_stop_buffered_stt_callback
 )
 from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
@@ -183,6 +183,9 @@ def run_stt_loop():
     buffered_stt = GcpBufferedStt()
     streaming_stt = GcpStreamingStt()
     
+    # 버퍼링 STT 실행 중 플래그 (중지 가능하도록)
+    buffered_stt_running = {"running": False}
+    
     async def broadcast(msg):
         """STT 결과를 브리지 서버(Socket.IO)로 전송"""
         send_stt_result(msg)
@@ -196,15 +199,17 @@ def run_stt_loop():
             if mode == "buffered":
                 # 버퍼링 방식: 3~5초 수집 후 일괄 처리 (분기처리 이전)
                 # 마이크는 이미 켜져있음
-                await buffered_stt.run(mic, broadcast)
-                # 버퍼링 STT 후 텍스트 전송 완료 → 마이크는 buffered_stt.run() 내부에서 OFF됨
+                buffered_stt_running["running"] = True
+                try:
+                    await buffered_stt.run(mic, broadcast)
+                finally:
+                    buffered_stt_running["running"] = False
+                # 버퍼링 STT 후 텍스트 전송 완료
+                # 주의: 마이크는 계속 ON 상태로 유지됨
             else:
                 # 스트리밍 방식: 실시간 인식 (분기처리 이후)
                 logger.info("🎤 스트리밍 모드 시작 (실시간 음성 인식)")
-                # 마이크 다시 활성화 (Intent 분류 중간에 OFF되었을 수 있음)
-                if not mic.is_active():
-                    mic.resume()
-                    logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
+                # 주의: 마이크는 항상 ON 상태로 유지되므로 별도의 활성화 불필요
                 
                 # 세션 ID 생성 (Clarify 세션용)
                 import uuid
@@ -268,6 +273,23 @@ def run_stt_loop():
     # 브리지 서버에 Streaming STT 시작 콜백 등록
     set_start_streaming_stt_callback(start_streaming_stt)
     
+    # 버퍼링 STT 세션 종료 콜백 등록
+    def handle_stop_buffered_stt(reason: str):
+        """버퍼링 STT 세션 종료 처리"""
+        logger.info("=" * 60)
+        logger.info(f"🛑 버퍼링 STT 세션 종료 신호 수신: reason={reason}")
+        logger.info("=" * 60)
+        
+        # 주의: 버퍼링 STT는 일회성으로 실행되며, 이미 완료되었을 가능성이 높음
+        # 마이크는 계속 ON 상태로 유지됨
+        if buffered_stt_running["running"]:
+            logger.info("⚠️ 버퍼링 STT가 실행 중입니다. 중지할 수 없습니다 (일회성 실행).")
+        else:
+            logger.info("ℹ️ 버퍼링 STT는 이미 완료되었거나 실행 중이 아닙니다.")
+        logger.info("✅ 버퍼링 STT 세션 종료 처리 완료 (마이크는 계속 ON 상태)")
+    
+    set_stop_buffered_stt_callback(handle_stop_buffered_stt)
+    
     # Wakeword 감지 대기 시작 콜백 등록
     def handle_wakeword_start_waiting():
         """Wakeword 감지 대기 시작 처리"""
@@ -315,7 +337,16 @@ def run_stt_loop():
         logger.info("🔇 마이크 장치 해제 (WebRTC 프로세스가 사용할 수 있음)")
         logger.info("   주의: 마이크는 하나이며, WebRTC 프로세스가 마이크를 점유합니다.")
         logger.info("=" * 60)
+        
+        # Wakeword 감지기 일시 중지 (마이크 해제 중에는 wakeword 감지 불가)
+        if wakeword_detector and wakeword_detector.interpreter is not None:
+            logger.info("🔇 Wakeword 감지기 일시 중지 (마이크 해제 중)")
+            wakeword_detector.pause()
+            mic.disable_wakeword_callback()  # Wakeword 콜백 비활성화
+            logger.info("✅ Wakeword 감지기 일시 중지 완료")
+        
         mic.release()  # 마이크 스트림을 완전히 닫아서 장치를 해제
+        logger.info("✅ 마이크 장치 해제 완료 (WebRTC 프로세스가 마이크를 사용할 수 있음)")
     
     set_mic_release_callback(handle_mic_release)
     
@@ -330,6 +361,19 @@ def run_stt_loop():
         # 재점유 후 논리적으로도 ON 상태로 설정
         if mic.is_paused:
             mic.resume()
+        
+        # 마이크 재점유 후 Wakeword 감지 대기 상태로 복귀
+        # 주의: communication_close 이벤트 후 wakeword_start_waiting 이벤트도 별도로 전송되지만,
+        # 여기서도 재활성화하여 안전하게 처리
+        if wakeword_detector and wakeword_detector.interpreter is not None:
+            logger.info("=" * 60)
+            logger.info("🔊 Wakeword 감지기 재활성화 (통신 종료 후 대기 상태 복귀)")
+            logger.info("=" * 60)
+            wakeword_detector.resume()  # Wakeword 감지기 재개
+            mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+            logger.info("✅ Wakeword 감지 대기 상태로 복귀 완료")
+        else:
+            logger.warning("⚠️ Wakeword 감지기가 초기화되지 않았습니다")
     
     set_mic_acquire_callback(handle_mic_acquire)
     
