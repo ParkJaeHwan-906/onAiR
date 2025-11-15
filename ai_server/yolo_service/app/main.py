@@ -61,6 +61,7 @@ async def shutdown():
 
 @app.post("/analyze")
 async def analyze(payload: dict):
+    device_detector_task.cancel()
     result = run_anomaly_detection()
     return result
 
