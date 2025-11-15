@@ -5,6 +5,7 @@ from loguru import logger
 
 from yolo_service.device_detector import start_device_detector
 from yolo_service.redis_client import get_device_state
+from yolo_service.anomaly import run_anomaly_detection
 
 app = FastAPI(title="YOLO Worker Service", version="1.0")
 
@@ -56,3 +57,9 @@ async def shutdown():
     """
     await stop_device_detector_task()
     logger.info("🛑 서버 종료: Device Detector 종료 완료")
+
+
+@app.post("/analyze")
+async def analyze(payload: dict):
+    result = run_anomaly_detection()
+    return result
