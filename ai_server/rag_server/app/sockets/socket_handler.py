@@ -1565,7 +1565,7 @@ async def handle_video_frame(sid, data):
             # Optical Flow + Essential 기반 업데이트
             u_new, v_new, z_size = motion_core.update_marker_position(u, v)
             # 화면 상에서 크게/작게 보이는 사이즈 반영
-            base_size = 30.0
+            base_size = 10.0
             size_factor = 20.0
             size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
             updated.append({
