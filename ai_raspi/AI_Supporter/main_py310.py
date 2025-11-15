@@ -170,20 +170,34 @@ def run_stt_loop():
     # 주의: loop가 정의된 후에 등록해야 함
     def start_streaming_stt(session_id: str):
         """브리지 서버를 통해 받은 Streaming STT 시작 명령 처리"""
-        logger.info(f"📥 Streaming STT 시작 명령 수신: session_id={session_id}")
+        logger.info("=" * 60)
+        logger.info(f"📥 [라즈베리파이] Streaming STT 시작 명령 수신")
+        logger.info(f"   Session ID: {session_id}")
+        logger.info("=" * 60)
         
         # 마이크 활성화 (버퍼링 STT 후 OFF되었을 수 있음)
         if not mic.is_active():
             mic.resume()
+            logger.info("=" * 60)
+            logger.info(f"🔊 [라즈베리파이] 마이크 활성화 (Streaming STT 시작)")
+            logger.info("=" * 60)
         
         # Streaming STT 세션 시작 (별도 태스크로 실행)
         async def run_streaming():
             try:
-                logger.info(f"🎤 Streaming STT 세션 시작: session_id={session_id}")
+                logger.info("=" * 60)
+                logger.info(f"🎤 [라즈베리파이] Streaming STT 세션 시작")
+                logger.info(f"   Session ID: {session_id}")
+                logger.info(f"   💡 사용자가 말하면 침묵 1.5초 후 한 문장으로 인식하여 FastAPI로 전송")
+                logger.info("=" * 60)
                 await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                logger.info("✅ Streaming STT 세션 종료")
+                logger.info("=" * 60)
+                logger.info(f"✅ [라즈베리파이] Streaming STT 세션 종료")
+                logger.info("=" * 60)
             except Exception as e:
-                logger.error(f"❌ Streaming STT 세션 오류: {e}")
+                logger.error("=" * 60)
+                logger.error(f"❌ [라즈베리파이] Streaming STT 세션 오류: {e}")
+                logger.error("=" * 60)
         
         # 이벤트 루프에서 실행
         loop.call_soon_threadsafe(lambda: asyncio.create_task(run_streaming()))
