@@ -81,6 +81,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
+        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -451,9 +452,23 @@ class WorkingActivity : AppCompatActivity() {
                     binding.taskName.text = message
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
+                
+                // CV 탐지 실패 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
+                mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
+                    Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
+                    val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 실패 처리 실패: ${e.message}")
                 e.printStackTrace()
+                // 오류 발생 시에도 재생 완료 이벤트 전송 시도
+                socketIoSttClient.sendCvDetectionFailedAudioCompleted()
             }
         }
     }
