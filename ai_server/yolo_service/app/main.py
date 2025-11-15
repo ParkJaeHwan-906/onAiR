@@ -76,5 +76,13 @@ async def start_device():
 
 @app.post("/device/stop")
 async def stop_device():
-    await stop_device_detector_task()
+    global device_detector_task
+    async with detector_lock:
+        if device_detector_task:
+            device_detector_task.cancel()
+            try:
+                await device_detector_task
+            except asyncio.CancelledError:
+                pass
+            device_detector_task = None
     return {"status": "stopped"}
