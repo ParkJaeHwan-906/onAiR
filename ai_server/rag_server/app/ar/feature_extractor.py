@@ -210,5 +210,5 @@ def extract_features(
             grid_cols=8,
             max_per_cell=max_corners // (6 * 8),
         )
-        print(f"⚠️ Low contrast (Var={lap_var:.2f}) → ORB-Uniform ({len(points)} pts)")
+        # print(f"⚠️ Low contrast (Var={lap_var:.2f}) → ORB-Uniform ({len(points)} pts)")
         return points, "ORB-Uniform"
