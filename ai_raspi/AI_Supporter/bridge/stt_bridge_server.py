@@ -48,6 +48,39 @@ def disconnect(sid):
     connected_clients.discard(sid)
     logger.info(f"❌ 브리지 클라이언트 연결 종료: {sid} (남은 연결: {len(connected_clients)}개)")
 
+# 버퍼링 STT 세션 종료 명령 수신 (Python 3.13 → Python 3.10)
+stop_buffered_stt_callback = None
+
+def set_stop_buffered_stt_callback(callback):
+    """버퍼링 STT 세션 종료 콜백 설정 (Python 3.10에서 호출)"""
+    global stop_buffered_stt_callback
+    stop_buffered_stt_callback = callback
+    logger.info("✅ 버퍼링 STT 세션 종료 콜백이 등록되었습니다")
+
+@sio.on('stop_buffered_stt')
+def handle_stop_buffered_stt(sid, data):
+    """Python 3.13에서 버퍼링 STT 세션 종료 명령 수신"""
+    reason = data.get("reason", "unknown")
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: 버퍼링 STT 세션 종료 명령 수신")
+    logger.info(f"   Reason: {reason}")
+    logger.info("=" * 60)
+    
+    if stop_buffered_stt_callback:
+        try:
+            stop_buffered_stt_callback(reason)
+            logger.info("=" * 60)
+            logger.info(f"✅ 브리지 서버: 버퍼링 STT 세션 종료 명령 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ 브리지 서버: 버퍼링 STT 세션 종료 명령 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 버퍼링 STT 세션 종료 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
 # Streaming STT 시작 명령 수신 (Python 3.13 → Python 3.10)
 @sio.on('start_streaming_stt')
 def handle_start_streaming_stt(sid, data):

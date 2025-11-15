@@ -108,15 +108,31 @@ class SocketIOClient:
             logger.info("=" * 60)
             
             # manager를 통해 종료 신호 전달
+            # 주의: 마이크는 계속 ON 상태로 유지되며, Streaming STT 세션만 종료됨
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
-                
-                # STT 목적 음성 수집 중지 (통신 요청 수락 등으로 인한 중지 시)
-                # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-                mic = self.manager.get_mic_stream()
-                if mic and mic.is_active():
-                    mic.pause()
-                    logger.info("🔇 STT 목적 음성 수집 중지 (Streaming STT 세션 종료)")
+                logger.info("✅ Streaming STT 세션 종료 신호 전달 완료 (마이크는 계속 ON 상태)")
+        
+        @self.sio.on("stop_buffered_stt")
+        async def handle_stop_buffered_stt(data):
+            """버퍼링 STT 세션 종료 신호 수신"""
+            reason = data.get("reason", "unknown")
+            logger.info("=" * 60)
+            logger.info(f"🛑 버퍼링 STT 세션 종료 신호 수신: reason={reason}")
+            logger.info("=" * 60)
+            
+            # 주의: 버퍼링 STT는 일회성으로 실행되며, 이미 완료되었을 가능성이 높음
+            # 마이크는 계속 ON 상태로 유지됨
+            # 버퍼링 STT가 실행 중이면 중지할 수 있도록 브리지 서버로 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                try:
+                    logger.info("📡 브리지 서버로 버퍼링 STT 세션 종료 신호 전달...")
+                    self.manager.bridge_client.sio.emit('stop_buffered_stt', data)
+                    logger.info("✅ 브리지 서버로 버퍼링 STT 세션 종료 신호 전달 완료")
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward stop_buffered_stt to bridge server: {e}")
+            else:
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
         
         @self.sio.on("handle_audio_stream")
         async def handle_handle_audio_stream(data):
