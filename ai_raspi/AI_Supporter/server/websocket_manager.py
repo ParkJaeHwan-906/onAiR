@@ -17,6 +17,7 @@ class ConnectionManager:
         self.streaming_stt_instance = None  # Streaming STT 인스턴스 참조
         self.stop_streaming_sessions = set()  # 종료할 세션 ID 집합
         self.service_completed = False  # 서비스 완료 플래그 (GPT-4o 답변 생성 및 TTS 완료 후 True)
+        self.audio_streamer = None  # WebRTC 오디오 스트리머 인스턴스
 
     def set_socketio_client(self, socketio_client):
         """
@@ -149,3 +150,17 @@ class ConnectionManager:
         """서비스 완료 플래그 리셋 (다음 서비스 대기)"""
         self.service_completed = False
         logger.info("🔄 서비스 완료 플래그 리셋")
+    
+    def set_audio_streamer(self, audio_streamer):
+        """
+        오디오 스트리머 인스턴스를 등록합니다.
+        
+        Args:
+            audio_streamer: AudioStreamer 인스턴스
+        """
+        self.audio_streamer = audio_streamer
+        logger.info("✅ 오디오 스트리머가 등록되었습니다.")
+    
+    def get_audio_streamer(self):
+        """등록된 오디오 스트리머 인스턴스를 반환합니다."""
+        return self.audio_streamer

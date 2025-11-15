@@ -8,6 +8,7 @@ import com.onair.mobile.communicate.data.WorkingRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class WorkingViewModel(
     private val taskRepository: TaskRepository,
@@ -39,6 +40,12 @@ class WorkingViewModel(
                     Log.e("response call", e.message.toString())
                 }
             }
+        }
+    }
+    fun getLiveKitToken(data: JSONObject) {
+        val acceptConnect = data.getBoolean("acceptConnection")
+        if (acceptConnect) {
+            _liveKitToken.value = data.getString("accessToken")
         }
     }
 }
