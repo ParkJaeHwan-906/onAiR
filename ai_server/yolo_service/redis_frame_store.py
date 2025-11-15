@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 
-redis = redis.from_url("redis://localhost:6379", decode_responses=False)
+redis = redis.from_url("redis://redis:6379", decode_responses=False)
 
 
 async def get_latest_frame():
