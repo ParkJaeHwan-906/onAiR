@@ -234,14 +234,14 @@ def process_frame(frame_bgr, sid=None):
 
     # ---- Optical Flow 실패 시: 즉시 재초기화 시도 ----
     if prev_valid is None or len(prev_valid) == 0:
+        # print("[DEBUG]  ▶ Optical Flow 추적 실패 → 특징점 재추출 시도")
         pts, method = extract_features(gray)
 
-        # 재추출도 실패
         if pts is None or len(pts) == 0:
+            # print("[DEBUG]  ▶ 재추출도 실패 → no_tracks 상태 반환")
             prev_gray = gray.copy()
             prev_pts = None
             last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
-
             return {
                 "status": "no_tracks",
                 "tracked": 0,
@@ -252,12 +252,8 @@ def process_frame(frame_bgr, sid=None):
                 "pose_ok": False,
             }
 
-        # 재추출 성공
-        pts = np.asarray(pts, dtype=np.float32)
-        if pts.shape[-1] > 2:
-            pts = pts[..., :2]
-        pts = pts.reshape(-1, 1, 2)
-
+        # 재추출 성공 → init 상태로 복귀
+        # print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
         prev_gray = gray.copy()
         prev_pts = pts
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
@@ -266,46 +262,19 @@ def process_frame(frame_bgr, sid=None):
             "status": "init",
             "tracked": int(len(pts)),
             "inliers": int(len(pts)),
-            "ransac_ratio": 100.0,
+            "ransac_ratio": 100.0 if len(pts) > 0 else 0.0,
             "size": float(size_acc),
             "flow_mean": (0.0, 0.0),
             "pose_ok": False,
         }
-
 
     # Optical Flow 평균 이동량
     flow_mean = compute_flow_mean(prev_valid, next_valid)
     last_flow_mean = flow_mean
     # print(f"[DEBUG]  ▶ Optical Flow 평균 이동량: dx={flow_mean[0]:.3f}, dy={flow_mean[1]:.3f}")
 
-    # # --- 4) RANSAC 필터링 ---
-    # # print("[DEBUG] [STEP3] RANSAC 필터링 시작")
-    # in_prev, in_next, F, mask = ransac_filter(
-    #     prev_valid,
-    #     next_valid,
-    #     threshold=1.0,
-    #     prob=0.999,
-    #     frame_shape=frame.shape,
-    #     grid_size=(8, 6),
-    #     dir_cos_thresh=0.5,
-    #     sigma_scale=2.0,
-    # )
-
-    # if mask is not None:
-    #     inlier_count = int(np.count_nonzero(mask))
-    #     total = len(mask)
-    #     ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
-    #     # print(f"[DEBUG]  ▶ RANSAC 결과: inliers={inlier_count}/{total} ({ransac_ratio:.1f}%)")
-    # else:
-    #     # RANSAC 실패 시 전체를 inlier 로 사용
-    #     # print("[DEBUG]  ▶ RANSAC 실패 → 모든 포인트를 inlier로 사용")
-    #     in_prev = prev_valid
-    #     in_next = next_valid
-    #     inlier_count = len(in_prev)
-    #     total = len(in_prev)
-    #     ransac_ratio = 0.0
-
     # --- 4) RANSAC 필터링 ---
+    # print("[DEBUG] [STEP3] RANSAC 필터링 시작")
     in_prev, in_next, F, mask = ransac_filter(
         prev_valid,
         next_valid,
@@ -317,24 +286,19 @@ def process_frame(frame_bgr, sid=None):
         sigma_scale=2.0,
     )
 
-    # ---------- 안정판 RANSAC 처리 ----------
-    # 1) mask가 None → RANSAC 모델 자체가 추정 실패
-    # 2) mask가 있어도 inlier < 5 → Essential 계산 불가능
-    if mask is None or np.count_nonzero(mask) < 5:
-        # RANSAC 실패 → 전체 유효 포인트 사용
-        in_prev = prev_valid
-        in_next = next_valid
-        mask = np.ones((len(in_prev),), dtype=np.uint8)
-
-        inlier_count = len(in_prev)
-        total = len(in_prev)
-        ransac_ratio = 100.0 if total > 0 else 0.0
-
-    else:
-        # 정상적으로 inliers 존재
+    if mask is not None:
         inlier_count = int(np.count_nonzero(mask))
         total = len(mask)
         ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
+        # print(f"[DEBUG]  ▶ RANSAC 결과: inliers={inlier_count}/{total} ({ransac_ratio:.1f}%)")
+    else:
+        # RANSAC 실패 시 전체를 inlier 로 사용
+        # print("[DEBUG]  ▶ RANSAC 실패 → 모든 포인트를 inlier로 사용")
+        in_prev = prev_valid
+        in_next = next_valid
+        inlier_count = len(in_prev)
+        total = len(in_prev)
+        ransac_ratio = 0.0
 
     # --- 5) Essential 기반 Motion 추정 (size = z proxy) ---
     # print("[DEBUG] [STEP4] Essential 기반 Motion 추정 시작")
@@ -369,33 +333,17 @@ def process_frame(frame_bgr, sid=None):
     # --- 6) 다음 프레임용 특징점 준비 ---
     # print("[DEBUG] [STEP5] 다음 프레임용 특징점 준비")
     if len(in_next) < 300:
+        # print(f"[DEBUG]  ▶ in_next={len(in_next)} < 300 → 신규 특징점 추가 추출")
         new_pts, method = extract_features(gray)
-
         if new_pts is not None and len(new_pts) > 0:
-            # -------- new_pts 안정화 ---------
-            new_pts = np.asarray(new_pts, dtype=np.float32)
-
-            # (K,2) → (K,1,2)
-            if new_pts.ndim == 2:
-                new_pts = new_pts.reshape(-1, 1, 2)
-
-            # (K,1,2,x) → (K,1,2)
-            if new_pts.shape[-1] > 2:
-                new_pts = new_pts[..., :2]
-
-            # -------- vstack 전에 in_next도 안전화 --------
-            in_next_fixed = np.asarray(in_next, dtype=np.float32).reshape(-1, 1, 2)
-
-            # -------- 최종 병합 --------
-            prev_pts = np.vstack([in_next_fixed, new_pts])
-
+            # print(f"[DEBUG]  ▶ 신규 특징점 {len(new_pts)}개 추가 (method={method})")
+            prev_pts = np.vstack([in_next, new_pts])
         else:
-            # 신규 특징점 없음 → 그냥 in_next 유지
-            prev_pts = in_next.reshape(-1, 1, 2).astype(np.float32)
-
+            # print("[DEBUG]  ▶ 신규 특징점 추출 실패 → in_next만 사용")
+            prev_pts = in_next
     else:
-        # 충분한 inlier가 유지 → 그대로 사용
-        prev_pts = in_next.reshape(-1, 1, 2).astype(np.float32)
+        # print(f"[DEBUG]  ▶ in_next={len(in_next)} ≥ 300 → 그대로 사용")
+        prev_pts = in_next
 
     prev_gray = gray.copy()
 
