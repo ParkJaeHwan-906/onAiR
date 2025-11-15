@@ -1,49 +1,31 @@
 """
 제어판 이상 탐지 (LED + 온도 OCR)
-- sharpness 기반으로 가장 선명한 프레임 1장 선택
-- Module YOLO → panel ROI 추출
-- Panel YOLO → LED / 온도 분석
+- run_anomaly_detection()에서 선택한 sharpest_frame과 module_boxes를 전달받음
+- module_boxes에서 panel 박스를 찾아 ROI 추출
+- panel_best.pt로 LED / 온도 분석
 """
 
-import os
 import cv2
 import pytesseract
 import numpy as np
-from pathlib import Path
 from loguru import logger
 from ultralytics import YOLO
 
-
-# ------------------------------
-# 모델 경로
-# ------------------------------
-
-MODULE_MODEL_PATH = "/app/ai_server/yolo_service/models/module_best.pt"
+# panel 전용 YOLO 모델 경로
 PANEL_MODEL_PATH = "/app/ai_server/yolo_service/models/panel_best.pt"
 
-# ------------------------------
-# 하이퍼파라미터
-# ------------------------------
-MIN_SHARPNESS = 70.0     # 흐린 프레임 필터링 기준
-
-_module_model = None      # lazy-loaded
-_panel_model = None
-
+_panel_model = None  # lazy-loaded
 
 # ------------------------------
-# 유틸 함수 (sharpness, LED 색상, OCR)
+# 유틸 함수 (LED 색상, OCR)
 # ------------------------------
-def calc_sharpness(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    return cv2.Laplacian(gray, cv2.CV_64F).var()
-
-
 def led_color_status(roi):
+    """LED ROI에서 주요 색상 추출"""
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
     red_mask = cv2.bitwise_or(
         cv2.inRange(hsv, (0, 100, 100), (10, 255, 255)),
-        cv2.inRange(hsv, (170, 100, 100), (180, 255, 255))
+        cv2.inRange(hsv, (170, 100, 100), (180, 255, 255)),
     )
     green_mask = cv2.inRange(hsv, (40, 40, 80), (90, 255, 255))
     yellow_mask = cv2.inRange(hsv, (15, 100, 100), (40, 255, 255))
@@ -56,6 +38,7 @@ def led_color_status(roi):
 
 
 def ocr_temperature(roi):
+    """온도 숫자 OCR"""
     roi = cv2.resize(roi, None, fx=3.0, fy=3.0)
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
@@ -70,83 +53,72 @@ def ocr_temperature(roi):
 
 
 # ------------------------------
-# lazy YOLO loader
+# panel YOLO lazy loader
 # ------------------------------
-def _load_models_once():
-    global _module_model, _panel_model
-
-    if _module_model is None:
-        _module_model = YOLO(str(MODULE_MODEL_PATH))
-        _module_model.fuse()
-        logger.info("📦 panel_anomaly: Module YOLO 로드 완료")
-
+def _load_panel_model_once():
+    global _panel_model
     if _panel_model is None:
         _panel_model = YOLO(str(PANEL_MODEL_PATH))
-        logger.info("📦 panel_anomaly: Panel YOLO 로드 완료")
+        logger.info("panel_anomaly: Panel YOLO 로드 완료")
 
 
 # ------------------------------
 # 제어판 이상 탐지 메인 함수
 # ------------------------------
-async def analyze_panel(frames, module_info=None):
+async def analyze_panel(sharpest_frame, best_score, module_boxes):
     """
-    panel_anomaly는 run_anomaly_detection()에서 module_info로
-    이미 panel box를 전달받을 수도 있음.
-    
-    frames: 프레임 리스트
-    module_info: {"label": "panel", "confidence": ..., "box": [...] }
+    제어판 이상 탐지
+    sharpest_frame: run_anomaly_detection()에서 선택한 가장 선명한 프레임 (np.ndarray)
+    best_score: 해당 프레임의 sharpness 값 (float)
+    module_boxes: module_best YOLO 결과 리스트
+                  [{"label": str, "confidence": float, "xyxy": (x1, y1, x2, y2)}, ...]
     """
-
     try:
-        if not frames:
-            return {"type": "panel", "status": "unknown", "message": "입력 프레임 없음"}
+        if sharpest_frame is None:
+            return {
+                "type": "panel",
+                "status": "unknown",
+                "message": "입력 프레임 없음",
+            }
 
-        # ------------------------------
-        # 1. sharpest frame 선택
-        # ------------------------------
-        sharp_list = [(f, calc_sharpness(f)) for f in frames]
-        sharp_list = [(f, s) for f, s in sharp_list if s > MIN_SHARPNESS]
+        if not module_boxes:
+            return {
+                "type": "panel",
+                "status": "not_found",
+                "sharpness": best_score,
+                "message": "모듈 탐지 결과 없음",
+            }
 
-        if not sharp_list:
-            return {"type": "panel", "status": "low_confidence", "message": "모든 프레임이 흐림"}
+        # 1. module_boxes에서 panel 박스 찾기
+        panel_boxes = [
+            b for b in module_boxes if "panel" in b["label"].lower()
+        ]
 
-        sharpest_frame, best_score = max(sharp_list, key=lambda x: x[1])
+        if not panel_boxes:
+            return {
+                "type": "panel",
+                "status": "not_found",
+                "sharpness": best_score,
+                "message": "제어판 모듈 미검출",
+            }
 
-        # ------------------------------
-        # 2. 모델 로드
-        # ------------------------------
-        _load_models_once()
-
-        # ------------------------------
-        # 3. panel ROI 추출
-        # ------------------------------
-        if module_info and "box" in module_info:
-            # run_anomaly_detection()에서 전달된 panel box 우선 사용
-            x1, y1, x2, y2 = map(int, module_info["box"])
-            panel_roi = sharpest_frame[y1:y2, x1:x2]
-        else:
-            # module YOLO로 box 탐지
-            mod_results = _module_model.predict(sharpest_frame, conf=0.5, verbose=False)
-            panel_roi = None
-            for r in mod_results:
-                for box in r.boxes:
-                    cls = _module_model.names[int(box.cls)]
-                    if "panel" in cls.lower():
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        panel_roi = sharpest_frame[y1:y2, x1:x2]
-                        break
+        # 가장 confidence 높은 panel 박스 사용
+        panel_box = max(panel_boxes, key=lambda b: b.get("confidence", 0.0))
+        x1, y1, x2, y2 = map(int, panel_box["xyxy"])
+        panel_roi = sharpest_frame[y1:y2, x1:x2]
 
         if panel_roi is None or panel_roi.size == 0:
             return {
                 "type": "panel",
                 "status": "not_found",
                 "sharpness": best_score,
-                "message": "제어판 미검출"
+                "message": "제어판 ROI가 비어 있음",
             }
 
-        # ------------------------------
-        # 4. Panel YOLO로 LED/온도 분석
-        # ------------------------------
+        # 2. panel 전용 YOLO 로드
+        _load_panel_model_once()
+
+        # 3. Panel YOLO로 LED/온도 분석
         panel_results = _panel_model.predict(panel_roi, conf=0.5, verbose=False)
 
         leds = {}
@@ -168,7 +140,7 @@ async def analyze_panel(frames, module_info=None):
                     leds[cls] = {
                         "status": "on" if is_on else "off",
                         "color": color,
-                        "confidence": conf
+                        "confidence": conf,
                     }
 
                 elif "temp" in cls_lower or "temperature" in cls_lower:
@@ -176,9 +148,7 @@ async def analyze_panel(frames, module_info=None):
                     if t is not None:
                         temp = t
 
-        # ------------------------------
-        # 5. 이상 판단
-        # ------------------------------
+        # 4. 이상 판단
         has_anomaly = False
 
         if temp is not None and (temp > 80 or temp < 5):
@@ -196,10 +166,14 @@ async def analyze_panel(frames, module_info=None):
             "message": "이상 탐지됨" if has_anomaly else "정상",
             "results": {
                 "leds": leds,
-                "temp": temp
-            }
+                "temp": temp,
+            },
         }
 
     except Exception as e:
         logger.exception(f"[panel] 분석 오류: {e}")
-        return {"type": "panel", "status": "error", "message": str(e)}
+        return {
+            "type": "panel",
+            "status": "error",
+            "message": str(e),
+        }
