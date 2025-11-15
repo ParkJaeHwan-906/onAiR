@@ -66,6 +66,18 @@ def run_socketio_client():
     manager.bridge_client = bridge_client  # manager에 브리지 클라이언트 등록
     logger.info("✅ 브리지 클라이언트 초기화 완료")
     
+    # WebRTC 오디오 스트리머 초기화 (Python 3.13에서 실행)
+    try:
+        from audio.audio_streamer import AudioStreamer
+        audio_streamer = AudioStreamer(socketio_client=socketio_client)
+        manager.set_audio_streamer(audio_streamer)
+        logger.info("✅ 오디오 스트리머 초기화 완료")
+    except ImportError as e:
+        logger.warning(f"⚠️ 오디오 스트리머를 사용할 수 없습니다: {e}")
+        logger.warning("   sounddevice 라이브러리가 필요합니다.")
+    except Exception as e:
+        logger.warning(f"⚠️ 오디오 스트리머 초기화 실패: {e}")
+    
     async def main_async():
         """비동기 메인 함수"""
         # Socket.IO 서버 연결

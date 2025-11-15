@@ -43,7 +43,6 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
-import com.onair.mobile.assistant.data.task.SseTaskClient
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -67,7 +66,6 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var ttsRepository: TtsRepositoryImpl
     private lateinit var mediaPlayerController: MediaPlayerController
     private lateinit var raspberryPiControlRepository: RaspberryPiControlRepository
-    private var sseTaskClient: SseTaskClient? = null
     private lateinit var tokenManager: TokenManager
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
@@ -144,7 +142,6 @@ class WorkingActivity : AppCompatActivity() {
         super.onDestroy()
         // 리소스 정리
         Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리")
-        sseTaskClient?.disconnect()
         if (::socketIoSttClient.isInitialized) {
             socketIoSttClient.disconnect()
         }
@@ -179,6 +176,7 @@ class WorkingActivity : AppCompatActivity() {
                         Log.d("SSE_working", event.toString())
                         when (event) {
                             is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
                             else -> Unit
                         }
                     }
@@ -282,9 +280,7 @@ class WorkingActivity : AppCompatActivity() {
             onFinalAnswer = { finalAnswer ->
                 handleFinalAnswerFromSocket(finalAnswer)
             },
-            onStartSseConnection = { text ->
-                handleStartSseConnection(text)
-            },
+            onStartSseConnection = null,  // 로그인 시 이미 /api/sse/stream에 연결되어 있으므로 무시
             onCvDetectionFailed = { cvFailed ->
                 handleCvDetectionFailed(cvFailed)
             },
@@ -338,17 +334,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     // MainActivitySttServer의 핵심 메서드들 (간소화 버전)
-    private fun handleStartSseConnection(text: String?) {
-        Log.i(TAG, "📡 SSE 연결 시작 요청 수신: text=${text?.take(50)}...")
-        lifecycleScope.launch {
-            try {
-                connectSseTaskStream()
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ SSE 연결 시작 요청 처리 실패: ${e.message}")
-                e.printStackTrace()
-            }
-        }
-    }
+    // handleStartSseConnection 제거: 로그인 시 이미 /api/sse/stream에 연결되어 있음
 
     private fun handleIntentResult(intentResult: IntentResultDto) {
         Log.i(TAG, "📩 Intent 결과 수신: text=${intentResult.text}, intent=${intentResult.intent}, confidence=${intentResult.confidence}")
@@ -406,17 +392,25 @@ class WorkingActivity : AppCompatActivity() {
                             } else {
                                 Log.e(TAG, "❌ 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 실패")
                             }
-                        }
-
-                        lifecycleScope.launch {
-                            val accessToken = authRepository.getAccessToken()
-                            if (accessToken.isNotEmpty()) {
-                                val receiverAccountId = 0L
-                                val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                                if (success) {
-                                    Log.i(TAG, "✅ WebRTC 연결 요청 완료")
+                            
+                            // intent_audio_completed 이벤트 전송 직후 WebRTC 요청 API 호출
+                            lifecycleScope.launch {
+                                val accessToken = authRepository.getAccessToken()
+                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+                                
+                                if (accessToken.isNotEmpty()) {
+                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                                    val receiverAccountId = -1L
+                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+                                    
+                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                                    if (success) {
+                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                                    } else {
+                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                                    }
                                 } else {
-                                    Log.e(TAG, "❌ WebRTC 연결 요청 실패")
+                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
                                 }
                             }
                         }
@@ -616,40 +610,5 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-    private fun connectSseTaskStream() {
-        lifecycleScope.launch {
-            val accessToken = authRepository.getAccessToken()
-            if (accessToken.isEmpty()) {
-                Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-                startActivity(Intent(this@WorkingActivity, LoginActivity::class.java))
-                finish()
-                return@launch
-            }
-
-            sseTaskClient?.disconnect()
-
-            sseTaskClient = SseTaskClient(
-                baseUrl = SPRING_SERVER_URL,
-                accessToken = accessToken,
-                onConnect = {
-                    Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
-                },
-                onTaskAssign = { event ->
-                    Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
-                },
-                onTaskCancel = { event ->
-                    Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
-                },
-                onTaskEnd = { event ->
-                    Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
-                },
-                onError = { error ->
-                    Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
-                    error.printStackTrace()
-                }
-            )
-
-            sseTaskClient?.connect()
-        }
-    }
+    // connectSseTaskStream 제거: 로그인 시 이미 /api/sse/stream에 연결되어 있음
 }
