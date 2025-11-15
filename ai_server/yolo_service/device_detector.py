@@ -57,7 +57,8 @@ async def device_detector_loop():
             # top-1 detection
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
-
+            logger.debug(f"[device_monitor] 감지된 디바이스: {label} ({confidence:.2f})")
+            
             # 1) confidence threshold 검사
             if confidence < CONF_THRESHOLD:
                 stable_counter = 0
