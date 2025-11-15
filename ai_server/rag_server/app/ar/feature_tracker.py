@@ -181,8 +181,8 @@ def track_features(
     # ---------- 프레임 수준 large motion 감지 & 저장 (디버그용) ----------
     if np.count_nonzero(valid) >= 5:
         mean_flow = _mean_flow(prev_pts[valid], next_pts[valid])
-        if mean_flow > large_motion_px:
-            # print(f"⚠️ Large motion detected: mean={mean_flow:.1f}px (> {large_motion_px})")
+        # if mean_flow > large_motion_px:
+        #     print(f"⚠️ Large motion detected: mean={mean_flow:.1f}px (> {large_motion_px})")
         # ---------- 유효 포인트 결과 ----------
     if np.count_nonzero(valid) < 5:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
