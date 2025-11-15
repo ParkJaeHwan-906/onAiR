@@ -1657,8 +1657,11 @@ async def accept_communication(sid, data):
     
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
-        print("⚠️ 알 수 없는 디바이스에서 accept_communication 이벤트 수신 - 무시")
-        return
+        print("⚠️ 알 수 없는 디바이스에서 accept_communication 이벤트 수신")
+        print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+        print("   ⚠️ 이벤트는 처리하되, device_map에 등록되지 않은 디바이스입니다.")
+        # device_map에 등록되지 않아도 이벤트는 처리 (웹에서 전송될 수 있음)
 
     print("=" * 60)
     print("📞 [통신 요청 수락] AI_Supporter/OPERATOR 기능 중지 및 WebRTC 오디오 스트리밍 시작")
