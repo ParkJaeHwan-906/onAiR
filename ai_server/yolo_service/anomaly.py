@@ -11,16 +11,13 @@ from ai_server.yolo_service.panel_anomaly import analyze_panel
 MODULE_MODEL_PATH = "/app/ai_server/yolo_service/models/module_best.pt"
 _module_model = None
 
-# threshold 설정
 MIN_SHARPNESS = 70.0
 MIN_CONF = 0.70
 MIN_BOX_AREA = 15000
 
-# optical-flow 분석용 전체 프레임 수
-TOTAL_FRAMES = 20      
+TOTAL_FRAMES = 30
+SHARPNESS_FRAMES = 10
 
-# sharpness 비교용 후보 프레임 수
-SHARPNESS_FRAMES = 10  
 
 def load_module_model():
     global _module_model
@@ -30,13 +27,12 @@ def load_module_model():
         logger.info("module_best YOLO 로드 완료")
     return _module_model
 
-# 프레임 선명도 측정
+
 def calc_sharpness(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return cv2.Laplacian(gray, cv2.CV_64F).var()
 
 
-# YOLO 박스 구조 통일
 def format_boxes(results, names):
     boxes = []
     for r in results:
@@ -66,6 +62,7 @@ async def run_anomaly_detection():
             "device_type": None,
             "modules": [],
             "anomalies": {},
+            "messages": [],
             "message": "디바이스 상태가 설정되지 않음"
         }
 
@@ -76,9 +73,9 @@ async def run_anomaly_detection():
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
+            "messages": [],
             "message": "AHU가 아님"
         }
-
 
     # 2) 프레임 획득
     frames = await get_cv_buffer_frames(n=TOTAL_FRAMES)
@@ -88,10 +85,11 @@ async def run_anomaly_detection():
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
+            "messages": [],
             "message": "프레임 없음"
         }
 
-    # 3) sharpness 기반 best frame 선택
+    # 3) sharpest frame 선택
     sharp_frames = frames[:SHARPNESS_FRAMES]
 
     sharp_list = [(f, calc_sharpness(f)) for f in sharp_frames]
@@ -104,14 +102,11 @@ async def run_anomaly_detection():
 
     logger.info(f"📸 sharpest sharpness={best_score:.1f}")
 
-
-
-    # 4) YOLO module_best 로 모듈 탐지 (한 번만)
+    # 4) YOLO 실행
     module_model = load_module_model()
     yolo_res = module_model.predict(sharpest_frame, conf=MIN_CONF, verbose=False)
     raw_boxes = format_boxes(yolo_res, module_model.names)
 
-    # 5) threshold 기반 박스 정제
     module_boxes = [
         b for b in raw_boxes
         if b["confidence"] >= MIN_CONF and b["area"] >= MIN_BOX_AREA
@@ -119,10 +114,10 @@ async def run_anomaly_detection():
 
     logger.info(f"📦 module boxes={module_boxes}")
 
-    # 6) anomaly 모듈 실행
+    # 5) anomaly 모듈 실행
     fan_belt_result = await analyze_fan_belt(frames, sharpest_frame, best_score, module_boxes)
     gauge_result = await analyze_gauge(sharpest_frame, best_score, module_boxes)
-    panel_result = await analyze_panel(frames, sharpest_frame, best_score, module_boxes)
+    panel_result = await analyze_panel(sharpest_frame, best_score, module_boxes)
 
     anomalies = {
         "fan_belt": fan_belt_result,
@@ -130,16 +125,29 @@ async def run_anomaly_detection():
         "panel": panel_result
     }
 
-    # 7) anomaly 여부 판단
+    # 6) 모듈 메시지 수집
+    collected_messages = []
+    for key, res in anomalies.items():
+        if isinstance(res, dict) and res.get("message"):
+            collected_messages.append(res["message"])
+
+    # 7) anomaly 여부 판정
     def is_abnormal(res):
         return res and res.get("status") == "anomaly"
 
     has_anomaly = any(is_abnormal(v) for v in anomalies.values())
+
+    final_message = (
+        " / ".join(collected_messages)
+        if collected_messages else
+        ("이상 탐지됨" if has_anomaly else "정상")
+    )
 
     return {
         "detected": has_anomaly,
         "device_type": device_label,
         "modules": [{"label": b["label"], "confidence": b["confidence"]} for b in module_boxes],
         "anomalies": anomalies,
-        "message": "이상 탐지됨" if has_anomaly else "정상"
+        "messages": collected_messages,     # 모든 모듈 메시지 배열
+        "message": final_message            # 최종 자연 문장
     }
