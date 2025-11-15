@@ -176,14 +176,6 @@ def init_socketio():
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
     
-    # # CV device_monitor 백그라운드 태스크 시작
-    # try:
-    #     asyncio.create_task(background_device_detector())
-    #     # print("✅ CV device_monitor 백그라운드 태스크 시작됨")
-    # except Exception as e:
-    #     print(f"⚠️ CV device_monitor 백그라운드 태스크 시작 실패: {e}")
-    
-    # print("✅ Socket.IO 이벤트 핸들러 등록 완료")
 
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -1538,12 +1530,12 @@ async def handle_video_frame(sid, data):
 
     # print(f"🖼️ Frame received [{ts_str}] from {sender_device}")  
 
-    # --- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
-    # try:
-    #     from app.services.cv.frame_collector import add_frame
-    #     await add_frame(frame)
-    # except Exception as e:
-    #     print(f"⚠️ 프레임 스트림 추가 오류: {e}")
+    #--- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
+    try:
+        from app.services.frame_collector import add_frame
+        await add_frame(frame)
+    except Exception as e:
+        print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
@@ -1565,7 +1557,7 @@ async def handle_video_frame(sid, data):
             # Optical Flow + Essential 기반 업데이트
             u_new, v_new, z_size = motion_core.update_marker_position(u, v)
             # 화면 상에서 크게/작게 보이는 사이즈 반영
-            base_size = 30.0
+            base_size = 10.0
             size_factor = 20.0
             size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
             updated.append({

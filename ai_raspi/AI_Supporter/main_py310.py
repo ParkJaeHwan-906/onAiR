@@ -34,53 +34,12 @@ logger = logging.getLogger(__name__)
 auto_mode_enabled = False
 
 # ========================================
-# 🐛 단계별 수동 실행 모드 (디버깅용) - 동기 버전
+# 디버그 모드 제거됨 - 자동 진행
 # ========================================
 
 def wait_for_next_step_sync(step_name: str, step_number: str = ""):
-    """
-    단계별 수동 실행 모드: 다음 단계로 진행하기 전 대기 (동기 버전)
-    
-    Args:
-        step_name: 현재 단계 이름 (로그 출력용)
-        step_number: 단계 번호 (예: "1", "2", "3-1")
-    
-    사용법:
-        - DEBUG_STEP_BY_STEP=True일 때: Enter 키 입력 대기
-        - DEBUG_STEP_BY_STEP=False일 때: 바로 진행 (0.5초 딜레이만)
-    """
-    if not settings.DEBUG_STEP_BY_STEP:
-        # 자동 모드: 짧은 딜레이만
-        time.sleep(0.5)
-        return
-    
-    # 자동 모드가 활성화되었으면 바로 진행
-    global auto_mode_enabled
-    if auto_mode_enabled:
-        time.sleep(0.2)
-        return
-    
-    # 수동 모드: 키보드 입력(Enter) 대기
-    logger.info("=" * 80)
-    logger.info(f"⏸️  [단계 {step_number}] {step_name} 완료")
-    logger.info(f"   다음 단계로 진행하려면 Enter 키를 누르세요")
-    logger.info(f"   (또는 자동 모드를 원하면 'auto'를 입력하고 Enter)")
-    logger.info("=" * 80)
-    
-    try:
-        user_input = input("   👆 Enter 키를 눌러 다음 단계 진행... ")
-        if user_input.strip().lower() == "auto":
-            logger.info(f"✅ 자동 모드 활성화 - 이후 단계는 자동 진행됩니다")
-            auto_mode_enabled = True
-        else:
-            logger.info(f"✅ 다음 단계 진행: {step_name}")
-    except (EOFError, KeyboardInterrupt):
-        # 입력이 불가능한 환경(백그라운드 실행 등)에서는 자동 진행
-        logger.info(f"⚠️ 키보드 입력을 받을 수 없습니다. 자동으로 다음 단계 진행")
-    except Exception as e:
-        logger.warning(f"⚠️ 입력 처리 오류: {e}, 자동으로 다음 단계 진행")
-    
-    logger.info("=" * 80)
+    """디버그 모드 제거됨 - 즉시 진행"""
+    pass
 
 
 def run_stt_loop():
@@ -97,7 +56,6 @@ def run_stt_loop():
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     """
     # 브리지 서버를 별도 스레드에서 실행
-    # 주의: 포트 바인딩 실패 시 예외가 발생하므로 try-except로 처리
     bridge_thread = None
     try:
         bridge_thread = threading.Thread(
@@ -106,8 +64,7 @@ def run_stt_loop():
             daemon=True
         )
         bridge_thread.start()
-        logger.info("🚀 STT 브리지 서버 시작 (포트 5050)")
-        logger.info("   Python 3.13에서 브리지 클라이언트가 연결할 수 있습니다.")
+        logger.info("🚀 브리지 서버 시작 (포트 5050)")
         
         # 브리지 서버가 시작될 때까지 잠시 대기
         time.sleep(1)
@@ -130,75 +87,13 @@ def run_stt_loop():
         logger.error("=" * 60)
         raise RuntimeError(f"브리지 서버를 시작할 수 없습니다: {e}") from e
     
-    # WebRTC 프로세스 확인 및 오디오 스트리밍 상태 확인
-    logger.info("🔍 WebRTC 프로세스 및 오디오 스트리밍 상태 확인 중...")
-    
-    # WebRTC 프로세스(socket_manager.py) 실행 중인지 확인
-    # 주의: WebRTC 프로세스는 OPERATOR Intent나 통신 요청 시에만 오디오 스트리밍을 시작함
-    # 평소에는 실행 중이어도 마이크를 점유하지 않아야 함
+    # WebRTC 프로세스 확인 (마이크 점유 확인)
     webrtc_pids = []
     try:
         result = subprocess.run(['pgrep', '-f', 'socket_manager.py'], capture_output=True, text=True)
         if result.returncode == 0:
             pids = result.stdout.strip().split('\n')
             webrtc_pids = [pid for pid in pids if pid]
-            if webrtc_pids:
-                logger.info(f"ℹ️ WebRTC 프로세스(socket_manager.py)가 실행 중입니다 (PID: {', '.join(webrtc_pids)})")
-                logger.info("   평소에는 마이크를 점유하지 않아야 합니다.")
-                
-                # WebRTC 프로세스가 마이크를 점유하고 있는지 확인
-                # lsof를 사용하여 /dev/snd 디바이스를 사용 중인 프로세스 확인
-                mic_occupied = False
-                try:
-                    # 방법 1: lsof로 /dev/snd 확인
-                    lsof_result = subprocess.run(['lsof', '/dev/snd/*'], capture_output=True, text=True, timeout=2)
-                    if lsof_result.returncode == 0 and lsof_result.stdout:
-                        # WebRTC 프로세스 PID가 lsof 결과에 있는지 확인
-                        for pid in webrtc_pids:
-                            if pid in lsof_result.stdout:
-                                mic_occupied = True
-                                logger.warning("=" * 60)
-                                logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 마이크를 점유하고 있습니다!")
-                                logger.warning("   FastAPI 서버에서 'handle_audio_stream' (start: False) 이벤트를 전송하여")
-                                logger.warning("   WebRTC 오디오 스트리밍을 중지해야 합니다.")
-                                logger.warning("=" * 60)
-                                logger.warning("   임시 해결 방법: WebRTC 프로세스 재시작")
-                                logger.warning(f"   $ pkill -f socket_manager.py")
-                                logger.warning("=" * 60)
-                    
-                    # 방법 2: fuser로 /dev/snd 확인
-                    if not mic_occupied:
-                        try:
-                            fuser_result = subprocess.run(['fuser', '/dev/snd/*'], capture_output=True, text=True, timeout=2)
-                            if fuser_result.returncode == 0 and fuser_result.stdout:
-                                for pid in webrtc_pids:
-                                    if pid in fuser_result.stdout:
-                                        mic_occupied = True
-                                        logger.warning("=" * 60)
-                                        logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 마이크를 점유하고 있습니다! (fuser 확인)")
-                                        logger.warning("=" * 60)
-                        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-                            pass
-                    
-                    # 방법 3: lsof로 audio 관련 프로세스 확인
-                    if not mic_occupied:
-                        try:
-                            lsof_audio = subprocess.run(['lsof', '|', 'grep', '-i', 'audio'], 
-                                                      shell=True, capture_output=True, text=True, timeout=2)
-                            if lsof_audio.returncode == 0 and lsof_audio.stdout:
-                                for pid in webrtc_pids:
-                                    if pid in lsof_audio.stdout:
-                                        mic_occupied = True
-                                        logger.warning("=" * 60)
-                                        logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 오디오 장치를 사용 중입니다!")
-                                        logger.warning("=" * 60)
-                        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-                            pass
-                            
-                except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-                    logger.debug(f"마이크 점유 확인 실패 (무시 가능): {e}")
-                
-                time.sleep(0.5)  # 잠시 대기
     except Exception as e:
         logger.warning(f"⚠️ WebRTC 프로세스 확인 실패: {e}")
     
@@ -206,32 +101,19 @@ def run_stt_loop():
     # MicStream.start()는 자동으로 장치를 선택하고 마이크를 열며,
     # WebRTC 프로세스가 마이크를 점유하고 있으면 적절한 오류 메시지를 출력합니다.
     
-    # 마이크 초기화 및 시작 (항상 켜져있음)
+    # 마이크 초기화 및 시작
     mic = MicStream()
-    
-    # Wakeword 감지기 초기화 (마이크 시작 전에 초기화)
     wakeword_detector = init_wakeword_detector()
     
-    # MicStream에 Wakeword 감지기 콜백 연결
     if wakeword_detector and wakeword_detector.interpreter is not None:
         mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
-        logger.info("✅ Wakeword 감지기가 MicStream에 연결되었습니다")
     
-    # 마이크 시작 (마이크 점유 확인 및 오류 처리 포함)
-    # 주의: WebRTC 프로세스는 평소에 마이크를 점유하지 않으므로,
-    # 마이크를 열 때 문제가 발생하면 MicStream.start()에서 적절한 오류 메시지가 출력됩니다.
     try:
-        mic.start()  # 스트림 생성 및 시작 (마이크 ON)
-        logger.info("🔊 마이크 ON (항상 활성 상태)")
+        mic.start()
+        logger.info("🔊 마이크 ON")
     except Exception as e:
-        logger.error("❌ 마이크 시작 실패")
-        logger.error("   해결 방법:")
-        logger.error("   1. WebRTC 오디오 스트리밍이 실행 중인지 확인:")
-        logger.error("      FastAPI 서버에서 'handle_audio_stream' (start: False) 이벤트 전송")
-        logger.error("   2. 다른 프로세스가 마이크를 사용 중인지 확인: $ lsof | grep -i audio")
-        logger.error("   3. ALSA 레벨에서 마이크 확인: $ arecord -l")
-        logger.error("   4. WebRTC 프로세스 중지 (최후의 수단): $ pkill -f socket_manager.py")
-        raise RuntimeError("마이크를 사용할 수 없습니다. WebRTC 오디오 스트리밍이나 다른 프로세스가 마이크를 점유하고 있을 수 있습니다.") from e
+        logger.error(f"❌ 마이크 시작 실패: {e}")
+        raise RuntimeError("마이크를 사용할 수 없습니다.") from e
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
@@ -288,38 +170,20 @@ def run_stt_loop():
     # 주의: loop가 정의된 후에 등록해야 함
     def start_streaming_stt(session_id: str):
         """브리지 서버를 통해 받은 Streaming STT 시작 명령 처리"""
-        logger.info("=" * 60)
-        logger.info(f"📥 [단계 12-3] Python 3.10: Streaming STT 시작 명령 수신")
-        logger.info(f"   Session ID: {session_id}")
-        logger.info("=" * 60)
-        wait_for_next_step_sync("Streaming STT 시작 명령 수신", "12-3")
+        logger.info(f"📥 Streaming STT 시작 명령 수신: session_id={session_id}")
         
         # 마이크 활성화 (버퍼링 STT 후 OFF되었을 수 있음)
         if not mic.is_active():
-            logger.info("=" * 60)
-            logger.info("🔊 [단계 12-4] 마이크 활성화 시작")
-            logger.info("=" * 60)
             mic.resume()
-            logger.info("✅ [단계 12-4 완료] 마이크 ON (Streaming STT 시작)")
-            wait_for_next_step_sync("마이크 활성화 완료", "12-4")
-        else:
-            logger.info("ℹ️ 마이크가 이미 활성화되어 있습니다.")
         
         # Streaming STT 세션 시작 (별도 태스크로 실행)
         async def run_streaming():
             try:
-                logger.info("=" * 60)
-                logger.info(f"🎤 [단계 12-5] 실시간 Streaming STT 세션 시작")
-                logger.info(f"   Session ID: {session_id}")
-                logger.info("=" * 60)
+                logger.info(f"🎤 Streaming STT 세션 시작: session_id={session_id}")
                 await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                logger.info("=" * 60)
-                logger.info("🟢 [단계 12-5 완료] Streaming STT 세션 종료")
-                logger.info("=" * 60)
+                logger.info("✅ Streaming STT 세션 종료")
             except Exception as e:
-                logger.error("=" * 60)
-                logger.error(f"❌ [단계 12-5 실패] Streaming STT 세션 오류: {e}")
-                logger.error("=" * 60)
+                logger.error(f"❌ Streaming STT 세션 오류: {e}")
         
         # 이벤트 루프에서 실행
         loop.call_soon_threadsafe(lambda: asyncio.create_task(run_streaming()))
@@ -330,32 +194,17 @@ def run_stt_loop():
     # 버퍼링 STT 세션 종료 콜백 등록
     def handle_stop_buffered_stt(reason: str):
         """버퍼링 STT 세션 종료 처리"""
-        logger.info("=" * 60)
-        logger.info(f"🛑 버퍼링 STT 세션 종료 신호 수신: reason={reason}")
-        logger.info("=" * 60)
-        
-        # 주의: 버퍼링 STT는 일회성으로 실행되며, 이미 완료되었을 가능성이 높음
-        # 마이크는 계속 ON 상태로 유지됨
-        if buffered_stt_running["running"]:
-            logger.info("⚠️ 버퍼링 STT가 실행 중입니다. 중지할 수 없습니다 (일회성 실행).")
-        else:
-            logger.info("ℹ️ 버퍼링 STT는 이미 완료되었거나 실행 중이 아닙니다.")
-        logger.info("✅ 버퍼링 STT 세션 종료 처리 완료 (마이크는 계속 ON 상태)")
+        logger.info(f"🛑 버퍼링 STT 세션 종료 신호 수신: {reason}")
     
     set_stop_buffered_stt_callback(handle_stop_buffered_stt)
     
     # Wakeword 감지 대기 시작 콜백 등록
     def handle_wakeword_start_waiting():
         """Wakeword 감지 대기 시작 처리"""
-        logger.info("=" * 60)
-        logger.info("🔊 Wakeword 감지 대기 시작")
-        logger.info("=" * 60)
         if wakeword_detector and wakeword_detector.interpreter is not None:
             wakeword_detector.resume()
             mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-            logger.info("✅ Wakeword 감지기 재활성화 완료")
-        else:
-            logger.warning("⚠️ Wakeword 감지기가 초기화되지 않았습니다")
+            logger.info("✅ Wakeword 감지 대기 시작")
     
     set_wakeword_start_waiting_callback(handle_wakeword_start_waiting)
     
@@ -431,54 +280,73 @@ def run_stt_loop():
     
     set_mic_acquire_callback(handle_mic_acquire)
     
-    logger.info("🎧 STT 루프 대기 시작 (마이크 ON, Wakeword 감지 중)")
-    logger.info("📌 Python 3.10에서 실행 중 (wakeword + STT)")
+    logger.info("🎧 STT 루프 시작 (Wakeword 감지 대기 중)")
     
     try:
         while True:
             # ① 대기 상태 (마이크 ON, Wakeword 감지 중)
-            logger.info("=" * 60)
-            logger.info("⏳ [단계 1] Wakeword 감지 대기 중...")
-            logger.info("=" * 60)
+            logger.info("⏳ Wakeword 감지 대기 중...")
             
             # ② Wakeword 감지 대기
             if wait_for_wakeword():
-                logger.info("=" * 60)
-                logger.info("✅ [단계 2] Wakeword 감지 완료!")
-                logger.info("=" * 60)
-                wait_for_next_step_sync("Wakeword 감지 완료", "2")
-                time.sleep(0.5)  # 0.5초 대기 (단계 구분)
+                logger.info("✅ Wakeword 감지 완료")
                 
                 # Wakeword 감지 후 즉시 wakeword 콜백 비활성화 (STT 세션 중 wakeword 감지 중지)
-                logger.info("🔇 Wakeword 감지기 일시 중지 (STT 세션 중)")
                 mic.disable_wakeword_callback()
-                # Wakeword 감지기 자체도 일시 중지
                 if wakeword_detector:
                     wakeword_detector.pause()
                 
                 # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
-                logger.info("=" * 60)
-                logger.info("📤 [단계 2-1] 브리지 서버로 Wakeword 감지 이벤트 전송")
-                logger.info("=" * 60)
-                send_wakeword_detected()
-                wait_for_next_step_sync("Wakeword 감지 이벤트 전송 완료", "2-1")
+                logger.info("📤 Wakeword 감지 이벤트 전송")
+                
+                # FastAPI 연결 상태 확인 및 전송 시도
+                wakeword_sent_successfully = False
+                max_retry_attempts = 3
+                retry_delay = 2  # 재시도 간격 (초)
+                
+                for attempt in range(max_retry_attempts):
+                    try:
+                        # 브리지 클라이언트 연결 상태 확인 (Python 3.13 프로세스 확인)
+                        # 주의: 브리지 서버는 Python 3.10에서 실행되므로 항상 연결 가능
+                        # 하지만 브리지 클라이언트(Python 3.13)가 FastAPI에 연결되어 있는지 확인 필요
+                        result = send_wakeword_detected()
+                        
+                        if result:
+                            # 브리지 클라이언트로 전송 성공
+                            wakeword_sent_successfully = True
+                            logger.info("✅ Wakeword 감지 이벤트 전송 완료")
+                            break
+                        else:
+                            # 브리지 클라이언트가 연결되지 않음 (Python 3.13 프로세스가 실행되지 않음)
+                            if attempt < max_retry_attempts - 1:
+                                logger.warning(f"⚠️ 브리지 클라이언트 연결 실패, {retry_delay}초 후 재시도 ({attempt + 1}/{max_retry_attempts})")
+                                time.sleep(retry_delay)
+                            else:
+                                logger.error("❌ 브리지 클라이언트 연결 실패 (최대 재시도 횟수 초과)")
+                    except Exception as e:
+                        if attempt < max_retry_attempts - 1:
+                            logger.warning(f"⚠️ Wakeword 이벤트 전송 실패, {retry_delay}초 후 재시도 ({attempt + 1}/{max_retry_attempts}): {e}")
+                            time.sleep(retry_delay)
+                        else:
+                            logger.error(f"❌ Wakeword 이벤트 전송 실패 (최대 재시도 횟수 초과): {e}")
+                
+                # FastAPI 연결 실패 시 wakeword 대기 상태로 복귀
+                if not wakeword_sent_successfully:
+                    logger.warning("⚠️ FastAPI 서버 연결 실패 - Wakeword 대기 상태로 복귀")
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                    continue
                 
                 # 모바일에서 음성 파일 재생 완료 대기
-                logger.info("=" * 60)
-                logger.info("⏳ [단계 2-2] 모바일 음성 파일 재생 완료 대기 중...")
-                logger.info("   💡 모바일에서 'onAir 서비스를 시작합니다. 어떤 것을 도와드릴까요?' 재생 중...")
-                logger.info("=" * 60)
+                logger.info("⏳ 모바일 음성 파일 재생 완료 대기 중...")
                 
                 wakeword_audio_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
                 
                 def on_wakeword_audio_completed():
                     """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
                     wakeword_audio_completed_flag["completed"] = True
-                    logger.info("=" * 60)
                     logger.info("✅ 모바일 음성 파일 재생 완료 신호 수신")
-                    logger.info("=" * 60)
-                    # 디버그 모드에서 Enter 키 대기 (콜백 내부에서 호출)
-                    wait_for_next_step_sync("모바일 음성 파일 재생 완료", "2-2")
                 
                 # 모바일 음성 파일 재생 완료 콜백 등록
                 set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
@@ -490,42 +358,26 @@ def run_stt_loop():
                     time.sleep(0.5)  # 0.5초마다 확인
                 
                 if not wakeword_audio_completed_flag["completed"]:
-                    logger.warning("=" * 60)
-                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다. 타임아웃으로 버퍼링 STT 시작")
-                    logger.warning("=" * 60)
-                    # 타임아웃 시에도 디버그 모드에서 Enter 키 대기
-                    wait_for_next_step_sync("모바일 음성 파일 재생 완료 (타임아웃)", "2-2")
-                else:
-                    logger.info("=" * 60)
-                    logger.info("✅ [단계 2-2 완료] 모바일 음성 파일 재생 완료")
-                    logger.info("=" * 60)
-                    # 콜백 내부에서 이미 wait_for_next_step_sync 호출됨
+                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호 미수신 - Wakeword 대기 상태로 복귀")
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                    continue
                 
-                logger.info("=" * 60)
-                logger.info("🎤 [단계 3] 버퍼링 STT 세션 시작")
-                logger.info("=" * 60)
-                wait_for_next_step_sync("버퍼링 STT 세션 시작", "3")
+                # 모바일 음성 파일 재생 완료 → 버퍼링 STT 세션 시작
+                logger.info("🎤 버퍼링 STT 세션 시작")
                 
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
                 loop.run_until_complete(stt_session())
-                
-                logger.info("=" * 60)
-                logger.info("🟢 [단계 완료] STT 세션 종료, 서비스 완료 대기 중...")
-                logger.info("=" * 60)
-                wait_for_next_step_sync("STT 세션 종료", "완료")
+                logger.info("✅ STT 세션 완료")
                 
                 # 서비스 완료 대기 (FastAPI 서버에서 GPT-4o 답변 생성 및 TTS 완료 후 service_completed 이벤트 수신)
-                # 주의: Python 3.10과 Python 3.13은 별도 프로세스이므로 메모리를 공유할 수 없음
-                # 따라서 브리지 서버를 통해 서비스 완료 신호를 받아야 함
-                logger.info("⏳ 서비스 완료 대기 중... (GPT-4o 답변 생성 및 TTS 완료 후 wakeword 재활성화)")
-                service_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                service_completed_flag = {"completed": False}
                 
                 def on_service_completed():
                     """서비스 완료 콜백 (브리지 서버를 통해 호출됨)"""
                     service_completed_flag["completed"] = True
-                    logger.info("=" * 60)
-                    logger.info("✅ 서비스 완료 신호 수신: GPT-4o 답변 생성 및 TTS 완료")
-                    logger.info("=" * 60)
+                    logger.info("✅ 서비스 완료 신호 수신")
                 
                 # 서비스 완료 콜백 등록
                 set_service_completed_callback(on_service_completed)
@@ -537,20 +389,14 @@ def run_stt_loop():
                     time.sleep(0.5)  # 0.5초마다 확인
                 
                 if not service_completed_flag["completed"]:
-                    logger.warning("=" * 60)
-                    logger.warning("⚠️ 서비스 완료 신호를 받지 못했습니다. 타임아웃으로 wakeword 재활성화")
-                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 서비스 완료 신호 미수신 (타임아웃)")
                 
                 # 서비스 완료 후 wakeword 콜백 재활성화 (옵션)
                 if settings.REENABLE_WAKEWORD_AFTER_SERVICE:
                     if wakeword_detector and wakeword_detector.interpreter is not None:
-                        logger.info("🔊 Wakeword 감지기 재활성화 (다음 wakeword 대기)")
-                        wakeword_detector.resume()  # Wakeword 감지기 재개
+                        wakeword_detector.resume()
                         mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-                        # 서비스 완료 플래그 리셋
                         service_completed_flag["completed"] = False
-                else:
-                    logger.info("⏸️ 설정에 따라 wakeword 감지기 재활성화를 건너뜁니다 (REENABLE_WAKEWORD_AFTER_SERVICE=False)")
                 
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
     except KeyboardInterrupt:
