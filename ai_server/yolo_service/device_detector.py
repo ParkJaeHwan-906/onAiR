@@ -1,18 +1,17 @@
-# yolo_service/device_monitor.py
+# yolo_service/device_detector.py
 
 import asyncio
 from loguru import logger
 
 from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
-from ai_server.yolo_service.redis_frame_store import get_latest_frame
-from ai_server.yolo_service.redis_client import save_device_result, get_device_state
+from ai_server.yolo_service.redis_client import save_device_state, get_device_state, get_latest_frame
 
 
 YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
 
 # 안정성 파라미터
-CONF_THRESHOLD = 0.60
+CONF_THRESHOLD = 0.65
 STABLE_COUNT_REQUIRED = 2
 
 # 모델 및 Task (Task는 main.py가 가지고 있음)
@@ -40,7 +39,8 @@ async def device_detector_loop():
             return
 
     # 2) Redis 상태 초기화
-    prev_state = await get_device_state()
+    info = await get_device_state()
+    prev_state = info["label"] if info else None
     candidate_label = None
     stable_counter = 0
 
@@ -97,7 +97,7 @@ async def device_detector_loop():
             # 안정성 만족 시 prev_state 업데이트
             if stable_counter >= STABLE_COUNT_REQUIRED:
                 prev_state = candidate_label
-                await save_device_result(prev_state, confidence)
+                await save_device_state(prev_state, confidence)
                 logger.info(f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})")
 
                 candidate_label = None
