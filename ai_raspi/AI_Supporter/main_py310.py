@@ -97,17 +97,38 @@ def run_stt_loop():
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     """
     # 브리지 서버를 별도 스레드에서 실행
-    bridge_thread = threading.Thread(
-        target=run_server,
-        args=('127.0.0.1', 5050),
-        daemon=True
-    )
-    bridge_thread.start()
-    logger.info("🚀 STT 브리지 서버 시작 (포트 5050)")
-    logger.info("   Python 3.13에서 브리지 클라이언트가 연결할 수 있습니다.")
-    
-    # 브리지 서버가 시작될 때까지 잠시 대기
-    time.sleep(1)
+    # 주의: 포트 바인딩 실패 시 예외가 발생하므로 try-except로 처리
+    bridge_thread = None
+    try:
+        bridge_thread = threading.Thread(
+            target=run_server,
+            args=('127.0.0.1', 5050),
+            daemon=True
+        )
+        bridge_thread.start()
+        logger.info("🚀 STT 브리지 서버 시작 (포트 5050)")
+        logger.info("   Python 3.13에서 브리지 클라이언트가 연결할 수 있습니다.")
+        
+        # 브리지 서버가 시작될 때까지 잠시 대기
+        time.sleep(1)
+        
+        # 포트가 실제로 열렸는지 확인
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('127.0.0.1', 5050))
+        sock.close()
+        if result != 0:
+            logger.warning("⚠️ 브리지 서버 포트 연결 확인 실패. 서버가 시작되지 않았을 수 있습니다.")
+    except Exception as e:
+        logger.error("=" * 60)
+        logger.error(f"❌ 브리지 서버 시작 실패: {e}")
+        logger.error("   해결 방법:")
+        logger.error("   1. 포트 5050을 사용 중인 프로세스 확인: sudo lsof -i :5050")
+        logger.error("   2. 프로세스 종료: sudo kill -9 <PID>")
+        logger.error("   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+        logger.error("=" * 60)
+        raise RuntimeError(f"브리지 서버를 시작할 수 없습니다: {e}") from e
     
     # WebRTC 프로세스 확인 및 오디오 스트리밍 상태 확인
     logger.info("🔍 WebRTC 프로세스 및 오디오 스트리밍 상태 확인 중...")
@@ -127,12 +148,15 @@ def run_stt_loop():
                 
                 # WebRTC 프로세스가 마이크를 점유하고 있는지 확인
                 # lsof를 사용하여 /dev/snd 디바이스를 사용 중인 프로세스 확인
+                mic_occupied = False
                 try:
+                    # 방법 1: lsof로 /dev/snd 확인
                     lsof_result = subprocess.run(['lsof', '/dev/snd/*'], capture_output=True, text=True, timeout=2)
                     if lsof_result.returncode == 0 and lsof_result.stdout:
                         # WebRTC 프로세스 PID가 lsof 결과에 있는지 확인
                         for pid in webrtc_pids:
                             if pid in lsof_result.stdout:
+                                mic_occupied = True
                                 logger.warning("=" * 60)
                                 logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 마이크를 점유하고 있습니다!")
                                 logger.warning("   FastAPI 서버에서 'handle_audio_stream' (start: False) 이벤트를 전송하여")
@@ -141,8 +165,38 @@ def run_stt_loop():
                                 logger.warning("   임시 해결 방법: WebRTC 프로세스 재시작")
                                 logger.warning(f"   $ pkill -f socket_manager.py")
                                 logger.warning("=" * 60)
+                    
+                    # 방법 2: fuser로 /dev/snd 확인
+                    if not mic_occupied:
+                        try:
+                            fuser_result = subprocess.run(['fuser', '/dev/snd/*'], capture_output=True, text=True, timeout=2)
+                            if fuser_result.returncode == 0 and fuser_result.stdout:
+                                for pid in webrtc_pids:
+                                    if pid in fuser_result.stdout:
+                                        mic_occupied = True
+                                        logger.warning("=" * 60)
+                                        logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 마이크를 점유하고 있습니다! (fuser 확인)")
+                                        logger.warning("=" * 60)
+                        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+                            pass
+                    
+                    # 방법 3: lsof로 audio 관련 프로세스 확인
+                    if not mic_occupied:
+                        try:
+                            lsof_audio = subprocess.run(['lsof', '|', 'grep', '-i', 'audio'], 
+                                                      shell=True, capture_output=True, text=True, timeout=2)
+                            if lsof_audio.returncode == 0 and lsof_audio.stdout:
+                                for pid in webrtc_pids:
+                                    if pid in lsof_audio.stdout:
+                                        mic_occupied = True
+                                        logger.warning("=" * 60)
+                                        logger.warning(f"⚠️ WebRTC 프로세스(PID: {pid})가 오디오 장치를 사용 중입니다!")
+                                        logger.warning("=" * 60)
+                        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+                            pass
+                            
                 except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-                    logger.debug(f"lsof 확인 실패 (무시 가능): {e}")
+                    logger.debug(f"마이크 점유 확인 실패 (무시 가능): {e}")
                 
                 time.sleep(0.5)  # 잠시 대기
     except Exception as e:

@@ -362,11 +362,44 @@ def send_stt_result(result: dict):
 # 4️⃣ 서버 실행
 def run_server(host='127.0.0.1', port=5050):
     from werkzeug.serving import WSGIRequestHandler, make_server
+    import socket
     logging.basicConfig(level=logging.INFO)
     logger.info(f"🚀 STT 브리지 서버 시작 (Socket.IO): ws://{host}:{port}")
+    
+    # 포트가 이미 사용 중인지 확인
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.error("=" * 60)
+            logger.error(f"❌ 포트 {port}가 이미 사용 중입니다!")
+            logger.error("   해결 방법:")
+            logger.error(f"   1. 포트를 사용 중인 프로세스 확인: sudo lsof -i :{port}")
+            logger.error(f"   2. 프로세스 종료: sudo kill -9 <PID>")
+            logger.error(f"   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+            logger.error("=" * 60)
+            raise OSError(f"Port {port} is already in use")
+    except socket.error as e:
+        # 포트 확인 중 오류 발생 (무시 가능)
+        logger.debug(f"포트 확인 중 오류 (무시 가능): {e}")
+    
     # threading 모드를 사용하므로 werkzeug 서버 사용
-    server = make_server(host, port, app, request_handler=WSGIRequestHandler)
-    server.serve_forever()
+    try:
+        server = make_server(host, port, app, request_handler=WSGIRequestHandler)
+        logger.info(f"✅ 브리지 서버 바인딩 성공: ws://{host}:{port}")
+        server.serve_forever()
+    except OSError as e:
+        if "Address already in use" in str(e) or "already in use" in str(e).lower():
+            logger.error("=" * 60)
+            logger.error(f"❌ 포트 {port} 바인딩 실패: 포트가 이미 사용 중입니다")
+            logger.error("   해결 방법:")
+            logger.error(f"   1. 포트를 사용 중인 프로세스 확인: sudo lsof -i :{port}")
+            logger.error(f"   2. 프로세스 종료: sudo kill -9 <PID>")
+            logger.error(f"   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+            logger.error("=" * 60)
+        raise
 
 if __name__ == "__main__":
     run_server()
