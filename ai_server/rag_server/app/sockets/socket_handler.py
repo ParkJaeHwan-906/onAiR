@@ -1595,7 +1595,7 @@ async def handle_clarify_response(sid, data):
 # ========================================
 # Raspberry Pi 비디오 프레임 처리
 # ========================================
-@sio.on("video_frame")
+# @sio.on("video_frame")
 async def handle_video_frame(sid, data):
     """라즈베리파이 → JPEG binary 수신 후 모션 추정 및 AR 마커 업데이트"""
     sender_device = device_map.get(sid, "unknown")
@@ -1671,13 +1671,18 @@ async def handle_video_frame(sid, data):
             size_factor = 20.0
             size_px = np.clip(base_size + (z_size * size_factor), 10.0, 100.0)
             updated.append({
+                "type": m["type"],
                 "idx": m["idx"],
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
                     "z": round(z_size, 4),
                     "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
-                }
+                },
+                "color": m["color"],
+                "pulseScale": m["pulseScale"],
+                "pulseOpacity": m["pulseOpacity"],
+                "opacity": m["opacity"]
             })
         ar_markers[:] = updated
         # print(f"arr : {ar_markers}")
@@ -1815,7 +1820,9 @@ async def communication_close(sid, data):
     print("   목적: STT/Wakeword 프로세스가 마이크 장치를 물리적 재점유")
     print("=" * 60)
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
-    
+    # 마커 데이터 초기화
+    global ar_markers
+    ar_markers = []
     # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
     print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
@@ -1834,6 +1841,8 @@ async def communication_close(sid, data):
     print("📤 [통신 종료] 기기 탐지 작업 시작")
     print("=" * 60)
     await start_device_detector_task()
+    
+    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
 
     print("=" * 60)
     print("✅ [통신 종료] 처리 완료")
