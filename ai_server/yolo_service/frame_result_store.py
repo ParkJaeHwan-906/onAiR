@@ -4,7 +4,7 @@ import numpy as np
 from loguru import logger
 
 # Redis 설정 (로컬 Redis 서버 기준)
-redis = redis.from_url("redis://localhost:6379", decode_responses=False)
+redis = redis.from_url("redis://redis:6379", decode_responses=False)
 
 # Redis Key
 REDIS_LATEST_FRAME_KEY = "cv:frame:latest"
