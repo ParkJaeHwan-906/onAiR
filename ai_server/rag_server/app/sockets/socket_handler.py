@@ -28,7 +28,6 @@ import httpx
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
 async def run_anomaly_detection():
-    stop_device_detector_task()
 
     url = f"{YOLO_URL}/analyze"
     async with httpx.AsyncClient(timeout=30.0) as client:
