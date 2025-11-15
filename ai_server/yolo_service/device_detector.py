@@ -12,22 +12,24 @@ YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
 
 # 안정성 파라미터
-CONF_THRESHOLD = 0.60               # YOLO 최소 confidence
-STABLE_COUNT_REQUIRED = 2           # 동일 후보 라벨이 N번 연속 감지되면 변경
+CONF_THRESHOLD = 0.60
+STABLE_COUNT_REQUIRED = 2
 
-_device_loop_task: asyncio.Task | None = None
+# 모델 및 Task (Task는 main.py가 가지고 있음)
 _device_model = None
 
 
+# ----------------------------------------------------------
+# 1) 메인 디바이스 감지 루프 (cancel 대응 완료)
+# ----------------------------------------------------------
 async def device_detector_loop():
     """장비(AHU/Boiler/Chiller 등)를 2초마다 감지하는 메인 루프."""
+
     global _device_model
 
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
-    # -----------------------
-    # 1) Lazy load YOLO model
-    # -----------------------
+    # 1) YOLO 모델 로드
     if _device_model is None:
         try:
             logger.info("[device_monitor] YOLO 모델 로드 중...")
@@ -37,24 +39,18 @@ async def device_detector_loop():
             logger.exception(f"[device_monitor] ❌ YOLO 모델 로드 실패: {e}")
             return
 
-    # -----------------------
-    # 2) 상태 초기화
-    # -----------------------
-    prev_state = await get_device_state()   # Redis에서 가져온 이전 상태
-
-    
-    candidate_label = None                  # 변경 후보 라벨
-    stable_counter = 0                      # 후보 라벨의 안정성 카운터
+    # 2) Redis 상태 초기화
+    prev_state = await get_device_state()
+    candidate_label = None
+    stable_counter = 0
 
     logger.info(f"[device_monitor] 초기 prev_state = {prev_state}")
 
-    # -----------------------
-    # 3) 감지 루프 시작
-    # -----------------------
+    # 3) 감지 루프
     while True:
         try:
             frame = await get_latest_frame()
-            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}") # redis에 저장된 이전 상태 로깅
+            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
 
             if frame is None:
                 await asyncio.sleep(DETECTION_INTERVAL)
@@ -66,56 +62,44 @@ async def device_detector_loop():
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
-            
-            # top-1 detection
+
+            # 가장 신뢰도 높은 label 선택
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
 
             logger.debug(f"[device_monitor] 감지: {label} ({confidence:.2f})")
 
-            # -----------------------
-            # (A) confidence 검사
-            # -----------------------
+            # confidence 기준 미달
             if confidence < CONF_THRESHOLD:
-                logger.debug("[device_monitor] confidence 미달 → 안정성 초기화")
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # -----------------------
-            # (B) 기존 상태와 같으면 안정화 리셋 (변경아님)
-            # -----------------------
+            # 기존 상태와 같으면 후보 초기화
             if label == prev_state:
                 candidate_label = None
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # -----------------------
-            # (C) 후보 라벨 안정화 체크
-            # -----------------------
+            # 후보 라벨 안정화 검사
             if candidate_label != label:
-                # 새로운 변화 후보 등장
                 candidate_label = label
                 stable_counter = 1
                 logger.debug(f"[device_monitor] 후보 라벨 변경 → {candidate_label}")
             else:
-                # 동일 후보 지속 감지
                 stable_counter += 1
                 logger.debug(
-                    f"[device_monitor] 후보 안정화 진행 중 "
-                    f"{candidate_label}: {stable_counter}/{STABLE_COUNT_REQUIRED}"
+                    f"[device_monitor] 후보 안정화 진행 {candidate_label}: "
+                    f"{stable_counter}/{STABLE_COUNT_REQUIRED}"
                 )
 
-            # -----------------------
-            # (D) 변화 확정 (stable)
-            # -----------------------
+            # 안정성 만족 시 prev_state 업데이트
             if stable_counter >= STABLE_COUNT_REQUIRED:
                 prev_state = candidate_label
                 await save_device_result(prev_state, confidence)
                 logger.info(f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})")
 
-                # reset
                 candidate_label = None
                 stable_counter = 0
 
@@ -131,44 +115,16 @@ async def device_detector_loop():
     logger.info("[device_monitor] 디바이스 감지 루프 종료 완료")
 
 
+# ----------------------------------------------------------
+# 2) start_device_detector — Task 생성하지 말고 loop만 실행
+# ----------------------------------------------------------
 async def start_device_detector():
-    """device_detector_loop를 백그라운드 task로 시작"""
-    global _device_loop_task
-
-    if _device_loop_task and not _device_loop_task.done():
-        logger.info("[device_monitor] 이미 실행 중 → start 무시")
-        return
-
-    loop = asyncio.get_running_loop()
-    _device_loop_task = loop.create_task(device_detector_loop())
-    logger.info("[device_monitor] ▶ device_detector_loop STARTED")
-
-
-async def stop_device_detector():
-    """device_detector_loop 중단"""
-    global _device_loop_task
-
-    if not _device_loop_task:
-        logger.info("[device_monitor] 중단할 루프 없음")
-        return
-
-    if _device_loop_task.done():
-        _device_loop_task = None
-        logger.info("[device_monitor] 이미 종료됨")
-        return
-
-    logger.info("[device_monitor] ⏹ 디바이스 감지 루프 중단 요청")
-    _device_loop_task.cancel()
-
+    """main.py에서 Task로 실행할 엔트리 포인트.
+    Task는 main.py가 관리.
+    """
     try:
-        await _device_loop_task
+        await device_detector_loop()
     except asyncio.CancelledError:
-        logger.info("[device_monitor] CancelledError 정상 처리")
+        logger.info("[device_monitor] start_device_detector Cancelled")
+        raise
 
-    _device_loop_task = None
-    logger.info("[device_monitor] 🛑 device_detector_loop STOPPED")
-
-
-def is_device_detector_running() -> bool:
-    """현재 디바이스 감지 루프 실행 상태"""
-    return _device_loop_task is not None and not _device_loop_task.done()
