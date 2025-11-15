@@ -367,7 +367,16 @@ class WorkingActivity : AppCompatActivity() {
                         // 음성 파일 재생
                         Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
+                            // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            
+                            // FastAPI 서버로 재생 완료 이벤트 전송
+                            val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
+                            if (success) {
+                                Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
+                            } else {
+                                Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                            }
                         }
                     }
 
