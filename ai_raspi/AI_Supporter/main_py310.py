@@ -460,7 +460,68 @@ def run_stt_loop():
                 logger.info("=" * 60)
                 logger.info("📤 [단계 2-1] 브리지 서버로 Wakeword 감지 이벤트 전송")
                 logger.info("=" * 60)
-                send_wakeword_detected()
+                
+                # FastAPI 연결 상태 확인 및 전송 시도
+                wakeword_sent_successfully = False
+                max_retry_attempts = 3
+                retry_delay = 2  # 재시도 간격 (초)
+                
+                for attempt in range(max_retry_attempts):
+                    try:
+                        # 브리지 클라이언트 연결 상태 확인 (Python 3.13 프로세스 확인)
+                        # 주의: 브리지 서버는 Python 3.10에서 실행되므로 항상 연결 가능
+                        # 하지만 브리지 클라이언트(Python 3.13)가 FastAPI에 연결되어 있는지 확인 필요
+                        result = send_wakeword_detected()
+                        
+                        if result:
+                            # 브리지 클라이언트로 전송 성공
+                            # FastAPI 연결 확인을 위해 잠시 대기 (브리지 클라이언트가 FastAPI로 전송하는 시간)
+                            time.sleep(1)
+                            wakeword_sent_successfully = True
+                            logger.info("✅ Wakeword 감지 이벤트 전송 완료 (브리지 클라이언트로 전송 성공)")
+                            break
+                        else:
+                            # 브리지 클라이언트가 연결되지 않음 (Python 3.13 프로세스가 실행되지 않음)
+                            logger.warning(f"⚠️ 브리지 클라이언트가 연결되지 않음 (시도 {attempt + 1}/{max_retry_attempts})")
+                            logger.warning("   Python 3.13 프로세스(main.py)가 실행 중인지 확인하세요.")
+                            if attempt < max_retry_attempts - 1:
+                                logger.info(f"   {retry_delay}초 후 재시도...")
+                                time.sleep(retry_delay)
+                            else:
+                                logger.error("=" * 60)
+                                logger.error("❌ 브리지 클라이언트 연결 실패 (최대 재시도 횟수 초과)")
+                                logger.error("   Python 3.13 프로세스(main.py)가 실행되지 않았습니다.")
+                                logger.error("   Wakeword 감지 대기 상태로 복귀합니다.")
+                                logger.error("=" * 60)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Wakeword 감지 이벤트 전송 실패 (시도 {attempt + 1}/{max_retry_attempts}): {e}")
+                        if attempt < max_retry_attempts - 1:
+                            logger.info(f"   {retry_delay}초 후 재시도...")
+                            time.sleep(retry_delay)
+                        else:
+                            logger.error("=" * 60)
+                            logger.error("❌ Wakeword 감지 이벤트 전송 실패 (최대 재시도 횟수 초과)")
+                            logger.error("   FastAPI 서버가 연결되지 않았거나 응답하지 않습니다.")
+                            logger.error("   Wakeword 감지 대기 상태로 복귀합니다.")
+                            logger.error("=" * 60)
+                
+                # FastAPI 연결 실패 시 wakeword 대기 상태로 복귀
+                if not wakeword_sent_successfully:
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ FastAPI 서버 연결 실패로 인해 Wakeword 감지 대기 상태로 복귀합니다.")
+                    logger.warning("   FastAPI 서버 상태를 확인하세요.")
+                    logger.warning("   다음 Wakeword 감지 시 다시 시도합니다.")
+                    logger.warning("=" * 60)
+                    
+                    # Wakeword 감지기 재활성화
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                        logger.info("✅ Wakeword 감지기 재활성화 완료 (다음 감지 대기)")
+                    
+                    # 다음 루프로 이동 (wakeword 감지 대기)
+                    continue
+                
                 wait_for_next_step_sync("Wakeword 감지 이벤트 전송 완료", "2-1")
                 
                 # 모바일에서 음성 파일 재생 완료 대기
@@ -491,10 +552,20 @@ def run_stt_loop():
                 
                 if not wakeword_audio_completed_flag["completed"]:
                     logger.warning("=" * 60)
-                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다. 타임아웃으로 버퍼링 STT 시작")
+                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호를 받지 못했습니다.")
+                    logger.warning("   FastAPI 서버가 응답하지 않거나 모바일 앱이 연결되지 않았을 수 있습니다.")
+                    logger.warning("   Wakeword 감지 대기 상태로 복귀합니다.")
                     logger.warning("=" * 60)
-                    # 타임아웃 시에도 디버그 모드에서 Enter 키 대기
-                    wait_for_next_step_sync("모바일 음성 파일 재생 완료 (타임아웃)", "2-2")
+                    
+                    # FastAPI 연결 실패로 판단하고 wakeword 대기 상태로 복귀
+                    # Wakeword 감지기 재활성화
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                        logger.info("✅ Wakeword 감지기 재활성화 완료 (다음 감지 대기)")
+                    
+                    # 다음 루프로 이동 (wakeword 감지 대기)
+                    continue
                 else:
                     logger.info("=" * 60)
                     logger.info("✅ [단계 2-2 완료] 모바일 음성 파일 재생 완료")
