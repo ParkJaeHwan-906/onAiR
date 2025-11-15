@@ -8,7 +8,7 @@ from ai_server.yolo_service.redis_frame_store import get_latest_frame
 from ai_server.yolo_service.redis_client import save_device_result, get_device_state
 
 
-YOLO_MODEL_PATH = "yolo_service/models/device_best.pt"
+YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
 
 # 내부에서 관리되는 전역 Task
