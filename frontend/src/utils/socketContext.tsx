@@ -26,6 +26,11 @@ interface ServerToClientEvents {
         y: number;
         size: number;
       };
+      type: string;
+      color: string;
+      pulseScale?: number;
+      pulseOpacity?: number;
+      opacity?: number;
     }>
   ) => void;
 }
@@ -39,7 +44,15 @@ interface ClientToServerEvents {
   accept_communication: (data: null) => void;
   "video-frame": (data: { frame: string }) => void;
   "audio-frame": (data: { frame: string }) => void;
-  "ar-marker": (data: { marker_x: number; marker_y: number }) => void;
+  "ar-marker": (data: {
+    marker_x: number;
+    marker_y: number;
+    type: string;
+    color: string;
+    pulseScale?: number;
+    pulseOpacity?: number;
+    opacity?: number;
+  }) => void;
   "delete-marker": (data: { idx: number }) => void;
 }
 // --- 타입 정의 끝 ---
