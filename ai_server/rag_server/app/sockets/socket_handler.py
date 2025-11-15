@@ -28,8 +28,8 @@ import httpx
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
 async def run_anomaly_detection():
-    url = f"{YOLO_URL}/analyze"
 
+    url = f"{YOLO_URL}/analyze"
     async with httpx.AsyncClient(timeout=30.0) as client:
         res = await client.post(url, json={"trigger": "run"})
         res.raise_for_status()
@@ -866,6 +866,9 @@ async def handle_stt_result(sid, data):
                 print("   💡 모바일에서 'AI_Supporter 기능을 시작합니다. 오류 탐지.' 재생 중...")
                 print("   💡 재생 완료 시 intent_audio_completed 이벤트를 통해 CV 로직이 실행됩니다.")
                 print("=" * 60)
+
+
+
                     
         except Exception as e:
             print(f"❌ 버퍼링 STT 처리 오류: {e}")
