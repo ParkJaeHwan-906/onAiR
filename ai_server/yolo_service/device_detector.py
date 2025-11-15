@@ -11,16 +11,17 @@ from ai_server.yolo_service.redis_client import save_device_result, get_device_s
 YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
 
-# 내부에서 관리되는 전역 Task
+# 안정성 강화 파라미터
+CONF_THRESHOLD = 0.75             # 최소 confidence
+STABLE_COUNT_REQUIRED = 2        # 연속 N번 같은 라벨일 때만 수정
+
+# 내부 Task
 _device_loop_task: asyncio.Task | None = None
 _device_model = None
 
 
 async def device_detector_loop():
-    """
-    AHU/BOILER/CHILLER 등 장비 감지를 지속 수행하는 루프
-    stop_device_detector() 호출 시 종료됨
-    """
+    """장비(AHU/Boiler/Chiller 등)를 지속 감지하는 메인 루프."""
     global _device_model
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
@@ -34,7 +35,9 @@ async def device_detector_loop():
             logger.exception(f"[device_monitor] ❌ YOLO 모델 로드 실패: {e}")
             return
 
-    prev_state = await get_device_state()
+    prev_state = await get_device_state()   # Redis에 저장된 이전 상태
+    stable_counter = 0                      # 연속 동일 감지 횟수
+    candidate_label = None                  # 후보 라벨
 
     while True:
         try:
@@ -47,14 +50,29 @@ async def device_detector_loop():
             detections = yolo_infer(_device_model, frame, return_boxes=False)
 
             if not detections:
+                stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # detections는 list(dict) 형태
+            # top-1 detection
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
 
-            if label != prev_state:
+            # 1) confidence threshold 검사
+            if confidence < CONF_THRESHOLD:
+                stable_counter = 0
+                await asyncio.sleep(DETECTION_INTERVAL)
+                continue
+
+            # 2) 안정성 검증 (hysteresis)
+            if label == prev_state:
+                stable_counter += 1
+            else:
+                candidate_label = label
+                stable_counter = 1
+
+            # 3) stable_count 만족 시 업데이트
+            if stable_counter >= STABLE_COUNT_REQUIRED and label != prev_state:
                 await save_device_result(label, confidence)
                 prev_state = label
                 logger.info(f"[device_monitor] 🔄 상태 변경: {label} ({confidence:.2f})")
