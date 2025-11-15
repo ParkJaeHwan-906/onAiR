@@ -306,7 +306,12 @@ def handle_audio_stream(sid, data):
 
 # Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
 def send_wakeword_detected():
-    """Wakeword 감지 이벤트를 브리지 클라이언트(3.13)에게 전송"""
+    """
+    Wakeword 감지 이벤트를 브리지 클라이언트(3.13)에게 전송
+    
+    Returns:
+        bool: 전송 성공 여부 (브리지 클라이언트가 연결되어 있으면 True)
+    """
     logger.info("=" * 60)
     logger.info(f"📤 [단계 2-1] 브리지 서버: Wakeword 감지 이벤트 전송 시작")
     logger.info(f"   연결된 클라이언트: {len(connected_clients)}개")
@@ -314,20 +319,31 @@ def send_wakeword_detected():
     
     if not connected_clients:
         logger.warning("⚠️ 연결된 클라이언트가 없습니다. Wakeword 감지 이벤트를 전송할 수 없습니다.")
-        return
+        logger.warning("   Python 3.13 프로세스(main.py)가 실행 중인지 확인하세요.")
+        return False
     
     # 모든 연결된 클라이언트에게 전송
+    success_count = 0
     for client_sid in list(connected_clients):  # 리스트로 복사하여 안전하게 순회
         try:
             sio.emit('wakeword_detected', {}, room=client_sid)
             logger.info(f"✅ 클라이언트 {client_sid[:10]}...에게 전송 완료")
+            success_count += 1
         except Exception as e:
             logger.error(f"❌ 클라이언트 {client_sid}에게 전송 실패: {e}")
             connected_clients.discard(client_sid)  # 실패한 클라이언트 제거
     
-    logger.info("=" * 60)
-    logger.info("✅ [단계 2-1 완료] 브리지 서버: Wakeword 감지 이벤트 전송 완료")
-    logger.info("=" * 60)
+    if success_count > 0:
+        logger.info("=" * 60)
+        logger.info("✅ [단계 2-1 완료] 브리지 서버: Wakeword 감지 이벤트 전송 완료")
+        logger.info("=" * 60)
+        return True
+    else:
+        logger.error("=" * 60)
+        logger.error("❌ [단계 2-1 실패] 브리지 서버: Wakeword 감지 이벤트 전송 실패")
+        logger.error("   모든 클라이언트에게 전송 실패")
+        logger.error("=" * 60)
+        return False
 
 # 3️⃣ 외부에서 호출될 함수 (STT 결과 emit)
 def send_stt_result(result: dict):
