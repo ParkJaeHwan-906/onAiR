@@ -200,39 +200,39 @@ async def broadcast_to(device_types, event: str, payload: dict):
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
-        print(f"   요청 디바이스: {device_types}")
-        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
-        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
+        # print(f"   요청 디바이스: {device_types}")
+        # print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                print(f"   Payload: {str(payload)[:100]}...")
+                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    if sent_count == 0:
-        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    else:
-        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    # if sent_count == 0:
+    #     print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    # else:
+    #     print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -245,10 +245,10 @@ async def handle_connect(sid, environ):
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
-        print("=" * 60)
-        print(f"✅ [연결] Client connected: {sid[:15]}... (from {remote_addr})")
-        print(f"   User-Agent: {user_agent[:50]}...")
-        print(f"   현재 연결된 디바이스 수: {len(device_map)}")
+        # print("=" * 60)
+        # print(f"✅ [연결] Client connected: {sid[:15]}... (from {remote_addr})")
+        # print(f"   User-Agent: {user_agent[:50]}...")
+        # print(f"   현재 연결된 디바이스 수: {len(device_map)}")
         print("=" * 60)
         
         if sio:
@@ -257,7 +257,7 @@ async def handle_connect(sid, environ):
         # print(f"🔍 [DEBUG] handle_connect 성공, 연결 허용")
         return True
     except Exception as e:
-        print(f"❌ Connection error for {sid}: {e}")
+        # print(f"❌ Connection error for {sid}: {e}")
         import traceback
         traceback.print_exc()
         # 예외 발생 시 연결 거부
@@ -279,11 +279,11 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
     
-    print("=" * 60)
+    # print("=" * 60)
     print(f"🔗 [디바이스 등록] Registered device: {device} ({sid[:15]}...)")
-    print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
-    print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
-    print("=" * 60)
+    # print(f"📊 현재 연결된 디바이스: {list(device_map.values())} (총 {len(device_map)}개)")
+    # print(f"   device_map 상세: {[(k[:15] + '...', v) for k, v in device_map.items()]}")
+    # print("=" * 60)
     
     if sio:
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
