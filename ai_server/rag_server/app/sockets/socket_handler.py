@@ -710,18 +710,51 @@ async def handle_audio_playback_completed(sid, data):
         print("✅ STT 목적 음성 수집 재개 + Wakeword 감지 대기 시작 이벤트 전송 완료")
         await wait_for_next_step("최종 답변 TTS 재생 완료 처리", "14-1")
     elif audio_type == "intent_audio":
-        # OPERATOR Intent 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 목적으로 음성 수집 시작
+        # OPERATOR Intent 음성 파일 재생 완료 → WebRTC 요청 API 호출
         intent = data.get("intent", "").upper()
         if intent == "OPERATOR":
             print("=" * 60)
             print(f"✅ OPERATOR Intent 음성 파일 재생 완료")
-            print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
+            print("   WebRTC 요청 API 호출 시작")
             print("=" * 60)
             
-            # 주의: 마이크는 하나이며, WebRTC 오디오 스트리밍 목적으로 음성을 수집합니다.
-            # accept_communication에서 이미 handle_audio_stream으로 처리됨
-            # 여기서는 추가 확인용
+            # WebRTC 요청 API 호출
+            try:
+                # 모바일에서 전달받은 토큰과 receiverAccountId 사용
+                access_token = data.get("access_token")
+                receiver_account_id = data.get("receiverAccountId", -1)  # 기본값: -1 (작업자)
+                
+                if not access_token:
+                    print("⚠️ access_token이 제공되지 않았습니다. WebRTC 요청을 보낼 수 없습니다.")
+                else:
+                    # WebRTC 요청 API 호출
+                    webrtc_url = f"{settings.WEBRTC_API_URL}/webrtc/request"
+                    headers = {
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"
+                    }
+                    body = {
+                        "receiverAccountId": receiver_account_id
+                    }
+                    
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        response = await client.post(webrtc_url, json=body, headers=headers)
+                        response.raise_for_status()
+                        result = response.json()
+                        
+                        if result.get("success"):
+                            print(f"✅ WebRTC 요청 API 호출 성공: {result.get('message', '')}")
+                        else:
+                            print(f"⚠️ WebRTC 요청 API 호출 실패: {result.get('message', '')}")
+            except httpx.HTTPStatusError as e:
+                print(f"❌ WebRTC 요청 API HTTP 오류: {e.response.status_code} - {e.response.text}")
+            except httpx.RequestError as e:
+                print(f"❌ WebRTC 요청 API 요청 오류: {e}")
+            except Exception as e:
+                print(f"❌ WebRTC 요청 API 호출 중 오류: {e}")
+            
             print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료")
+            print("=" * 60)
     else:
         print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
 
