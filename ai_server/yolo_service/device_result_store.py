@@ -10,7 +10,7 @@ _cached_result: Optional[dict] = None
 _result_lock = asyncio.Lock()
 
 # Redis 클라이언트
-redis = redis.from_url("redis://localhost:6379", decode_responses=True)
+redis = redis.from_url("redis://redis:6379/0", decode_responses=True)
 
 
 async def save_device_result(result: dict) -> None:
