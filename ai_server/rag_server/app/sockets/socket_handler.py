@@ -200,37 +200,39 @@ async def broadcast_to(device_types, event: str, payload: dict):
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다. 요청: {device_types}, 현재 연결: {list(set(device_map.values()))}")
-        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
+        print(f"   요청 디바이스: {device_types}")
+        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+        print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                # # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                # print(f"   Payload: {str(payload)[:100]}...")
+                print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"   Payload: {str(payload)[:100]}...")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    # if sent_count == 0:
-        # print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    # else:
-        # print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    if sent_count == 0:
+        print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+    else:
+        print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -299,24 +301,44 @@ async def handle_wakeword_detected(sid, data):
     print("=" * 60)
     print(f"🔔 [이벤트 수신] wakeword_detected 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
+    print(f"   Data: {data}")
     print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   연결된 디바이스: {list(set(device_map.values()))}")
     print("=" * 60)
 
     await stop_device_detector_task()
-    print(" 기기 탐지 종료")
+    print("✅ 기기 탐지 종료")
     sender_device = device_map.get(sid, "unknown")
     print(f"   발신자 디바이스: {sender_device}")
     
     # 라즈베리파이에서만 받음
     if sender_device != "raspi":
-        print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print("=" * 60)
+        print(f"⚠️ [오류] Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다.")
+        print(f"   수신자: {sender_device}")
         print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
         return
     
     print("=" * 60)
     print(f"📝 [단계 2-1] FastAPI 서버: Wakeword 감지 이벤트 수신 [raspi]")
     print("=" * 60)
     await wait_for_next_step("Wakeword 감지 이벤트 수신 완료", "2-1")
+    
+    # 모바일 연결 상태 확인
+    mobile_sids = [s for s, d in device_map.items() if d == "mobile"]
+    if not mobile_sids:
+        print("=" * 60)
+        print("⚠️ [오류] 모바일 디바이스가 연결되어 있지 않습니다.")
+        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
+        return
+    
+    print("=" * 60)
+    print(f"✅ 모바일 디바이스 연결 확인: {len(mobile_sids)}개")
+    print(f"   모바일 SID: {[s[:15] + '...' for s in mobile_sids]}")
+    print("=" * 60)
     
     # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
     print("=" * 60)
@@ -339,7 +361,9 @@ async def handle_wakeword_audio_completed(sid, data):
     print("=" * 60)
     print(f"🔔 [이벤트 수신] wakeword_audio_completed 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
+    print(f"   Data: {data}")
     print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   연결된 디바이스: {list(set(device_map.values()))}")
     print("=" * 60)
     
     sender_device = device_map.get(sid, "unknown")
@@ -347,14 +371,32 @@ async def handle_wakeword_audio_completed(sid, data):
     
     # 모바일에서만 받음
     if sender_device != "mobile":
-        print(f"⚠️ 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print("=" * 60)
+        print(f"⚠️ [오류] 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다.")
+        print(f"   수신자: {sender_device}")
         print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
         return
     
     print("=" * 60)
     print(f"📝 [단계 2-2] FastAPI 서버: 모바일 음성 파일 재생 완료 이벤트 수신 [mobile]")
     print("=" * 60)
     await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
+    
+    # 라즈베리파이 연결 상태 확인
+    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
+    if not raspi_sids:
+        print("=" * 60)
+        print("⚠️ [오류] 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
+        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
+        return
+    
+    print("=" * 60)
+    print(f"✅ 라즈베리파이 디바이스 연결 확인: {len(raspi_sids)}개")
+    print(f"   라즈베리파이 SID: {[s[:15] + '...' for s in raspi_sids]}")
+    print("=" * 60)
     
     # 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)
     print("=" * 60)
