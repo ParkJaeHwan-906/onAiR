@@ -142,7 +142,7 @@ class SocketIOClient:
             logger.info(f"   데이터: {data}")
             logger.info("=" * 60)
             
-            # 브리지 클라이언트를 통해 브리지 서버로 전달
+            # 브리지 클라이언트를 통해 브리지 서버로 전달 (마이크 장치 해제/재점유)
             if self.manager and hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
                 try:
                     logger.info("📡 브리지 서버로 handle_audio_stream 이벤트 전달...")
@@ -154,6 +154,34 @@ class SocketIOClient:
                     logger.error(f"❌ Failed to forward handle_audio_stream to bridge server: {e}")
             else:
                 logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+            
+            # 오디오 스트리밍 시작/중지 처리
+            if self.manager and hasattr(self.manager, 'audio_streamer') and self.manager.audio_streamer:
+                try:
+                    if data and data.get("start", False):
+                        # WebRTC 오디오 스트리밍 시작
+                        # 주의: Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
+                        logger.info("=" * 60)
+                        logger.info("⏳ Python 3.10 프로세스의 마이크 장치 해제 대기 중... (0.3초)")
+                        logger.info("=" * 60)
+                        await asyncio.sleep(0.3)  # 마이크 해제 완료 대기
+                        
+                        logger.info("=" * 60)
+                        logger.info("🎙️ WebRTC 오디오 스트리밍 시작")
+                        logger.info("=" * 60)
+                        self.manager.audio_streamer.start()
+                        logger.info("✅ 오디오 스트리밍 시작 완료")
+                    else:
+                        # WebRTC 오디오 스트리밍 중지
+                        logger.info("=" * 60)
+                        logger.info("🛑 WebRTC 오디오 스트리밍 중지")
+                        logger.info("=" * 60)
+                        self.manager.audio_streamer.stop()
+                        logger.info("✅ 오디오 스트리밍 중지 완료")
+                except Exception as e:
+                    logger.error(f"❌ 오디오 스트리밍 제어 실패: {e}")
+            else:
+                logger.warning("⚠️ 오디오 스트리머가 등록되지 않았습니다.")
         
         @self.sio.on("start_streaming_stt")
         async def handle_start_streaming_stt(data):
