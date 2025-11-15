@@ -702,7 +702,6 @@ async def handle_audio_playback_completed(sid, data):
         print("   Wakeword 감지 대기 시작 이벤트 전송")
         print("=" * 60)
         
-        # 주의: 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
         
         # 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송
         await broadcast_to("raspi", "wakeword_start_waiting", {})
@@ -724,6 +723,13 @@ async def handle_audio_playback_completed(sid, data):
                 access_token = data.get("access_token")
                 receiver_account_id = data.get("receiverAccountId", -1)  # 기본값: -1 (작업자)
                 
+                print("=" * 60)
+                print("📡 [WebRTC 요청] API 호출 정보")
+                print(f"   URL: {settings.WEBRTC_API_URL}/webrtc/request")
+                print(f"   Receiver Account ID: {receiver_account_id}")
+                print(f"   Access Token: {'제공됨' if access_token else '미제공'}")
+                print("=" * 60)
+                
                 if not access_token:
                     print("⚠️ access_token이 제공되지 않았습니다. WebRTC 요청을 보낼 수 없습니다.")
                 else:
@@ -737,21 +743,50 @@ async def handle_audio_playback_completed(sid, data):
                         "receiverAccountId": receiver_account_id
                     }
                     
+                    print("=" * 60)
+                    print("📤 [WebRTC 요청] API 호출 시작")
+                    print(f"   Method: POST")
+                    print(f"   URL: {webrtc_url}")
+                    print(f"   Body: {body}")
+                    print("=" * 60)
+                    
                     async with httpx.AsyncClient(timeout=10.0) as client:
                         response = await client.post(webrtc_url, json=body, headers=headers)
                         response.raise_for_status()
                         result = response.json()
                         
+                        print("=" * 60)
+                        print("📥 [WebRTC 요청] API 응답 수신")
+                        print(f"   Status Code: {response.status_code}")
+                        print(f"   Response: {result}")
+                        print("=" * 60)
+                        
                         if result.get("success"):
-                            print(f"✅ WebRTC 요청 API 호출 성공: {result.get('message', '')}")
+                            print("=" * 60)
+                            print(f"✅ [WebRTC 요청] API 호출 성공")
+                            print(f"   Message: {result.get('message', '')}")
+                            print("=" * 60)
                         else:
-                            print(f"⚠️ WebRTC 요청 API 호출 실패: {result.get('message', '')}")
+                            print("=" * 60)
+                            print(f"⚠️ [WebRTC 요청] API 호출 실패")
+                            print(f"   Message: {result.get('message', '')}")
+                            print("=" * 60)
             except httpx.HTTPStatusError as e:
-                print(f"❌ WebRTC 요청 API HTTP 오류: {e.response.status_code} - {e.response.text}")
+                print("=" * 60)
+                print(f"❌ [WebRTC 요청] API HTTP 오류")
+                print(f"   Status Code: {e.response.status_code}")
+                print(f"   Response: {e.response.text}")
+                print("=" * 60)
             except httpx.RequestError as e:
-                print(f"❌ WebRTC 요청 API 요청 오류: {e}")
+                print("=" * 60)
+                print(f"❌ [WebRTC 요청] API 요청 오류")
+                print(f"   Error: {e}")
+                print("=" * 60)
             except Exception as e:
-                print(f"❌ WebRTC 요청 API 호출 중 오류: {e}")
+                print("=" * 60)
+                print(f"❌ [WebRTC 요청] API 호출 중 예외 발생")
+                print(f"   Error: {e}")
+                print("=" * 60)
             
             print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료")
             print("=" * 60)
@@ -1656,24 +1691,33 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
-    print("[DEBUG] accept_communication 이벤트 발생")
+    print("=" * 60)
+    print("🔔 [이벤트 수신] accept_communication 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   Sender Device: {device_map.get(sid, 'unknown')}")
+    print(f"   Data: {data}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
+        print("⚠️ 알 수 없는 디바이스에서 accept_communication 이벤트 수신 - 무시")
         return
 
     print("=" * 60)
-    print("📞 통신 요청 수락: AI_Supporter/OPERATOR 기능 중지 및 WebRTC 오디오 스트리밍 시작")
+    print("📞 [통신 요청 수락] AI_Supporter/OPERATOR 기능 중지 및 WebRTC 오디오 스트리밍 시작")
     print("=" * 60)
     
     # 현재 실행 중인 Streaming STT 세션이 있는지 확인
     active_sessions = list(clarify_sessions.keys())
     if active_sessions:
-        print(f"⚠️ 실행 중인 Streaming STT 세션 발견: {len(active_sessions)}개")
+        print("=" * 60)
+        print(f"⚠️ [통신 요청 수락] 실행 중인 Streaming STT 세션 발견: {len(active_sessions)}개")
         print(f"   세션 ID: {active_sessions}")
+        print("=" * 60)
         
         # 모든 실행 중인 Streaming STT 세션 종료
         for session_id in active_sessions:
-            print(f"🛑 Streaming STT 세션 종료: {session_id}")
+            print(f"🛑 [통신 요청 수락] Streaming STT 세션 종료: {session_id}")
             await broadcast_to("raspi", "stop_streaming_stt", {
                 "session_id": session_id,
                 "reason": "통신 요청 수락으로 인한 중지"
@@ -1681,19 +1725,29 @@ async def accept_communication(sid, data):
         
         # 세션 정보 정리
         clarify_sessions.clear()
-        print("✅ 모든 Streaming STT 세션 종료 완료")
+        print("✅ [통신 요청 수락] 모든 Streaming STT 세션 종료 완료")
+    else:
+        print("ℹ️ [통신 요청 수락] 실행 중인 Streaming STT 세션 없음")
     
     # 주의: 마이크는 하나이며, STT 프로세스가 마이크 장치를 해제한 후 WebRTC가 시작되어야 합니다.
     # 마이크는 항상 ON 상태로 유지되며, STT 세션은 이미 종료되었거나 없을 수 있음
     # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
     # mic.release()가 호출되어 실제 마이크 장치가 해제됩니다.
-    print("[DEBUG] handle_audio_stream(True) 이벤트 emit (WebRTC 오디오 스트리밍 목적, 마이크 장치 해제)")
+    print("=" * 60)
+    print("📤 [통신 요청 수락] 라즈베리파이로 handle_audio_stream 이벤트 전송")
+    print("   Data: {'start': True}")
+    print("   목적: WebRTC 오디오 스트리밍을 위해 마이크 장치 물리적 해제")
+    print("=" * 60)
     await broadcast_to("raspi", "handle_audio_stream", {"start": True})
     
     # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
+    print("⏳ [통신 요청 수락] 마이크 장치 해제 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
-    print("✅ 통신 요청 수락 처리 완료: AI_Supporter/OPERATOR 기능 중지, WebRTC 오디오 스트리밍 시작")
+    print("=" * 60)
+    print("✅ [통신 요청 수락] 처리 완료")
+    print("   - AI_Supporter/OPERATOR 기능 중지")
+    print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
     print("=" * 60)
 
 # 웹에서 통신 종료 이벤트 전달
@@ -1702,34 +1756,57 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
-    print("[DEBUG] communication_close 이벤트 발생")
+    print("=" * 60)
+    print("🔔 [이벤트 수신] communication_close 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   Sender Device: {device_map.get(sid, 'unknown')}")
+    print(f"   Data: {data}")
+    print("=" * 60)
+    
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown":
+        print("⚠️ 알 수 없는 디바이스에서 communication_close 이벤트 수신 - 무시")
         return
 
     print("=" * 60)
-    print("📞 통신 종료: WebRTC 오디오 스트리밍 중지 및 STT 목적 음성 수집 재개")
+    print("📞 [통신 종료] WebRTC 오디오 스트리밍 중지 및 STT 목적 음성 수집 재개")
     print("=" * 60)
     
     # WebRTC 오디오 스트리밍 목적 음성 수집 중지
     # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
     # mic.acquire()가 호출되어 실제 마이크 장치를 재점유합니다.
-    print("[DEBUG] handle_audio_stream (start:False) emit (WebRTC 오디오 스트리밍 중지, 마이크 장치 재점유)")
+    print("=" * 60)
+    print("📤 [통신 종료] 라즈베리파이로 handle_audio_stream 이벤트 전송")
+    print("   Data: {'start': False}")
+    print("   목적: STT/Wakeword 프로세스가 마이크 장치를 물리적 재점유")
+    print("=" * 60)
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
     
     # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
+    print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
     # 주의: 마이크는 handle_audio_stream({"start": False})에서 이미 재점유되어 ON 상태임
     # 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
     
     # Wakeword 감지 대기 시작
-    print("[DEBUG] wakeword_start_waiting 이벤트 emit")
+    print("=" * 60)
+    print("📤 [통신 종료] 라즈베리파이로 wakeword_start_waiting 이벤트 전송")
+    print("   목적: Wakeword 감지 대기 상태로 복귀")
+    print("=" * 60)
     await broadcast_to("raspi", "wakeword_start_waiting", {})
-
+    
+    print("=" * 60)
+    print("📤 [통신 종료] 기기 탐지 작업 시작")
+    print("=" * 60)
     await start_device_detector_task()
 
-    print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
+    print("=" * 60)
+    print("✅ [통신 종료] 처리 완료")
+    print("   - WebRTC 오디오 스트리밍 중지")
+    print("   - STT 목적 음성 수집 재개")
+    print("   - Wakeword 감지 대기 시작")
+    print("   - 기기 탐지 시작")
     print("=" * 60)
 
 
