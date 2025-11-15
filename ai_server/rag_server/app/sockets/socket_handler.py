@@ -1785,7 +1785,11 @@ async def handle_ar_marker(sid, data):
             "x": u_new,
             "y": v_new,
             "size": size_px
-        }
+        },
+        "color": data.get("color"),
+        "pulseScale": data.get("pulseScale", 1.0),
+        "pulseOpacity": data.get("pulseOpacity", 1.0),
+        "opacity": data.get("opacity", 1.0)
     }
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
