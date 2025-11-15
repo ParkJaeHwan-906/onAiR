@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # =======================================
     # 💾 Conversation Memory (Redis)
     # =======================================
-    REDIS_URL: str = "redis://localhost:6380/0"
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
     REDIS_PREFIX: str = "rag_chat"
 
     # =======================================
