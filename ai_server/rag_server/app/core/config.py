@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+import os
 
 class Settings(BaseSettings):
     JSONL_PATH: str = "app/data/samkos_cleaned.jsonl"
@@ -91,7 +92,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # 디버그: API 키 로드 상태 확인 (서버 시작 시 한 번만 출력)
-import os
+
 env_gms_key = os.getenv("GMS_API_KEY")
 if env_gms_key:
     print(f"🔍 [Config] 환경 변수 GMS_API_KEY 발견: {env_gms_key[:10]}... (길이: {len(env_gms_key)})")
