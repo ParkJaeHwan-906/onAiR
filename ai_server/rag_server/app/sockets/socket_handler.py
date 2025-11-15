@@ -28,8 +28,8 @@ import httpx
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
 async def run_anomaly_detection():
-
     url = f"{YOLO_URL}/analyze"
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         res = await client.post(url, json={"trigger": "run"})
         res.raise_for_status()
@@ -866,9 +866,6 @@ async def handle_stt_result(sid, data):
                 print("   💡 모바일에서 'AI_Supporter 기능을 시작합니다. 오류 탐지.' 재생 중...")
                 print("   💡 재생 완료 시 intent_audio_completed 이벤트를 통해 CV 로직이 실행됩니다.")
                 print("=" * 60)
-
-
-
                     
         except Exception as e:
             print(f"❌ 버퍼링 STT 처리 오류: {e}")
@@ -1597,7 +1594,7 @@ async def handle_video_frame(sid, data):
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
-                    # "z": round(z_size, 4),
+                    "z": round(z_size, 4),
                     "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 },
                 "color": m["color"],
@@ -1607,7 +1604,7 @@ async def handle_video_frame(sid, data):
             })
         ar_markers[:] = updated
         # print(f"arr : {ar_markers}")
-        await broadcast_to(["pc", "mobile"], "ar-info", {"markers": ar_markers})
+        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -1701,19 +1698,6 @@ async def accept_communication(sid, data):
     print("   Data: {'start': True}")
     print("   목적: WebRTC 오디오 스트리밍을 위해 마이크 장치 물리적 해제")
     print("=" * 60)
-    
-    # 라즈베리파이 연결 상태 확인
-    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
-    if not raspi_sids:
-        print("=" * 60)
-        print("⚠️ [통신 요청 수락] 라즈베리파이 디바이스가 연결되어 있지 않습니다!")
-        print(f"   현재 device_map: {dict(device_map)}")
-        print(f"   연결된 디바이스: {list(set(device_map.values()))}")
-        print("=" * 60)
-    else:
-        print(f"✅ [통신 요청 수락] 라즈베리파이 연결 확인: {len(raspi_sids)}개")
-        print(f"   라즈베리파이 SID: {[s[:15] + '...' for s in raspi_sids]}")
-    
     await broadcast_to("raspi", "handle_audio_stream", {"start": True})
     
     # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
@@ -1884,7 +1868,7 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    await broadcast_to(["pc", "mobile"], "ar-info", {"markers": ar_markers})
+    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
 
 async def delete_marker(sid, data):
     """
@@ -1909,4 +1893,4 @@ async def delete_marker(sid, data):
         marker["idx"] = i
     
     # 전송을 하긴 하는데, 없어도 될듯?
-    await broadcast_to(["pc", "mobile"], "ar-info", {"markers": ar_markers})
+    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
