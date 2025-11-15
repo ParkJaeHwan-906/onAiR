@@ -535,10 +535,11 @@ async def handle_intent_audio_completed(sid, data):
                         print(f"🤖 [단계 12] GPT-4o로 최종 답변 생성 시작")
                         print("=" * 60)
                         
-                        # GPT-4o 호출 시점에 STT 목적 음성 수집 중지 이벤트 전송
-                        # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-                        print("[DEBUG] GPT-4o 호출 시점: STT 목적 음성 수집 중지 이벤트 전송")
-                        await broadcast_to("raspi", "mic_off", {})
+                        # GPT-4o 호출 시점에 Streaming STT 세션 종료 이벤트 전송
+                        # 주의: 마이크는 계속 ON 상태이지만, Streaming STT 세션을 종료하여 큐에 데이터가 누적되지 않도록 함
+                        print("[DEBUG] GPT-4o 호출 시점: Streaming STT 세션 종료 이벤트 전송")
+                        # CV 탐지 성공은 세션이 없으므로 세션 종료 이벤트는 전송하지 않음
+                        # (이 경우는 Streaming STT가 실행되지 않았으므로)
                         
                         snippets = [h["source"]["content"] for h in used_hits]
                         answer_result = llm_generate_answer(query, snippets, used_hits)
@@ -612,24 +613,18 @@ async def handle_intent_audio_completed(sid, data):
                 "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
             })
     elif intent == "OPERATOR":
-        # OPERATOR인 경우 WebRTC 오디오 스트리밍 목적으로 음성 수집 시작
+        # OPERATOR인 경우 WebRTC 오디오 스트리밍 대기 상태
         print("=" * 60)
         print(f"✅ [단계 8-1 완료] OPERATOR Intent 음성 파일 재생 완료 확인")
-        print("   WebRTC 오디오 스트리밍 목적으로 음성 수집 시작")
+        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
         print("=" * 60)
         
         # 주의: 마이크는 하나이며, STT 프로세스가 마이크를 해제한 후 WebRTC가 시작되어야 합니다.
         # 버퍼링 STT 완료 후 이미 mic.pause()가 호출되어 STT 목적 음성 수집은 OFF 상태입니다.
-        # 하지만 실제 마이크 장치는 여전히 점유 중이므로, 장치를 해제해야 합니다.
+        # 실제 마이크 장치 해제는 accept_communication 이벤트에서 handle_audio_stream으로 처리됩니다.
         
-        # Python 3.10 프로세스에 마이크 장치 해제 신호 전송
-        # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
-        # mic.release()가 호출됩니다.
-        await broadcast_to("raspi", "handle_audio_stream", {"start": True})
-        
-        # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
-        await asyncio.sleep(0.3)
-        print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료: WebRTC 오디오 스트리밍 시작")
+        print("✅ OPERATOR Intent 음성 파일 재생 완료 처리 완료")
+        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
         print("=" * 60)
     else:
         print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
@@ -687,12 +682,10 @@ async def handle_audio_playback_completed(sid, data):
         # AI_Supporter 최종 답변 TTS 재생 완료 → 마이크 ON + Wakeword 감지 대기 시작
         print("=" * 60)
         print(f"✅ AI_Supporter 최종 답변 TTS 재생 완료: session_id={session_id}")
-        print("   마이크 ON + Wakeword 감지 대기 시작 이벤트 전송")
+        print("   Wakeword 감지 대기 시작 이벤트 전송")
         print("=" * 60)
         
-        # 라즈베리파이로 STT 목적 음성 수집 재개 이벤트 전송
-        # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
-        await broadcast_to("raspi", "mic_on", {})
+        # 주의: 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
         
         # 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송
         await broadcast_to("raspi", "wakeword_start_waiting", {})
@@ -816,6 +809,17 @@ async def handle_stt_result(sid, data):
             print(f"   버퍼링 STT 처리 완료: '{stt_text[:50]}...' → Intent: {intent}")
             print("=" * 60)
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
+            
+            # 버퍼링 STT 세션 종료 이벤트 전송
+            # 주의: 마이크는 계속 ON 상태이지만, 버퍼링 STT 세션은 종료하여 큐에 데이터가 누적되지 않도록 함
+            print("=" * 60)
+            print("📤 [단계 8-0] 버퍼링 STT 세션 종료 이벤트 전송")
+            print("=" * 60)
+            await broadcast_to("raspi", "stop_buffered_stt", {
+                "reason": "버퍼링 STT 결과 전송 완료, Intent 분류 진행"
+            })
+            print("✅ 버퍼링 STT 세션 종료 이벤트 전송 완료")
+            await wait_for_next_step("버퍼링 STT 세션 종료 이벤트 전송 완료", "8-0")
             
             # AI_SUPPORTER인 경우 모바일에서 intent_audio_completed 이벤트를 기다림
             # CV 로직은 handle_intent_audio_completed에서 실행됨
@@ -1233,10 +1237,13 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             
             # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
-            # GPT-4o 호출 시점에 STT 목적 음성 수집 중지 이벤트 전송
-            # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-            print("[DEBUG] GPT-4o 호출 시점: STT 목적 음성 수집 중지 이벤트 전송")
-            await broadcast_to("raspi", "mic_off", {})
+            # GPT-4o 호출 시점에 Streaming STT 세션 종료 이벤트 전송
+            # 주의: 마이크는 계속 ON 상태이지만, Streaming STT 세션을 종료하여 큐에 데이터가 누적되지 않도록 함
+            print("[DEBUG] GPT-4o 호출 시점: Streaming STT 세션 종료 이벤트 전송 (Clarify GREEN)")
+            await broadcast_to("raspi", "stop_streaming_stt", {
+                "session_id": session_id,
+                "reason": "Clarify GREEN → GPT-4o 최종 답변 생성 시작"
+            })
             
             snippets = [h["source"]["content"] for h in used_hits]
             answer_result = llm_generate_answer(effective_query, snippets, used_hits)
@@ -1550,7 +1557,7 @@ async def handle_video_frame(sid, data):
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
                     "z": round(z_size, 4),
-                    "size": round(size_px, 3),
+                    "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 }
             })
         ar_markers[:] = updated
@@ -1626,12 +1633,8 @@ async def accept_communication(sid, data):
         clarify_sessions.clear()
         print("✅ 모든 Streaming STT 세션 종료 완료")
     
-    # STT 목적으로 음성 수집 중지 이벤트 전송 (논리적 OFF)
-    # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-    print("[DEBUG] STT 목적 음성 수집 중지 이벤트 전송 (논리적 OFF)")
-    await broadcast_to("raspi", "mic_off", {})
-    
     # 주의: 마이크는 하나이며, STT 프로세스가 마이크 장치를 해제한 후 WebRTC가 시작되어야 합니다.
+    # 마이크는 항상 ON 상태로 유지되며, STT 세션은 이미 종료되었거나 없을 수 있음
     # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
     # mic.release()가 호출되어 실제 마이크 장치가 해제됩니다.
     print("[DEBUG] handle_audio_stream(True) 이벤트 emit (WebRTC 오디오 스트리밍 목적, 마이크 장치 해제)")
@@ -1667,10 +1670,8 @@ async def communication_close(sid, data):
     # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
     await asyncio.sleep(0.3)
     
-    # STT 목적 음성 수집 재개 (논리적 ON)
-    # 주의: 마이크는 하나이며, STT 목적으로 음성을 수집합니다.
-    print("[DEBUG] mic_on 이벤트 emit (논리적 ON)")
-    await broadcast_to("raspi", "mic_on", {})
+    # 주의: 마이크는 handle_audio_stream({"start": False})에서 이미 재점유되어 ON 상태임
+    # 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
     
     # Wakeword 감지 대기 시작
     print("[DEBUG] wakeword_start_waiting 이벤트 emit")
@@ -1740,7 +1741,7 @@ async def handle_control_raspi(sid, data):
 # AR 마커 생성 이벤트
 # ========================================
 # 전역 관리 리스트
-ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
+ar_markers = []  # [{ "type": str, "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
 
 async def handle_ar_marker(sid, data):
     """
@@ -1761,6 +1762,7 @@ async def handle_ar_marker(sid, data):
     # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
     size_px = motion_core.compute_marker_size(z_scale)
     marker = {
+        "type": "marker",
         "idx": len(ar_markers) + 1,
         "info": {
             "x": u_new,
