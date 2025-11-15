@@ -143,11 +143,18 @@ def track_features(
         next_pts_valid : (M,1,2) float32
         valid_mask     : (N,) uint8 (원본 prev_pts 기준 살아남은 인덱스)
     """
+
     # ---------- 입력 검증 ----------
     if prev_pts is None or len(prev_pts) == 0:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
     if prev_gray is None or cur_gray is None:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
+    
+    # float32 + (N,1,2) 강제 규격화
+    prev_pts = np.asarray(prev_pts, dtype=np.float32)
+    if prev_pts.shape[-1] > 2:
+        prev_pts = prev_pts[..., :2]
+    prev_pts = prev_pts.reshape(-1, 1, 2)
 
     # ---------- 전처리 ----------
     cur_proc = _equalize_if_needed(cur_gray, enable_equalize)
