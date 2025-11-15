@@ -13,6 +13,7 @@ interface CanvasProps {
 
 // AR 마커 타입 정의
 type ArMarker = {
+  type: string;
   idx: number;
   info: {
     x: number;
@@ -125,30 +126,38 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
 
     // ar-info 이벤트 listen
     socket.on("ar-info", (data) => {
-      console.log("receive ar info", data);
+      console.log("[SOCKET] receive ar-info =>", data);
 
-      // { markers: [...] } 형태의 데이터 처리
       const markersData = data as unknown as { markers: ArMarker[] };
-      if (Array.isArray(markersData.markers)) {
-        // 카메라 좌표를 Stage 좌표로 변환
-        const convertedMarkers = markersData.markers.map((marker: ArMarker) => {
+
+      if (!Array.isArray(markersData.markers)) {
+        console.warn("data.markers is not an array:", markersData.markers);
+        setArMarkers([]);
+        return;
+      }
+
+      // 위치/사이즈는 서버 값 사용 + 기존 파동 효과는 유지
+      setArMarkers((prev) => {
+        return markersData.markers.map((marker) => {
           const stagePos = convertCameraToStage(marker.info.x, marker.info.y);
+
+          // 기존 마커 찾기 (pulse 유지 목적)
+          const old = prev.find((m) => m.idx === marker.idx);
+
           return {
             ...marker,
             info: {
               ...marker.info,
               x: stagePos.x,
               y: stagePos.y,
-              size: marker.info.size * scale, // size도 스케일 적용
+              size: marker.info.size * scale,
             },
+            // 기존 파동 상태 유지
+            pulseScale: old?.pulseScale ?? 1,
+            pulseOpacity: old?.pulseOpacity ?? 0.5,
           };
         });
-        setArMarkers(convertedMarkers);
-        console.log("converted AR Markers : ", convertedMarkers);
-      } else {
-        console.warn("data.markers is not an array:", markersData.markers);
-        setArMarkers([]);
-      }
+      });
     });
 
     // cleanup
@@ -157,21 +166,21 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     };
   }, [socket, convertCameraToStage, scale]);
 
-  // -------------------------- Pulse 효과: 마커가 주기적으로 커졌다 작아짐 ---------------------------
+  // -------------------------- Ripple 효과 (물방울처럼 퍼짐) ---------------------------
   useEffect(() => {
     const interval = setInterval(() => {
       setArMarkers((prev) =>
         prev.map((m) => {
-          const newScale = (m.pulseScale ?? 1) + 0.03;
-          const newOpacity = (m.pulseOpacity ?? 0.5) - 0.02;
-          if (newScale > 1.6) {
+          const newScale = (m.pulseScale ?? 1) + 0.015;
+          const newOpacity = (m.pulseOpacity ?? 0.5) - 0.005;
+          if (newScale > 1.3) {
             // 다시 초기화 (한 바퀴 돌면 원래 크기로)
             return { ...m, pulseScale: 1, pulseOpacity: 0.5 };
           }
           return { ...m, pulseScale: newScale, pulseOpacity: newOpacity };
         })
       );
-    }, 50); // 0.05초마다 갱신
+    }, 100); // 0.05초마다 갱신
     return () => clearInterval(interval);
   }, []);
 
@@ -205,6 +214,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     if (tool == "eraser") {
       const target = arMarkers.find(
         (m) =>
+          m.type === "marker" &&
           Math.hypot(m.info.x - pos.x, m.info.y - pos.y) <= m.info.size + 10
       );
 
@@ -243,9 +253,12 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       setArMarkers((prev) => [
         ...prev,
         {
+          type: "marker",
           idx: Date.now(),
           info: { x: pos.x, y: pos.y, size: 20 },
           color: penColor,
+          pulseScale: 1,
+          pulseOpacity: 0.5,
         },
       ]);
 
@@ -257,6 +270,11 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       socket.emit("ar-marker", {
         marker_x: cameraPos.x,
         marker_y: cameraPos.y,
+        type: "marker",
+        color: penColor,
+        opacity: 1,
+        pulseScale: 1,
+        pulseOpacity: 0.5,
       });
     }
   };
@@ -360,9 +378,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
                 />
                 {/* 퍼지는 파동 (pulse 효과) */}
                 <Circle
-                  radius={marker.info.size * (marker.pulseScale ?? 1)}
+                  radius={marker.info.size * 0.7 * (marker.pulseScale ?? 1)}
                   stroke={marker.color}
-                  strokeWidth={1.5}
+                  strokeWidth={1.3}
                   opacity={marker.pulseOpacity ?? 0.5}
                 />
               </Group>
