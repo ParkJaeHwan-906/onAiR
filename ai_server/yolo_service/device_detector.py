@@ -3,9 +3,9 @@
 import asyncio
 from loguru import logger
 
-from yolo_service.yolo_utils import load_yolo_model, yolo_infer
-from yolo_service.redis_frame_store import get_latest_frame
-from yolo_service.redis_client import save_device_result, get_device_state
+from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
+from ai_server.yolo_service.redis_frame_store import get_latest_frame
+from ai_server.yolo_service.redis_client import save_device_result, get_device_state
 
 
 YOLO_MODEL_PATH = "yolo_service/models/device_best.pt"

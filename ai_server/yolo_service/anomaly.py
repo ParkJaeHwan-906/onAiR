@@ -2,12 +2,12 @@ import asyncio
 from loguru import logger
 from typing import Dict, List
 
-from yolo_service.redis_frame_store import get_cv_buffer_frames, get_device_state
+from ai_server.yolo_service.redis_frame_store import get_cv_buffer_frames, get_device_state
 
 # 개별 anomaly 분석 모듈
-from yolo_service.fan_belt_anomaly import analyze_fan_belt
-from yolo_service.gauge_anomaly import analyze_gauge
-from yolo_service.panel_anomaly import analyze_panel
+from ai_server.yolo_service.fan_belt_anomaly import analyze_fan_belt
+from ai_server.yolo_service.gauge_anomaly import analyze_gauge
+from ai_server.yolo_service.panel_anomaly import analyze_panel
 
 
 async def run_anomaly_detection() -> Dict:
