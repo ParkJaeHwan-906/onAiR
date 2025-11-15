@@ -17,9 +17,9 @@ from ultralytics import YOLO
 # ------------------------------
 # 모델 경로
 # ------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-MODULE_MODEL_PATH = BASE_DIR / "../models/module_best.pt"
-PANEL_MODEL_PATH = BASE_DIR / "../models/panel_best.pt"
+
+MODULE_MODEL_PATH = "/app/ai_server/yolo_service/models/module_best.pt"
+PANEL_MODEL_PATH = "/app/ai_server/yolo_service/models/panel_best.pt"
 
 # ------------------------------
 # 하이퍼파라미터
