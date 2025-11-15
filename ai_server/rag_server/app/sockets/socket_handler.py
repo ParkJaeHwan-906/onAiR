@@ -1550,7 +1550,7 @@ async def handle_video_frame(sid, data):
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
                     "z": round(z_size, 4),
-                    "size": round(size_px, 3),
+                    "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 }
             })
         ar_markers[:] = updated
@@ -1740,7 +1740,7 @@ async def handle_control_raspi(sid, data):
 # AR 마커 생성 이벤트
 # ========================================
 # 전역 관리 리스트
-ar_markers = []  # [{ "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
+ar_markers = []  # [{ "type": str, "idx": int, "info": { "x": float, "y": float, "size": float } }, ...]
 
 async def handle_ar_marker(sid, data):
     """
@@ -1761,6 +1761,7 @@ async def handle_ar_marker(sid, data):
     # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
     size_px = motion_core.compute_marker_size(z_scale)
     marker = {
+        "type": "marker",
         "idx": len(ar_markers) + 1,
         "info": {
             "x": u_new,
