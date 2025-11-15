@@ -4,7 +4,8 @@ import io
 import time
 import threading
 import socketio
-import sounddevice as sd
+# 주의: sounddevice는 사용하지 않으므로 import 제거 (마이크 리소스 점유 방지)
+# import sounddevice as sd
 import numpy as np
 from datetime import datetime
 from threading import Condition
