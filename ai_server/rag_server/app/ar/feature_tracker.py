@@ -117,12 +117,94 @@ def _adaptive_large_motion_filter(
 
 
 # ==========================================================
+# 🔧 prev_pts 정규화 유틸
+# ==========================================================
+def _normalize_points_to_n12(pts) -> np.ndarray | None:
+    """
+    다양한 형태의 pts를 (N,1,2) float32로 정규화.
+    - list/tuple/ndarray 모두 허용
+    - inhomogeneous shape 발생하면 None 반환
+    """
+    if pts is None:
+        return None
+
+    try:
+        # 리스트/튜플이고 내부에 ndarray/list/tuple가 들어있는 경우
+        if isinstance(pts, (list, tuple)) and len(pts) > 0 \
+           and isinstance(pts[0], (np.ndarray, list, tuple)):
+
+            parts = []
+            for p in pts:
+                if p is None:
+                    continue
+                a = np.asarray(p, dtype=np.float32)
+
+                if a.ndim == 1:
+                    # [x, y] 형태
+                    if a.size < 2:
+                        continue
+                    a = a[:2].reshape(1, 1, 2)
+                elif a.ndim == 2:
+                    # (K,2) 또는 (K,>=2)
+                    if a.shape[1] < 2:
+                        continue
+                    a = a[:, :2].reshape(-1, 1, 2)
+                elif a.ndim >= 3:
+                    # (K,1,2) 또는 (K,1,>=2)
+                    if a.shape[-1] < 2:
+                        continue
+                    a = a[..., :2].reshape(-1, 1, 2)
+                else:
+                    continue
+
+                if len(a) > 0:
+                    parts.append(a)
+
+            if not parts:
+                return None
+
+            pts_arr = np.vstack(parts)
+
+        else:
+            # 일반적인 경우: 바로 배열로 변환
+            pts_arr = np.asarray(pts, dtype=np.float32)
+
+        # 이제 pts_arr의 ndim/shape에 따라 (N,1,2)로 맞추기
+        if pts_arr.ndim == 1:
+            # [x, y] 형태
+            if pts_arr.size < 2:
+                return None
+            pts_arr = pts_arr[:2].reshape(1, 1, 2)
+
+        elif pts_arr.ndim == 2:
+            # (N,2) 또는 (N,>=2)
+            if pts_arr.shape[1] < 2:
+                return None
+            pts_arr = pts_arr[:, :2].reshape(-1, 1, 2)
+
+        elif pts_arr.ndim >= 3:
+            # (N,1,2) 또는 (N,1,>=2, ...)
+            if pts_arr.shape[-1] < 2:
+                return None
+            pts_arr = pts_arr[..., :2].reshape(-1, 1, 2)
+
+        if len(pts_arr) == 0:
+            return None
+
+        return pts_arr.astype(np.float32)
+
+    except ValueError:
+        # inhomogeneous shape 등으로 asarray 실패한 경우
+        return None
+
+
+# ==========================================================
 # 🧭 메인 Optical Flow 추적 함수
 # ==========================================================
 def track_features(
     prev_gray: np.ndarray,
     cur_gray: np.ndarray,
-    prev_pts: np.ndarray,
+    prev_pts,
     *,
     fb_thresh: float = 2.0,                 # FB soft-filter 스케일
     large_motion_px: float = 100.0,         # 프레임 전체 평균 이동량이 이걸 넘으면 issue 저장
@@ -145,16 +227,17 @@ def track_features(
     """
 
     # ---------- 입력 검증 ----------
-    if prev_pts is None or len(prev_pts) == 0:
+    if prev_pts is None:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
     if prev_gray is None or cur_gray is None:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
-    
-    # float32 + (N,1,2) 강제 규격화
-    prev_pts = np.asarray(prev_pts, dtype=np.float32)
-    if prev_pts.shape[-1] > 2:
-        prev_pts = prev_pts[..., :2]
-    prev_pts = prev_pts.reshape(-1, 1, 2)
+
+    # prev_pts를 (N,1,2) float32로 강제 규격화
+    prev_pts_norm = _normalize_points_to_n12(prev_pts)
+    if prev_pts_norm is None or len(prev_pts_norm) == 0:
+        return np.array([]), np.array([]), np.array([], dtype=np.uint8)
+
+    prev_pts = prev_pts_norm
 
     # ---------- 전처리 ----------
     cur_proc = _equalize_if_needed(cur_gray, enable_equalize)
@@ -190,7 +273,8 @@ def track_features(
         mean_flow = _mean_flow(prev_pts[valid], next_pts[valid])
         # if mean_flow > large_motion_px:
         #     print(f"⚠️ Large motion detected: mean={mean_flow:.1f}px (> {large_motion_px})")
-        # ---------- 유효 포인트 결과 ----------
+
+    # ---------- 유효 포인트 결과 ----------
     if np.count_nonzero(valid) < 5:
         return np.array([]), np.array([]), np.array([], dtype=np.uint8)
 
@@ -204,14 +288,18 @@ def track_features(
 # ==========================================================
 # ✅ 개선 요약
 # ==========================================================
-# • FB soft-filter (상위 85% confidence 유지)
+# • prev_pts를 _normalize_points_to_n12()로 강제 (N,1,2,float32)
+#   - list/tuple/ndarray 모두 허용
+#   - inhomogeneous shape이면 해당 프레임은 no_tracks로 안전하게 스킵
+# • FB soft-filter (상위 95% confidence 유지 방식)
 # • LK error 기반 IQR 필터 (관대)
 # • Adaptive Large Motion ( |flow| > mean + 1.5 * std 제거 )
 # • blur_var_thresh  = 12.0   → 약한 블러 프레임 통과
 # • winSize          = (25,25), maxLevel=4 → 큰 모션 대응
-# • 프레임 평균 이동량이 large_motion_px 초과 시 issue 프레임 저장
+# • 프레임 평균 이동량이 large_motion_px 초과 시 issue 프레임 저장 (원하면 로그 추가)
 #
 # 🚀 효과:
+#   - prevPts inhomogeneous shape로 인한 ValueError 제거
 #   - 개별 outlier 제거 → RANSAC inlier 비율 상승
 #   - Tracking-lost 빈도 감소
 #   - 큰 움직임/플리커/오류 벡터 대응 향상
