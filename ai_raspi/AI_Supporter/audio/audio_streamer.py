@@ -5,43 +5,47 @@ WebRTC 오디오 스트리밍 모듈
 import time
 import threading
 import logging
-import queue
-import asyncio
 import sounddevice as sd
 import numpy as np
-import base64
 
 logger = logging.getLogger(__name__)
+
+# 재시도 설정
+max_retries = 3
+retry_delay = 0.5
 
 class AudioStreamer:
     """
     WebRTC 오디오 스트리밍 클래스
     sounddevice를 사용하여 마이크에서 오디오를 읽고 Socket.IO로 전송합니다.
     """
-    def __init__(self, socketio_client, sample_rate=16000, channels=1, chunk_size=1024):
+    def __init__(self, socketio_client, sample_rate=16000, channels=1, chunk_size=1024, send_chunk=4):
         """
         Args:
             socketio_client: SocketIOClient 인스턴스 (오디오 프레임 전송용)
             sample_rate: 샘플레이트 (기본값: 16000Hz)
             channels: 채널 수 (기본값: 1, 모노)
             chunk_size: 청크 크기 (기본값: 1024 샘플)
+            send_chunk: 전송할 청크 수 (기본값: 4, 버퍼링)
         """
         self.socketio_client = socketio_client
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk_size = chunk_size
+        self.send_chunk = send_chunk
         
         self.is_streaming = False
         self.stream = None
         self.stream_thread = None
-        self.stop_event = threading.Event()
-        self.audio_queue = queue.Queue(maxsize=10)  # 오디오 프레임 큐 (백프레셔 방지)
-        self.send_thread = None  # 오디오 전송 스레드
+        # 버퍼: 여러 청크를 모아서 한 번에 전송
+        self.buffer = np.zeros((chunk_size * send_chunk,), dtype=np.float32)
+        self.buffer_index = 0
         
         logger.info("🎙️ AudioStreamer 초기화 완료")
         logger.info(f"   - Sample Rate: {self.sample_rate}Hz")
         logger.info(f"   - Channels: {self.channels}")
         logger.info(f"   - Chunk Size: {self.chunk_size} samples")
+        logger.info(f"   - Send Chunk: {self.send_chunk} (버퍼 크기: {chunk_size * send_chunk} samples)")
     
     def start(self):
         """오디오 스트리밍 시작"""
@@ -49,174 +53,155 @@ class AudioStreamer:
             logger.warning("⚠️ 오디오 스트리밍이 이미 실행 중입니다.")
             return
         
-        try:
-            logger.info("=" * 60)
-            logger.info("🎙️ 오디오 스트리밍 시작")
-            logger.info("=" * 60)
-            
-            # sounddevice InputStream 생성
-            self.stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                blocksize=self.chunk_size,
-                dtype='float32',
-                callback=self._audio_callback
-            )
-            
-            self.is_streaming = True
-            self.stop_event.clear()
-            
-            # 스트림 시작
-            self.stream.start()
-            
-            # 오디오 전송 스레드 시작
-            self.send_thread = threading.Thread(target=self._send_audio_loop, daemon=True)
-            self.send_thread.start()
-            
-            logger.info("✅ 오디오 스트림 시작 완료")
-            logger.info("   - 마이크에서 오디오 읽기 시작")
-            logger.info("   - Socket.IO로 audio_frame 이벤트 전송 시작")
-            
-        except Exception as e:
-            logger.error(f"❌ 오디오 스트리밍 시작 실패: {e}")
-            self.is_streaming = False
-            raise
+        logger.info("=" * 60)
+        logger.info("🎙️ 오디오 스트리밍 시작")
+        logger.info("=" * 60)
+        
+        self.is_streaming = True
+        # 스트리밍 시작 시 버퍼 인덱스 초기화
+        self.buffer_index = 0
+        
+        # 별도 스레드에서 스트리밍 시작
+        self.stream_thread = threading.Thread(target=self._stream_audio, daemon=True)
+        self.stream_thread.start()
     
     def stop(self):
-        """오디오 스트리밍 중지"""
+        """오디오 스트리밍 종료"""
         if not self.is_streaming:
             logger.warning("⚠️ 오디오 스트리밍이 실행 중이 아닙니다.")
             return
         
-        try:
-            logger.info("=" * 60)
-            logger.info("🛑 오디오 스트리밍 중지")
-            logger.info("=" * 60)
-            
-            self.is_streaming = False
-            self.stop_event.set()
-            
-            if self.stream:
+        logger.info("=" * 60)
+        logger.info("🛑 오디오 스트리밍 중지")
+        logger.info("=" * 60)
+        
+        self.is_streaming = False
+        
+        # 스트림이 열려있으면 명시적으로 닫기
+        if self.stream is not None:
+            try:
                 self.stream.stop()
                 self.stream.close()
+            except Exception as e:
+                logger.warning(f"⚠️ Stream close error: {e}")
+            finally:
                 self.stream = None
-            
-            # 오디오 전송 스레드 종료 대기
-            if self.send_thread and self.send_thread.is_alive():
-                self.send_thread.join(timeout=1.0)
-            
-            # 큐 비우기
-            while not self.audio_queue.empty():
-                try:
-                    self.audio_queue.get_nowait()
-                except queue.Empty:
-                    break
-            
-            logger.info("✅ 오디오 스트림 중지 완료")
-            
-        except Exception as e:
-            logger.error(f"❌ 오디오 스트리밍 중지 실패: {e}")
+        
+        # 스트림 스레드 종료 대기
+        if self.stream_thread and self.stream_thread.is_alive():
+            self.stream_thread.join(timeout=2.0)
+        
+        logger.info("✅ 오디오 스트림 중지 완료")
     
-    def _audio_callback(self, indata, frames, time_info, status):
-        """
-        sounddevice 오디오 콜백 함수
-        마이크에서 오디오 데이터를 받을 때마다 호출됩니다.
+    def _stream_audio(self):
+        """오디오 스트리밍 메인 루프 (별도 스레드에서 실행)"""
+        # 스트림 시작 시 버퍼 인덱스 초기화
+        self.buffer_index = 0
         
-        Args:
-            indata: 입력 오디오 데이터 (numpy array)
-            frames: 프레임 수
-            time_info: 타임스탬프 정보
-            status: 상태 정보
-        """
-        if status:
-            logger.warning(f"⚠️ 오디오 스트림 상태: {status}")
-        
-        if not self.is_streaming:
-            return
-        
-        try:
-            # 오디오 데이터를 float32에서 int16으로 변환
-            # sounddevice는 기본적으로 float32(-1.0 ~ 1.0)로 반환
-            audio_int16 = (indata * 32767).astype(np.int16)
+        def callback(indata, frames, time_info, status):
+            """sounddevice 오디오 콜백 함수"""
+            if not self.is_streaming:
+                return
             
-            # 오디오 데이터를 base64로 인코딩
-            audio_bytes = audio_int16.tobytes()
-            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            if status:
+                logger.warning(f"⚠️ 오디오 스트림 상태: {status}")
             
-            # 타임스탬프 생성 (밀리초)
-            timestamp = int(time.time() * 1000)
+            length = len(indata)
             
-            # 오디오 프레임을 큐에 추가 (백프레셔 방지를 위해 큐가 가득 차면 스킵)
-            try:
-                self.audio_queue.put_nowait({
-                    "timestamp": timestamp,
-                    "audio": audio_base64,
-                    "sample_rate": self.sample_rate,
-                    "channels": self.channels
-                })
-            except queue.Full:
-                # 큐가 가득 차면 가장 오래된 프레임 제거 후 추가
-                try:
-                    self.audio_queue.get_nowait()
-                    self.audio_queue.put_nowait({
-                        "timestamp": timestamp,
-                        "audio": audio_base64,
-                        "sample_rate": self.sample_rate,
-                        "channels": self.channels
-                    })
-                except queue.Empty:
-                    pass
-    
-    def _send_audio_loop(self):
-        """오디오 프레임 전송 루프 (별도 스레드에서 실행)"""
-        logger.info("🚀 오디오 전송 스레드 시작")
-        
-        while self.is_streaming or not self.audio_queue.empty():
-            try:
-                # 큐에서 오디오 프레임 가져오기 (타임아웃: 0.1초)
-                try:
-                    audio_data = self.audio_queue.get(timeout=0.1)
-                except queue.Empty:
-                    continue
+            if self.buffer_index + length >= len(self.buffer):
+                # 버퍼 채워짐 → 서버로 전송
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:, 0]
                 
-                # Socket.IO로 audio_frame 이벤트 전송
-                if self.socketio_client and self.socketio_client.sio:
-                    try:
-                        # 이벤트 루프 가져오기
+                try:
+                    timestamp = int(time.time() * 1000)  # 현재 시각 (ms 단위)
+                    
+                    # 바이너리 데이터로 변환 (float32 → bytes)
+                    audio_bytes = self.buffer.tobytes()
+                    
+                    # Socket.IO로 audio_frame 이벤트 전송
+                    if self.socketio_client and self.socketio_client.sio:
                         try:
+                            import asyncio
                             loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            # 이벤트 루프가 없으면 새로 생성
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        if loop.is_running():
-                            # 이미 실행 중인 루프면 태스크로 추가
-                            asyncio.run_coroutine_threadsafe(
-                                self._emit_audio_frame(audio_data),
-                                loop
-                            )
-                        else:
-                            # 루프가 실행 중이 아니면 직접 실행
-                            loop.run_until_complete(
-                                self._emit_audio_frame(audio_data)
-                            )
-                    except Exception as e:
-                        logger.error(f"❌ audio_frame 이벤트 전송 실패: {e}")
+                            if loop.is_running():
+                                asyncio.run_coroutine_threadsafe(
+                                    self._emit_audio_frame(timestamp, audio_bytes),
+                                    loop
+                                )
+                            else:
+                                loop.run_until_complete(
+                                    self._emit_audio_frame(timestamp, audio_bytes)
+                                )
+                        except Exception as e:
+                            logger.error(f"❌ audio_frame 이벤트 전송 실패: {e}")
+                except Exception as e:
+                    logger.error(f"⚠️ Audio emit error: {e}")
+                
+                # 버퍼 인덱스 초기화
+                self.buffer_index = 0
+            else:
+                # 아직 버퍼 채우기
+                self.buffer[self.buffer_index:self.buffer_index+length] = indata[:, 0]
+                self.buffer_index += length
+        
+        # 재시도 로직
+        for attempt in range(max_retries):
+            # is_streaming이 False가 되면 즉시 종료
+            if not self.is_streaming:
+                logger.info("🔇 오디오 스트리밍 중지 신호 수신, 스트림 시작 취소")
+                break
+            
+            try:
+                logger.info(f"🎙️ WebRTC 오디오 스트림 시작 시도 {attempt + 1}/{max_retries}...")
+                
+                self.stream = sd.InputStream(
+                    channels=self.channels,
+                    samplerate=self.sample_rate,
+                    blocksize=self.chunk_size,
+                    callback=callback,
+                    dtype='float32',
+                    device=None  # 기본 장치 사용 (STT 프로세스가 해제한 후 사용)
+                )
+                
+                self.stream.start()
+                logger.info("✅ WebRTC 오디오 스트림 시작 성공")
+                
+                # 스트리밍이 활성화된 동안 대기
+                while self.is_streaming:
+                    time.sleep(0.05)
+                
+                logger.info("🔇 WebRTC 오디오 스트림 종료 (is_streaming=False)")
+                break
                 
             except Exception as e:
-                logger.error(f"❌ 오디오 전송 루프 오류: {e}")
-                if not self.is_streaming:
-                    break
-        
-        logger.info("🔚 오디오 전송 스레드 종료")
+                if attempt < max_retries - 1:
+                    current_delay = retry_delay * (2 ** attempt)  # 지수 백오프
+                    logger.warning(f"   {current_delay}초 후 재시도...")
+                    time.sleep(current_delay)
+                else:
+                    logger.error("❌ WebRTC 오디오 스트림 시작 실패 (최대 재시도 횟수 초과)")
+                    logger.error(f"   오류: {e}")
+            finally:
+                # 스트림 정리
+                if self.stream is not None:
+                    try:
+                        self.stream.stop()
+                        self.stream.close()
+                        logger.info("🔇 WebRTC 마이크 스트림 닫기 완료")
+                    except Exception as e:
+                        logger.warning(f"⚠️ 스트림 닫기 오류 (무시 가능): {e}")
+                    finally:
+                        self.stream = None
     
-    async def _emit_audio_frame(self, audio_data):
+    async def _emit_audio_frame(self, timestamp, frame_bytes):
         """비동기 audio_frame 이벤트 전송"""
         try:
             await self.socketio_client.sio.emit(
                 "audio_frame",
-                audio_data
+                {
+                    "timestamp": timestamp,
+                    "frame": frame_bytes
+                }
             )
         except Exception as e:
             logger.error(f"❌ audio_frame emit 오류: {e}")
