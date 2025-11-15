@@ -22,10 +22,19 @@ from app.services.answerability import comprehensive_evidence_check, normalize_q
 from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
-from ai_server.yolo_service.anomaly import run_anomaly_detection
 from app.ar import motion_core
 from ai_server.yolo_service.app.main import stop_device_detector_task, start_device_detector_task
-# Redis 의존성 제거됨 - 메모리 버퍼 사용
+import httpx
+
+YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
+
+async def run_anomaly_detection():
+    url = f"{YOLO_URL}/analyze"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(url, json={"trigger": "run"})
+        res.raise_for_status()
+        return res.json()
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -397,6 +406,7 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 60)
 
             cv_raw = await run_anomaly_detection()
+            print("CV 결과:", cv_raw)
 
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {}).get("results", {})
