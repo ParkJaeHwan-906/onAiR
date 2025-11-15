@@ -725,22 +725,37 @@ async def handle_audio_playback_completed(sid, data):
         # Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
         # (이미 라즈베리파이에서 Streaming STT가 실행 중이므로 별도 처리 불필요)
         print("=" * 60)
-        print(f"✅ Clarify Q&A 턴 TTS 재생 완료: session_id={session_id}, turn_id={turn_id}")
-        print("   다음 Streaming STT 질문을 대기 중입니다.")
+        print(f"✅ [FastAPI] Clarify Q&A 턴 TTS 재생 완료 이벤트 수신")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+        print("=" * 60)
+        print("=" * 60)
+        print(f"🔄 [FastAPI] 다음 Streaming STT 질문 대기 중")
+        print(f"   💡 라즈베리파이 Streaming STT는 계속 실행 중")
+        print(f"   💡 사용자가 다음 질문을 말하면 자동으로 처리됩니다")
         print("=" * 60)
         await wait_for_next_step("Clarify Q&A 턴 TTS 재생 완료 처리", "12-3")
     elif audio_type == "final_answer":
         # AI_Supporter 최종 답변 TTS 재생 완료 → 마이크 ON + Wakeword 감지 대기 시작
         print("=" * 60)
-        print(f"✅ AI_Supporter 최종 답변 TTS 재생 완료: session_id={session_id}")
-        print("   Wakeword 감지 대기 시작 이벤트 전송")
+        print(f"✅ [FastAPI] 최종 답변 TTS 재생 완료 이벤트 수신")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
         print("=" * 60)
-        
+        print("=" * 60)
+        print(f"🎉 [FastAPI] 서비스 로직 종료")
+        print(f"   💡 Clarify 루프 완료 → 최종 답변 전달 완료")
+        print("=" * 60)
+        print("=" * 60)
+        print(f"📤 [FastAPI] 라즈베리파이로 wakeword_start_waiting 이벤트 전송")
+        print(f"   목적: Wakeword 감지 대기 상태로 복귀")
+        print("=" * 60)
         
         # 라즈베리파이로 Wakeword 감지 대기 시작 이벤트 전송
         await broadcast_to("raspi", "wakeword_start_waiting", {})
         
-        print("✅ STT 목적 음성 수집 재개 + Wakeword 감지 대기 시작 이벤트 전송 완료")
+        print("=" * 60)
+        print(f"✅ [FastAPI] Wakeword 감지 대기 시작 이벤트 전송 완료")
+        print(f"   💡 서비스 로직 종료 완료")
+        print("=" * 60)
         await wait_for_next_step("최종 답변 TTS 재생 완료 처리", "14-1")
     else:
         print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
@@ -896,7 +911,12 @@ async def handle_stt_result(sid, data):
             print("=" * 60)
             print(f"📝 [단계 13] FastAPI 서버: Streaming STT 결과 수신 [raspi]")
             print(f"   Session ID: {session_id}")
-            print(f"   타입: {stt_type}, 텍스트: {stt_text[:50]}...")
+            print(f"   타입: {stt_type}, 텍스트: {stt_text}")
+            print(f"   신뢰도: {confidence}")
+            print("=" * 60)
+            print("=" * 60)
+            print(f"🤖 [FastAPI] Gemini-Flash 호출 시작 (Clarify 필요 여부 판단)")
+            print(f"   Session ID: {session_id}")
             print("=" * 60)
             await wait_for_next_step("Streaming STT 결과 수신 완료", "13")
             await process_clarify_qa_turn(session_id, stt_text)
@@ -1157,10 +1177,21 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
         # 3. RAG 기반 Evidence Check (RED/YELLOW/GREEN)
         print("=" * 60)
         print(f"🔍 [단계 13-3] Evidence Check 시작 (RED/YELLOW/GREEN 판단)")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
         print("=" * 60)
         need_clarify, evidence_stats = comprehensive_evidence_check(effective_query, used_hits)
         gate_decision = evidence_stats.get("gate_decision")
-        print(f"✅ Evidence Check 완료: gate_decision={gate_decision}, need_clarify={need_clarify}")
+        print("=" * 60)
+        print(f"✅ [FastAPI] Evidence Check 완료")
+        print(f"   Gate Decision: {gate_decision}")
+        print(f"   Need Clarify: {need_clarify}")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+        if gate_decision == "RED":
+            print("   🔴 RED: 충분한 정보 없음 → Clarify 질문 생성 필요")
+        elif gate_decision == "YELLOW":
+            print("   🟡 YELLOW: 부분적 정보 있음 → Clarify 질문 생성 필요")
+        elif gate_decision == "GREEN":
+            print("   🟢 GREEN: 충분한 정보 있음 → GPT-4o로 최종 답변 생성")
         print("=" * 60)
         await wait_for_next_step("Evidence Check 완료", "13-3")
         
@@ -1235,7 +1266,11 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # clarify_qa_turn 이벤트 전송
             print("=" * 60)
             print(f"📤 [단계 13-7] 모바일로 clarify_qa_turn 이벤트 전송 시작")
-            print(f"   Turn ID: {turn_id}, Need Clarify: True, Gate Decision: {gate_decision}")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   Gate Decision: {gate_decision}, Need Clarify: True")
+            print(f"   작업자 질문: {user_question[:50]}...")
+            print(f"   LLM 답변: {llm_answer[:50]}...")
+            print(f"   TTS 오디오 크기: {len(audio_content) if audio_content else 0} bytes")
             print("=" * 60)
             await broadcast_to("mobile", "clarify_qa_turn", {
                 "session_id": session_id,
@@ -1252,6 +1287,8 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             })
             print("=" * 60)
             print(f"✅ [단계 13-7 완료] 모바일로 clarify_qa_turn 이벤트 전송 완료")
+            print(f"   💡 모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
+            print(f"   💡 라즈베리파이 Streaming STT는 계속 실행 중 (다음 질문 대기)")
             print("=" * 60)
             await wait_for_next_step("모바일로 clarify_qa_turn 이벤트 전송 완료", "13-7")
             
@@ -1271,6 +1308,8 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # 이미 위에서 RAG 검색 및 Evidence Check 완료됨
             print("=" * 60)
             print(f"✅ [단계 13-8] 최종 답변 생성 시작 (GREEN, GPT-4o)")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   💡 Gate Decision: GREEN → GPT-4o 호출하여 최종 답변 생성")
             print("=" * 60)
             
             # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
@@ -1283,8 +1322,16 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             })
             
             snippets = [h["source"]["content"] for h in used_hits]
+            print("=" * 60)
+            print(f"🤖 [FastAPI] GPT-4o 호출 시작 (최종 답변 생성)")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print("=" * 60)
             answer_result = llm_generate_answer(effective_query, snippets, used_hits)
-            print(f"✅ 최종 답변 생성 완료: {answer_result.get('tts_text', '')[:50]}...")
+            print("=" * 60)
+            print(f"✅ [FastAPI] GPT-4o 최종 답변 생성 완료")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   답변: {answer_result.get('tts_text', '')[:50]}...")
+            print("=" * 60)
             await wait_for_next_step("최종 답변 생성 완료 (GPT-4o)", "13-8")
             
             # 구조화된 답변에서 TTS 텍스트 추출
@@ -1294,14 +1341,22 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # TTS 생성 (TTS 친화적 텍스트 사용)
             print("=" * 60)
             print(f"🔊 [단계 13-9] 최종 답변 TTS 변환 시작")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   답변 텍스트: {answer_text[:50]}...")
             print("=" * 60)
             try:
                 tts_result = text_to_speech(answer_text)
                 audio_content = tts_result.get("audio_content")
                 audio_encoding = tts_result.get("mime_type")
-                print(f"✅ 최종 답변 TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
+                print("=" * 60)
+                print(f"✅ [FastAPI] 최종 답변 TTS 변환 완료")
+                print(f"   오디오 크기: {len(audio_content) if audio_content else 0} bytes")
+                print(f"   오디오 인코딩: {audio_encoding}")
+                print("=" * 60)
             except Exception as e:
-                print(f"⚠️ TTS 생성 실패: {e}")
+                print("=" * 60)
+                print(f"⚠️ [FastAPI] TTS 생성 실패: {e}")
+                print("=" * 60)
                 audio_content = None
                 audio_encoding = None
             await wait_for_next_step("최종 답변 TTS 변환 완료", "13-9")
@@ -1330,6 +1385,9 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             # 최종 답변 전송 (구조화된 답변 포함)
             print("=" * 60)
             print(f"📤 [단계 13-10] 모바일로 final_answer 이벤트 전송 시작")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   답변 텍스트: {answer_text[:50]}...")
+            print(f"   TTS 오디오 크기: {len(audio_content) if audio_content else 0} bytes")
             print("=" * 60)
             await broadcast_to("mobile", "final_answer", {
                 "session_id": session_id,
@@ -1349,8 +1407,8 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             })
             print("=" * 60)
             print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
-            print(f"   최종 답변 생성 완료 [session={session_id}]")
-            print("   모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
+            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+            print(f"   💡 모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
