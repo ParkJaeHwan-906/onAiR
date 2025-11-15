@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
     FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
     FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
+    
+    # =======================================
+    # 📞 WebRTC API URL
+    # =======================================
+    # WebRTC 요청 API URL
+    # EC2 배포: "http://k13a407.p.ssafy.io" 또는 실제 API 서버 URL
+    WEBRTC_API_URL: str = os.getenv("WEBRTC_API_URL", "https://onair.ai.kr/api")
 
     # =======================================
     # 🔊 TTS (Text-to-Speech) - GCP TTS
