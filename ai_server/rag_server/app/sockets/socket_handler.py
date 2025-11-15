@@ -457,10 +457,7 @@ async def handle_intent_audio_completed(sid, data):
                 "detected": has_anomaly,
                 "device_type": cv_raw.get("device_type"),
                 "modules": modules,
-                "anomalies": {
-                    "status": "anomaly_detected" if has_anomaly else "no_anomaly",
-                    "results": anomalies
-                },
+                "anomalies": anomalies,
                 "message": cv_raw.get("message", "")
             }
 
@@ -525,33 +522,28 @@ async def handle_intent_audio_completed(sid, data):
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
-                
-                # CV 탐지 결과를 기반으로 RAG 쿼리 생성
+
                 device_type = cv_result.get("device_type", "unknown")
                 anomalies = cv_result.get("anomalies", {})
-                modules = cv_result.get("modules", [])
-                
-                # 오류 내용을 쿼리로 변환
+
                 query_parts = []
+
+                # 장비 유형
                 if device_type and device_type != "unknown":
                     query_parts.append(f"{device_type}에서")
-                
-                if anomalies and isinstance(anomalies, dict):
-                    anomaly_status = anomalies.get("status", "")
-                    if anomaly_status == "anomaly_detected":
-                        results = anomalies.get("results", {})
-                        detected_modules = []
-                        for module_name, module_result in results.items():
-                            if isinstance(module_result, dict) and module_result.get("status") == "anomaly":
-                                detected_modules.append(module_name)
-                        if detected_modules:
-                            query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
-                    else:
-                        query_parts.append("이상이 탐지되었습니다")
+
+                # 모듈별 이상 탐지
+                detected_modules = []
+                for module_name, module_res in anomalies.items():
+                    if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+                        detected_modules.append(module_name)
+
+                if detected_modules:
+                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
                 else:
                     query_parts.append("이상이 탐지되었습니다")
-                
-                query = " ".join(query_parts) if query_parts else "CV 모델에서 이상이 탐지되었습니다"
+
+                query = " ".join(query_parts)
                 
                 print("=" * 60)
                 print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
