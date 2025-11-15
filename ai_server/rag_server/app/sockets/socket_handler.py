@@ -1594,7 +1594,7 @@ async def handle_video_frame(sid, data):
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
-                    "z": round(z_size, 4),
+                    # "z": round(z_size, 4),
                     "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 },
                 "color": m["color"],
