@@ -41,6 +41,8 @@ async def device_detector_loop():
     # 2) 상태 초기화
     # -----------------------
     prev_state = await get_device_state()   # Redis에서 가져온 이전 상태
+    logger.debug(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
+    
     candidate_label = None                  # 변경 후보 라벨
     stable_counter = 0                      # 후보 라벨의 안정성 카운터
 
