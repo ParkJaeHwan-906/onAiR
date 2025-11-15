@@ -122,13 +122,21 @@ class AudioStreamer:
                     if self.socketio_client and self.socketio_client.sio:
                         try:
                             import asyncio
-                            loop = asyncio.get_event_loop()
+                            try:
+                                loop = asyncio.get_event_loop()
+                            except RuntimeError:
+                                # 이벤트 루프가 없으면 새로 생성
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                            
                             if loop.is_running():
+                                # 이미 실행 중인 루프면 태스크로 추가
                                 asyncio.run_coroutine_threadsafe(
                                     self._emit_audio_frame(timestamp, audio_bytes),
                                     loop
                                 )
                             else:
+                                # 루프가 실행 중이 아니면 직접 실행
                                 loop.run_until_complete(
                                     self._emit_audio_frame(timestamp, audio_bytes)
                                 )
