@@ -3,7 +3,7 @@ import numpy as np
 from loguru import logger
 from ultralytics import YOLO
 
-from ai_server.yolo_service.redis_frame_store import get_cv_buffer_frames, get_device_state
+from ai_server.yolo_service.redis_client import get_cv_buffer_frames, get_device_state
 from ai_server.yolo_service.fan_belt_anomaly import analyze_fan_belt
 from ai_server.yolo_service.gauge_anomaly import analyze_gauge
 from ai_server.yolo_service.panel_anomaly import analyze_panel
@@ -59,7 +59,17 @@ async def run_anomaly_detection():
     logger.info("🚀 run_anomaly_detection() 시작")
 
     # 1) 장비 타입 확인
-    device_label = await get_device_state()
+    device_info = await get_device_state()
+    if not device_info:
+        return {
+            "detected": False,
+            "device_type": None,
+            "modules": [],
+            "anomalies": {},
+            "message": "디바이스 상태가 설정되지 않음"
+        }
+
+    device_label = device_info.get("label")
     if device_label != "AHU":
         return {
             "detected": False,
@@ -68,6 +78,7 @@ async def run_anomaly_detection():
             "anomalies": {},
             "message": "AHU가 아님"
         }
+
 
     # 2) 프레임 획득
     frames = await get_cv_buffer_frames(n=TOTAL_FRAMES)
