@@ -1698,6 +1698,19 @@ async def accept_communication(sid, data):
     print("   Data: {'start': True}")
     print("   목적: WebRTC 오디오 스트리밍을 위해 마이크 장치 물리적 해제")
     print("=" * 60)
+    
+    # 라즈베리파이 연결 상태 확인
+    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
+    if not raspi_sids:
+        print("=" * 60)
+        print("⚠️ [통신 요청 수락] 라즈베리파이 디바이스가 연결되어 있지 않습니다!")
+        print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
+    else:
+        print(f"✅ [통신 요청 수락] 라즈베리파이 연결 확인: {len(raspi_sids)}개")
+        print(f"   라즈베리파이 SID: {[s[:15] + '...' for s in raspi_sids]}")
+    
     await broadcast_to("raspi", "handle_audio_stream", {"start": True})
     
     # Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
