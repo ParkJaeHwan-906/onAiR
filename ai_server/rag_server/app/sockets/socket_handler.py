@@ -23,7 +23,6 @@ from app.services.generator import llm_generate_answer
 from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
-from ai_server.yolo_service.app.main import stop_device_detector_task, start_device_detector_task
 import httpx
 
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
@@ -35,6 +34,14 @@ async def run_anomaly_detection():
         res = await client.post(url, json={"trigger": "run"})
         res.raise_for_status()
         return res.json()
+
+async def stop_device_detector_task():
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{YOLO_URL}/device/stop")
+
+async def start_device_detector_task():
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{YOLO_URL}/device/start")
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
