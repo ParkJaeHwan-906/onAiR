@@ -78,6 +78,7 @@ class SSERepository(
 }
 sealed class SseEvent {
     data class CallRequest(val data: JSONObject) : SseEvent()
+    data class CallResponse(val data: JSONObject) : SseEvent()
     data class TaskAssign(val data: JSONObject) : SseEvent()
     data class TaskCancel(val data: JSONObject) : SseEvent()
 }
