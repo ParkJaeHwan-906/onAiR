@@ -3,9 +3,9 @@ import asyncio
 from fastapi import FastAPI
 from loguru import logger
 
-from yolo_service.device_detector import start_device_detector
-from yolo_service.redis_client import get_device_state
-from yolo_service.anomaly import run_anomaly_detection
+from ai_server.yolo_service.device_detector import start_device_detector
+from ai_server.yolo_service.redis_client import get_device_state
+from ai_server.yolo_service.anomaly import run_anomaly_detection
 
 app = FastAPI(title="YOLO Worker Service", version="1.0")
 
@@ -63,3 +63,18 @@ async def shutdown():
 async def analyze(payload: dict):
     result = run_anomaly_detection()
     return result
+
+@app.post("/device/start")
+async def start_device():
+    global device_detector_task
+    async with detector_lock:
+        if not device_detector_task:
+            device_detector_task = asyncio.create_task(start_device_detector())
+            return {"status": "started"}
+        return {"status": "already_running"}
+
+
+@app.post("/device/stop")
+async def stop_device():
+    await stop_device_detector_task()
+    return {"status": "stopped"}
