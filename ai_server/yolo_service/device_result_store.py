@@ -1,6 +1,6 @@
 import asyncio
 from typing import Optional
-import aioredis
+import redis.asyncio as redis
 
 # Redis 키 설정
 REDIS_KEY_DEVICE_RESULT = "cv:result:device"
@@ -10,7 +10,7 @@ _cached_result: Optional[dict] = None
 _result_lock = asyncio.Lock()
 
 # Redis 클라이언트
-redis = aioredis.from_url("redis://localhost:6379", decode_responses=True)
+redis = redis.from_url("redis://localhost:6379", decode_responses=True)
 
 
 async def save_device_result(result: dict) -> None:

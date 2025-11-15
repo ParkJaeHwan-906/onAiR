@@ -1,4 +1,4 @@
-import aioredis
+import redis.asyncio as redis
 import cv2
 import numpy as np
 import asyncio
@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 # Redis 연결
-redis = aioredis.from_url("redis://localhost:6379", decode_responses=False)
+redis = redis.from_url("redis://localhost:6379", decode_responses=False)
 
 # 전역 상태
 _cv_collection_active = False
