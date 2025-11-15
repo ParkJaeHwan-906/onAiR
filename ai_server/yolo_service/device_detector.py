@@ -12,7 +12,7 @@ YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
 
 # 안정성 강화 파라미터
-CONF_THRESHOLD = 0.75             # 최소 confidence
+CONF_THRESHOLD = 0.60             # 최소 confidence
 STABLE_COUNT_REQUIRED = 2        # 연속 N번 같은 라벨일 때만 수정
 
 # 내부 Task
@@ -58,7 +58,7 @@ async def device_detector_loop():
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
             logger.debug(f"[device_monitor] 감지된 디바이스: {label} ({confidence:.2f})")
-            
+
             # 1) confidence threshold 검사
             if confidence < CONF_THRESHOLD:
                 stable_counter = 0
