@@ -52,9 +52,10 @@ async def device_detector_loop():
     # 3) 감지 루프 시작
     # -----------------------
     while True:
-        logger.debug(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}") # redis에 저장된 이전 상태 로깅
         try:
             frame = await get_latest_frame()
+            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}") # redis에 저장된 이전 상태 로깅
+
             if frame is None:
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
@@ -65,7 +66,7 @@ async def device_detector_loop():
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
-
+            
             # top-1 detection
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
