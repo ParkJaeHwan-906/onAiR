@@ -138,100 +138,187 @@ class GcpStreamingStt:
                     # 종료 신호 전송
                     asyncio.run_coroutine_threadsafe(results_queue.put(None), loop)
 
-            # 스트리밍 인식 시작 (별도 스레드에서 실행)
-            await loop.run_in_executor(None, blocking_stream)
-
-            # 결과 수신 및 Socket.IO 전송
-            while True:
-                # 🆕 종료 신호 확인
+            # Clarify 루프를 위해 여러 번 스트림 실행 (stop 신호를 받을 때까지)
+            while not self._stop:
+                # 종료 신호 확인
                 if self.session_id and self.session_id in self.stop_sessions:
                     print(f"🛑 Streaming STT 종료 신호 수신: session_id={self.session_id}")
                     self.stop_sessions.remove(self.session_id)
                     self._stop = True
                     break
                 
-                # 서비스 종료 신호 확인
-                if self._stop:
-                    print("🔚 서비스 종료: 스트리밍 세션 종료")
-                    break
+                # 상태 리셋 (새로운 스트림 시작 전)
+                self.force_final_sent = False
+                self.last_activity_time = time.time()
+                self.last_interim_text = ""
+                
+                # 침묵 모니터링 태스크 재시작
+                if self.monitor_task:
+                    self.monitor_task.cancel()
+                    try:
+                        await self.monitor_task
+                    except asyncio.CancelledError:
+                        pass
+                self.monitor_task = asyncio.create_task(
+                    self._monitor_silence(results_queue, loop)
+                )
+                
+                # 스트리밍 인식 시작 (별도 스레드에서 실행)
+                await loop.run_in_executor(None, blocking_stream)
+
+                # 결과 수신 및 Socket.IO 전송 (Clarify 루프를 위해 계속 실행)
+                while True:
+                    # 🆕 종료 신호 확인
+                    if self.session_id and self.session_id in self.stop_sessions:
+                        print(f"🛑 Streaming STT 종료 신호 수신: session_id={self.session_id}")
+                        self.stop_sessions.remove(self.session_id)
+                        self._stop = True
+                        break
                     
-                msg = await results_queue.get()
-                if msg is None:
-                    break
-                
-                msg_type = msg.get("type")
-                txt = msg.get("text", "")
-                confidence = msg.get("confidence")
-                
-                if msg_type in ("final", "interim"):
-                    # 최종 결과만 전송
-                    if msg_type == "final":
-                        print(f"📝 STT 최종 결과: {txt}")
-                        self.force_final_sent = True  # final 수신 시 플래그 설정
+                    # 서비스 종료 신호 확인
+                    if self._stop:
+                        print("🔚 서비스 종료: 스트리밍 세션 종료")
+                        break
+                        
+                    msg = await results_queue.get()
+                    if msg is None:
+                        # blocking_stream이 종료되었지만, Clarify 루프를 위해 재시작
+                        print("🔄 Streaming STT 스트림 종료 → 다음 입력 대기 (재시작)")
+                        # 상위 루프로 돌아가서 새로운 스트림 시작
+                        break
+                    
+                    msg_type = msg.get("type")
+                    txt = msg.get("text", "")
+                    confidence = msg.get("confidence")
+                    
+                    if msg_type in ("final", "interim"):
+                        # 최종 결과만 전송
+                        if msg_type == "final":
+                            print("=" * 60)
+                            print(f"📝 [라즈베리파이] STT 최종 결과 수신 (한 문장 완성)")
+                            print(f"   Session ID: {self.session_id}")
+                            print(f"   텍스트: {txt}")
+                            print(f"   신뢰도: {confidence}")
+                            print("=" * 60)
+                            self.force_final_sent = True  # final 수신 시 플래그 설정
+                            
+                            # 전송 방식 선택: socketio_client 우선, 없으면 broadcaster 사용
+                            if self.socketio_client:
+                                # Socket.IO 클라이언트로 직접 전송 (Python 3.13에서 사용)
+                                print("=" * 60)
+                                print(f"📤 [라즈베리파이] FastAPI로 STT 결과 전송 시작")
+                                print(f"   Session ID: {self.session_id}")
+                                print(f"   텍스트: {txt[:50]}...")
+                                print("=" * 60)
+                                success = await self.socketio_client.emit_streaming_stt(
+                                    text=txt,
+                                    msg_type="final",
+                                    confidence=confidence,
+                                    session_id=self.session_id
+                                )
+                                if success:
+                                    print("=" * 60)
+                                    print(f"✅ [라즈베리파이] FastAPI로 STT 결과 전송 완료")
+                                    print("=" * 60)
+                                else:
+                                    print("=" * 60)
+                                    print(f"❌ [라즈베리파이] FastAPI로 STT 결과 전송 실패")
+                                    print("=" * 60)
+                            elif broadcaster:
+                                # Broadcaster를 통해 브리지 서버로 전송 (Python 3.10에서 사용)
+                                print("=" * 60)
+                                print(f"📤 [라즈베리파이] FastAPI로 STT 결과 전송 시작 (브리지 서버 경유)")
+                                print(f"   Session ID: {self.session_id}")
+                                print(f"   텍스트: {txt[:50]}...")
+                                print("=" * 60)
+                                stt_result = {
+                                    "type": "final",
+                                    "text": txt,
+                                    "confidence": confidence,
+                                    "session_id": self.session_id
+                                }
+                                await broadcaster(stt_result)
+                                print("=" * 60)
+                                print(f"✅ [라즈베리파이] FastAPI로 STT 결과 전송 완료 (브리지 서버 경유)")
+                                print("=" * 60)
+                            
+                            # final 전송 후 상위 루프로 돌아가서 새로운 스트림 시작
+                            print("=" * 60)
+                            print(f"🔄 [라즈베리파이] STT 결과 전송 완료 → 다음 입력 대기 중...")
+                            print(f"   💡 사용자가 다음 질문을 말할 때까지 대기")
+                            print("=" * 60)
+                            break
+                        
+                        # 로그 출력 (interim 결과도 표시)
+                        if msg_type == "interim":
+                            print(f"🔄 STT 중간 결과: {txt}")
+                            self.last_interim_text = txt  # 마지막 interim 결과 저장 (침묵 타임아웃 시 사용)
+                            
+                    elif msg_type in ("info", "error"):
+                        print(f"⚠️ {msg_type}: {txt}")
+                    elif msg_type == "silence_timeout":
+                        # 침묵 타임아웃으로 인한 강제 final
+                        print("=" * 60)
+                        print(f"🕓 [라즈베리파이] 침묵 타임아웃 감지 → 발화 종료 처리 (한 문장 완성)")
+                        print(f"   Session ID: {self.session_id}")
+                        print("=" * 60)
+                        # 마지막 interim 결과 사용 (없으면 빈 문자열)
+                        final_text = txt if txt else self.last_interim_text
+                        print(f"   사용할 텍스트: '{final_text}'")
+                        self.force_final_sent = True
                         
                         # 전송 방식 선택: socketio_client 우선, 없으면 broadcaster 사용
+                        success = False
                         if self.socketio_client:
                             # Socket.IO 클라이언트로 직접 전송 (Python 3.13에서 사용)
+                            print("=" * 60)
+                            print(f"📤 [라즈베리파이] FastAPI로 STT 결과 전송 시작 (침묵 타임아웃)")
+                            print(f"   Session ID: {self.session_id}")
+                            print(f"   텍스트: {final_text[:50]}...")
+                            print("=" * 60)
                             success = await self.socketio_client.emit_streaming_stt(
-                                text=txt,
+                                text=final_text,
                                 msg_type="final",
                                 confidence=confidence,
                                 session_id=self.session_id
                             )
-                            if not success:
-                                print("⚠️ Socket.IO 전송 실패")
+                            if success:
+                                print("=" * 60)
+                                print(f"✅ [라즈베리파이] FastAPI로 STT 결과 전송 완료 (침묵 타임아웃)")
+                                print("=" * 60)
+                            else:
+                                print("=" * 60)
+                                print(f"❌ [라즈베리파이] FastAPI로 STT 결과 전송 실패 (침묵 타임아웃)")
+                                print("=" * 60)
                         elif broadcaster:
                             # Broadcaster를 통해 브리지 서버로 전송 (Python 3.10에서 사용)
+                            print("=" * 60)
+                            print(f"📤 [라즈베리파이] FastAPI로 STT 결과 전송 시작 (침묵 타임아웃, 브리지 서버 경유)")
+                            print(f"   Session ID: {self.session_id}")
+                            print(f"   텍스트: {final_text[:50]}...")
+                            print("=" * 60)
                             stt_result = {
                                 "type": "final",
-                                "text": txt,
+                                "text": final_text,
                                 "confidence": confidence,
                                 "session_id": self.session_id
                             }
                             await broadcaster(stt_result)
-                            print(f"✅ 브리지 서버로 STT 결과 전송: {txt[:50]}...")
-                        break  # final 수신 시 루프 종료
-                    
-                    # 로그 출력 (interim 결과도 표시)
-                    if msg_type == "interim":
-                        print(f"🔄 STT 중간 결과: {txt}")
-                        self.last_interim_text = txt  # 마지막 interim 결과 저장 (침묵 타임아웃 시 사용)
+                            print("=" * 60)
+                            print(f"✅ [라즈베리파이] FastAPI로 STT 결과 전송 완료 (침묵 타임아웃, 브리지 서버 경유)")
+                            print("=" * 60)
+                            success = True
                         
-                elif msg_type in ("info", "error"):
-                    print(f"⚠️ {msg_type}: {txt}")
-                elif msg_type == "silence_timeout":
-                    # 침묵 타임아웃으로 인한 강제 final
-                    print(f"🕓 침묵 타임아웃 감지 → 발화 종료 처리")
-                    # 마지막 interim 결과 사용 (없으면 빈 문자열)
-                    final_text = txt if txt else self.last_interim_text
-                    print(f"   사용할 텍스트: '{final_text}'")
-                    self.force_final_sent = True
-                    
-                    # 전송 방식 선택: socketio_client 우선, 없으면 broadcaster 사용
-                    success = False
-                    if self.socketio_client:
-                        # Socket.IO 클라이언트로 직접 전송 (Python 3.13에서 사용)
-                        success = await self.socketio_client.emit_streaming_stt(
-                            text=final_text,
-                            msg_type="final",
-                            confidence=confidence,
-                            session_id=self.session_id
-                        )
-                    elif broadcaster:
-                        # Broadcaster를 통해 브리지 서버로 전송 (Python 3.10에서 사용)
-                        stt_result = {
-                            "type": "final",
-                            "text": final_text,
-                            "confidence": confidence,
-                            "session_id": self.session_id
-                        }
-                        await broadcaster(stt_result)
-                        print(f"✅ 브리지 서버로 STT 결과 전송 (침묵 타임아웃): {final_text[:50]}...")
-                        success = True
-                    
-                    if not success:
-                        print("⚠️ STT 결과 전송 실패")
-                    break  # 강제 final 수신 시 루프 종료
+                        if not success:
+                            print("=" * 60)
+                            print(f"❌ [라즈베리파이] STT 결과 전송 실패")
+                            print("=" * 60)
+                        # 상위 루프로 돌아가서 새로운 스트림 시작
+                        print("=" * 60)
+                        print(f"🔄 [라즈베리파이] STT 결과 전송 완료 → 다음 입력 대기 중...")
+                        print(f"   💡 사용자가 다음 질문을 말할 때까지 대기")
+                        print("=" * 60)
+                        break
 
         finally:
             # 침묵 모니터링 태스크 취소
