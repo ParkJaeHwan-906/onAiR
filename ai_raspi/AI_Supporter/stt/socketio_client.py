@@ -300,12 +300,23 @@ class SocketIOClient:
             
             # 브리지 서버를 통해 Python 3.10으로 Wakeword 감지 대기 시작 신호 전달
             if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
-                if self.manager.bridge_client.is_connected():
+                bridge_client = self.manager.bridge_client
+                
+                # 브리지 클라이언트 연결 상태 확인 및 재연결 시도
+                if not bridge_client.is_connected():
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 재연결 시도...")
+                    logger.warning("=" * 60)
+                    # 재연결 시도 (최대 2초 대기)
+                    bridge_client.ensure_connected(timeout=2.0)
+                
+                # 브리지 서버로 Wakeword 감지 대기 시작 신호 전송
+                if bridge_client.is_connected():
                     try:
                         logger.info("=" * 60)
                         logger.info(f"📤 브리지 서버로 Wakeword 감지 대기 시작 신호 전송")
                         logger.info("=" * 60)
-                        self.manager.bridge_client.sio.emit('wakeword_start_waiting', {})
+                        bridge_client.sio.emit('wakeword_start_waiting', {})
                         logger.info("=" * 60)
                         logger.info(f"✅ 브리지 서버로 Wakeword 감지 대기 시작 신호 전송 완료")
                         logger.info("=" * 60)
@@ -316,6 +327,7 @@ class SocketIOClient:
                 else:
                     logger.warning("=" * 60)
                     logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다.")
+                    logger.warning("   자동 재연결 옵션이 활성화되어 있어 자동으로 재연결됩니다.")
                     logger.warning("=" * 60)
             else:
                 logger.warning("=" * 60)
