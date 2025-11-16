@@ -58,7 +58,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
 
-    // MainActivitySttServer 로직 통합
+    // Socket.IO 클라이언트 및 Assistant 로직
     private lateinit var socketIoSttClient: SocketIoSttClient
     private lateinit var sttRepository: SttRepositoryImpl
     private lateinit var intentRepository: IntentRepositoryImpl
@@ -112,7 +112,7 @@ class WorkingActivity : AppCompatActivity() {
         initView()
         observeViewModel()
         goCall()
-        // MainActivitySttServer 로직 초기화 (연결은 onResume에서)
+        // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
     }
 
@@ -259,7 +259,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     /**
-     * MainActivitySttServer의 로직 초기화
+     * Assistant 로직 초기화
      * WorkingActivity가 활성화된 상태에서만 동작하도록 설정
      */
     private fun initAssistantLogic() {
@@ -361,7 +361,7 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "✅ Assistant 로직 초기화 완료")
     }
 
-    // MainActivitySttServer의 핵심 메서드들 (간소화 버전)
+    // Assistant 핵심 메서드들
     // handleStartSseConnection 제거: 로그인 시 이미 /api/sse/stream에 연결되어 있음
 
     private fun handleIntentResult(intentResult: IntentResultDto) {
@@ -557,7 +557,6 @@ class WorkingActivity : AppCompatActivity() {
                         Log.e(TAG, "❌ 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 실패")
                     }
 
-                    // 재생 완료 직후 WebRTC 요청 API 호출 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
                         val accessToken = authRepository.getAccessToken()
                         Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
@@ -578,6 +577,9 @@ class WorkingActivity : AppCompatActivity() {
                         }
                     }
                 }
+                
+                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 정상 처리 실패: ${e.message}")
                 e.printStackTrace()
