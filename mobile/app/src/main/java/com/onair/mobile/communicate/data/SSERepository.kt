@@ -51,6 +51,7 @@ class SSERepository(
             }
             when (event) {
                 "callRequest" -> _eventFlow.tryEmit(SseEvent.CallRequest(json))
+                "callResponse" -> _eventFlow.tryEmit(SseEvent.CallResponse(json))
                 "taskAssign" -> _eventFlow.tryEmit(SseEvent.TaskAssign(json))
                 "taskCancel" -> _eventFlow.tryEmit(SseEvent.TaskCancel(json))
                 "rtcCanceled" -> {
