@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import SocketHolder
 import android.app.Application
 import android.preference.PreferenceManager
 import android.util.Log
@@ -45,37 +46,37 @@ class CallViewModel(
             dynacast = true,
         )
     )
-    private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
-    val audioHandler = room.audioHandler as AudioSwitchHandler
+//    private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
+//    val audioHandler = room.audioHandler as AudioSwitchHandler
+//
+//    val participants = room::remoteParticipants.flow
+//        .map { remoteParticipants ->
+//            listOf<Participant>(room.localParticipant) +
+//                    remoteParticipants
+//                        .keys
+//                        .sortedBy { it.value }
+//                        .mapNotNull { remoteParticipants[it] }
+//        }
+//
+//    private val _error = MutableStateFlow<Throwable?>(null)
 
-    val participants = room::remoteParticipants.flow
-        .map { remoteParticipants ->
-            listOf<Participant>(room.localParticipant) +
-                    remoteParticipants
-                        .keys
-                        .sortedBy { it.value }
-                        .mapNotNull { remoteParticipants[it] }
-        }
-
-    private val _error = MutableStateFlow<Throwable?>(null)
-
-    private val _primarySpeaker = MutableStateFlow<Participant?>(null)
-    val primarySpeaker : StateFlow<Participant?> = _primarySpeaker
-
-    val activeSpeakers = room::activeSpeakers.flow
-
-    private var localScreencastVideoTrack : LocalScreencastVideoTrack? = null
-
-    // Controls
-    val micEnabled = room.localParticipant::isMicrophoneEnabled.flow
-    val cameraEnabled = room.localParticipant::isCameraEnabled.flow
-    val screenshareEnabled = room.localParticipant::isScreenShareEnabled.flow
-
-    private val _enhancedNsEnabled = MutableStateFlow(false)
-    val enhancedNsEnabled = _enhancedNsEnabled.asStateFlow()
-
-    private val _enableAudioProcessor = MutableStateFlow(true)
-    val enableAudioProcessor = _enableAudioProcessor.asStateFlow()
+//    private val _primarySpeaker = MutableStateFlow<Participant?>(null)
+//    val primarySpeaker : StateFlow<Participant?> = _primarySpeaker
+//
+//    val activeSpeakers = room::activeSpeakers.flow
+//
+//    private var localScreencastVideoTrack : LocalScreencastVideoTrack? = null
+//
+//    // Controls
+//    val micEnabled = room.localParticipant::isMicrophoneEnabled.flow
+//    val cameraEnabled = room.localParticipant::isCameraEnabled.flow
+//    val screenshareEnabled = room.localParticipant::isScreenShareEnabled.flow
+//
+//    private val _enhancedNsEnabled = MutableStateFlow(false)
+//    val enhancedNsEnabled = _enhancedNsEnabled.asStateFlow()
+//
+//    private val _enableAudioProcessor = MutableStateFlow(true)
+//    val enableAudioProcessor = _enableAudioProcessor.asStateFlow()
 
     // Emits a string whenever a data message is received.
     private val _dataReceived = MutableSharedFlow<String>()
@@ -84,6 +85,8 @@ class CallViewModel(
     // Whether other participants are allowed to subscribe to this participant's tracks.
     private val _permissionAllowed = MutableStateFlow(true)
     val permissionAllowed = _permissionAllowed.asStateFlow()
+
+    val arMarkers = SocketHolder.socketClient.arMarkers
 
     init {
 //        room.registerTextStreamHandler(
@@ -113,6 +116,12 @@ class CallViewModel(
             }
         }
         connectToRoom()
+        viewModelScope.launch {
+            arMarkers.collect { markers ->
+                Log.i("CallViewModel", "🎯 ViewModel에서 AR 마커 수신: ${markers.size}")
+            }
+        }
+
     }
     private fun connectToRoom() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -124,20 +133,18 @@ class CallViewModel(
                 )
 
                 room.localParticipant.setMicrophoneEnabled(false)
-                room.localParticipant.setCameraEnabled(true)
+                room.localParticipant.setCameraEnabled(false)
             } catch (e: Throwable) {
                 Log.e("connectToRoom", "연결 중 오류 발생"+e.message.toString())
             }
         }
     }
 
+
     override fun onCleared() {
         super.onCleared()
         room.disconnect()
         room.release()
-
-
     }
-
 
 }
