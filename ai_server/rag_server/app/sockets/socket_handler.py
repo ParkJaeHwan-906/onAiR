@@ -1667,9 +1667,9 @@ async def handle_video_frame(sid, data):
 
     # --- ④ 모션 추정 (Optical Flow + RANSAC + Essential) ---
     result = motion_core.process_frame(frame)
-    # print(f"[DEBUG] 모션 추정 결과 : {result}")
+    print(f"[DEBUG] 모션 추정 결과 : {result}")
     if result["status"] not in ("ok", "init"):
-        # print("[DEBUG] 모션 추적에 실패했습니다.")
+        print("[DEBUG] 모션 추적에 실패했습니다.")
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
         await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
         return
@@ -1946,7 +1946,7 @@ async def handle_ar_marker(sid, data):
 
     u = float(data.get("marker_x"))
     v = float(data.get("marker_y"))
-    # print(f"[DEBUG] 마커 입력이 들어왔습니다. : [{u}, {v}]")
+    print(f"[DEBUG] 마커 입력이 들어왔습니다. : [{u}, {v}]")
     # 현재 프레임의 위치를 기준점으로 한다.
     # 이후 motion_core.process_frame()에서 Optical Flow로 자동 갱신됨
     u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
@@ -1966,7 +1966,7 @@ async def handle_ar_marker(sid, data):
         "opacity": data.get("opacity", 1.0)
     }
     ar_markers.append(marker)
-    # print(f"[DEBUG] arr : {ar_markers}")
+    print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
