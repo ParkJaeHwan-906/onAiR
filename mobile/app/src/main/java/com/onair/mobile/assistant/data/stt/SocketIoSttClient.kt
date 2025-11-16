@@ -284,6 +284,19 @@ class SocketIoSttClient(
                 }
             }
 
+            socket?.on("ar-info") { args ->
+                try {
+//                    Log.i(TAG, "AR-INFO 호출됨")
+                    val data = args[0].toString()
+                    val markers = Json.decodeFromString<ArMarkerResponse>(data)
+
+//                    onArMarkerDetected?.invoke(markers)
+                    _arMarkers.tryEmit(markers.markers)
+                } catch (e: Exception) {
+                    Log.e(TAG, "AR 마커 처리 오류: ${e.message}")
+                }
+            }
+
             // clarify_qa_turn 이벤트 수신 (Clarify 질문/답변 턴 - 작업자 질문 + LLM 답변)
             socket?.on("clarify_qa_turn") { args ->
                 try {

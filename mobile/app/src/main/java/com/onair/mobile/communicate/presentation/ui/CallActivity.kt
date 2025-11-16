@@ -1,6 +1,7 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.app.Activity
+import android.graphics.Color.parseColor
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -56,6 +57,7 @@ import com.onair.mobile.communicate.utils.viewModelByFactory
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.collections.emptyList
+import androidx.core.graphics.toColorInt
 
 data class TimedPath(
     val path: Path,
@@ -152,11 +154,11 @@ fun WhiteboardCanvas(
 
     //    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
         val markers by viewModel.arMarkers.collectAsState(initial = emptyList<ArMarker>())
-        LaunchedEffect(Unit) {
-            viewModel.arMarkers.collect {
-                Log.i("CallActivity", "🎨 Activity에서 AR 마커 UI 업데이트: ${it.size}")
-            }
-        }
+//        LaunchedEffect(Unit) {
+//            viewModel.arMarkers.collect {
+//                Log.i("CallActivity", "🎨 Activity에서 AR 마커 UI 업데이트: ${it.size}")
+//            }
+//        }
         val context = LocalContext.current
 
     //    LaunchedEffect(Unit) {
@@ -334,24 +336,24 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         drawCircle(
-            color = parseColor(marker.color),
+            color = Color(marker.color.toColorInt()),
             radius = marker.info.size,
             center = Offset(x, y)
         )
 
         drawCircle(
-            color = parseColor(marker.color).copy(alpha = pulseAlpha),
+            color = Color(marker.color.toColorInt()).copy(alpha = pulseAlpha),
             radius = marker.pulseScale,
             center = Offset(x, y),
             style = Stroke(width = 4f)
         )
     }
 }
-private fun parseColor(colorString: String?): Color {
-    return when (colorString?.lowercase()) {
-        "red" -> Color.Red
-        "blue" -> Color.Blue
-        "yellow" -> Color.Yellow
-        else -> Color.White
-    }
-}
+//private fun parseColor(colorString: String?): Color {
+//    return when (colorString?.lowercase()) {
+//        "red" -> Color.Red
+//        "blue" -> Color.Blue
+//        "yellow" -> Color.Yellow
+//        else -> Color.White
+//    }
+//}
