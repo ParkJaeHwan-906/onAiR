@@ -242,6 +242,7 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
+        await start_device_detector_task()
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
@@ -250,7 +251,7 @@ async def handle_connect(sid, environ):
         # print(f"   User-Agent: {user_agent[:50]}...")
         # print(f"   현재 연결된 디바이스 수: {len(device_map)}")
         print("=" * 60)
-        
+
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
