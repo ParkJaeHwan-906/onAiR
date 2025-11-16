@@ -71,59 +71,59 @@ def extract_red_segments(roi):
 
 
 # temperature ROI 추출 (현재는 사용하지 않지만 남겨둠)
-def get_temperature_roi(model, img):
-    results = model(img)[0]
+# def get_temperature_roi(model, img):
+#     results = model(img)[0]
 
-    best_box = None
-    best_conf = 0
+#     best_box = None
+#     best_conf = 0
 
-    for box in results.boxes:
-        cls = int(box.cls)
-        conf = float(box.conf)
-        if model.names[cls] == "temperature" and conf > best_conf:
-            best_box = box
-            best_conf = conf
+#     for box in results.boxes:
+#         cls = int(box.cls)
+#         conf = float(box.conf)
+#         if model.names[cls] == "temperature" and conf > best_conf:
+#             best_box = box
+#             best_conf = conf
 
-    if best_box is None:
-        return None
+#     if best_box is None:
+#         return None
 
-    x1, y1, x2, y2 = map(int, best_box.xyxy[0])
-    return img[y1:y2, x1:x2]
+#     x1, y1, x2, y2 = map(int, best_box.xyxy[0])
+#     return img[y1:y2, x1:x2]
 
 
 # 디스플레이 영역 crop
-def crop_display_area(roi):
-    h, w, _ = roi.shape
-    top = int(h * 0.25)
-    bottom = int(h * 0.77)
-    left = int(w * 0.22)
-    right = int(w * 0.77)
-    return roi[top:bottom, left:right]
+# def crop_display_area(roi):
+#     h, w, _ = roi.shape
+#     top = int(h * 0.25)
+#     bottom = int(h * 0.77)
+#     left = int(w * 0.22)
+#     right = int(w * 0.77)
+#     return roi[top:bottom, left:right]
 
 
-# OCR
-def ocr_temperature(roi):
-    if roi is None or roi.size == 0:
-        return None
-    roi = cv2.resize(roi, None, fx=3.0, fy=3.0)
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    _, th = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
-    config = "--psm 7 -c tessedit_char_whitelist=0123456789."
-    txt = pytesseract.image_to_string(th, config=config).strip()
-    try:
-        return float(txt)
-    except Exception:
-        return None
+# # OCR
+# def ocr_temperature(roi):
+#     if roi is None or roi.size == 0:
+#         return None
+#     roi = cv2.resize(roi, None, fx=3.0, fy=3.0)
+#     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+#     _, th = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+#     config = "--psm 7 -c tessedit_char_whitelist=0123456789."
+#     txt = pytesseract.image_to_string(th, config=config).strip()
+#     try:
+#         return float(txt)
+#     except Exception:
+#         return None
 
 
 # 이상 판단
-def detect_abnormal(temp, led_status):
+def detect_abnormal(led_status):
     if led_status.get("overheat", {}).get("on", False):
         return "overheat"
     if not led_status.get("power", {}).get("on", True):
         return "power_off"
-    if temp is not None and temp > 60:
-        return "temp_high"
+    # if temp is not None and temp > 60:
+    #     return "temp_high"
     return "normal"
 
 
@@ -184,7 +184,7 @@ async def analyze_panel(sharpest_frame, best_score, module_boxes):
         panel_results = _panel_model.predict(panel_roi, conf=0.5, verbose=False)
 
         led_status = {}
-        temperature_val = None
+        # temperature_val = None
 
         for r in panel_results:
             for box in r.boxes:
@@ -206,12 +206,12 @@ async def analyze_panel(sharpest_frame, best_score, module_boxes):
                         "confidence": conf,
                     }
 
-                elif "temp" in name or "temperature" in name:
-                    t_roi = crop_display_area(roi)
-                    mask = extract_red_segments(t_roi)
-                    temperature_val = ocr_temperature(mask)
+                # elif "temp" in name or "temperature" in name:
+                #     t_roi = crop_display_area(roi)
+                #     mask = extract_red_segments(t_roi)
+                #     temperature_val = ocr_temperature(mask)
 
-        anomaly = detect_abnormal(temperature_val, led_status)
+        anomaly = detect_abnormal(led_status)
         detail = anomaly  # normal, overheat, power_off, temp_high
         status = "anomaly" if anomaly != "normal" else "normal"
         message = PANEL_RAG_MESSAGE.get(
@@ -226,7 +226,7 @@ async def analyze_panel(sharpest_frame, best_score, module_boxes):
             "message": message,
             "sharpness": best_score,
             "results": {
-                "temperature": temperature_val,
+                # "temperature": temperature_val,
                 "leds": led_status,
             }
         }
