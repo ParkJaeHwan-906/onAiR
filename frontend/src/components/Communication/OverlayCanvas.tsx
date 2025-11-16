@@ -27,8 +27,8 @@ type ArMarker = {
 };
 
 // 카메라 화면 size (고정값)
-const CAMERA_WIDTH = 640;
-const CAMERA_HEIGHT = 480;
+const CAMERA_WIDTH = 480;
+const CAMERA_HEIGHT = 360;
 
 export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
   const socket = useSocket();
