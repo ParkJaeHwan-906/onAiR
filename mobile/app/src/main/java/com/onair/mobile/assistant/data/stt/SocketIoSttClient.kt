@@ -59,7 +59,7 @@ class SocketIoSttClient(
     private var socket: Socket? = null
     private var isConnected = false
     private val gson = Gson()
-    private val _arMarkers = MutableSharedFlow<List<ArMarker>>()
+    private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
     
     /**
@@ -316,6 +316,7 @@ class SocketIoSttClient(
                     Log.i(TAG, "AR-INFO 호출됨")
                     val data = args[0].toString()
                     val markers = Json.decodeFromString<ArMarkerResponse>(data)
+                    Log.d(TAG, data)
 
 //                    onArMarkerDetected?.invoke(markers)
                     _arMarkers.tryEmit(markers.markers)
