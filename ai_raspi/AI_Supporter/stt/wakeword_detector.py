@@ -17,7 +17,7 @@ DURATION = 1.0
 N_FFT = 400
 HOP_LENGTH = 160
 N_MELS = 40
-WAKEWORD_THRESHOLD = 0.95
+WAKEWORD_THRESHOLD = 0.90
 LABELS = ["onair", "negative"]
 
 # -----------------------------
