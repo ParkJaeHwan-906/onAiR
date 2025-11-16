@@ -51,6 +51,7 @@ class SSERepository(
             }
             when (event) {
                 "callRequest" -> _eventFlow.tryEmit(SseEvent.CallRequest(json))
+                "callResponse" -> _eventFlow.tryEmit(SseEvent.CallResponse(json))
                 "taskAssign" -> _eventFlow.tryEmit(SseEvent.TaskAssign(json))
                 "taskCancel" -> _eventFlow.tryEmit(SseEvent.TaskCancel(json))
                 "rtcCanceled" -> {
@@ -78,6 +79,7 @@ class SSERepository(
 }
 sealed class SseEvent {
     data class CallRequest(val data: JSONObject) : SseEvent()
+    data class CallResponse(val data: JSONObject) : SseEvent()
     data class TaskAssign(val data: JSONObject) : SseEvent()
     data class TaskCancel(val data: JSONObject) : SseEvent()
 }

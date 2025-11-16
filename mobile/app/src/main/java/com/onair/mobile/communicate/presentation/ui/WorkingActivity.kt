@@ -115,10 +115,8 @@ class WorkingActivity : AppCompatActivity() {
         initAssistantLogic()
     }
 
-
-    override fun onResume() {
-        super.onResume()
-        // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
+    override fun onStart() {
+        super.onStart()
         Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
         try {
             if (::socketIoSttClient.isInitialized) {
@@ -131,14 +129,36 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
+
+    override fun onResume() {
+        super.onResume()
+        if (::socketIoSttClient.isInitialized) {
+            setCallBack()
+        }
+        // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
+//        Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
+//        try {
+//            if (::socketIoSttClient.isInitialized) {
+//                socketIoSttClient.connect()
+//                Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
+//            }
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
+//            e.printStackTrace()
+//        }
+    }
+
     override fun onPause() {
         super.onPause()
         // WorkingActivity가 background로 가면 Socket.IO 연결 종료
         Log.i(TAG, "🟡 WorkingActivity onPause: Socket.IO 연결 종료")
         if (::socketIoSttClient.isInitialized) {
-            socketIoSttClient.disconnect()
-            Log.i(TAG, "🔌 Socket.IO 연결 종료")
+            removeCallback()
         }
+//        if (::socketIoSttClient.isInitialized) {
+//            socketIoSttClient.disconnect()
+//            Log.i(TAG, "🔌 Socket.IO 연결 종료")
+//        }
     }
 
     override fun onDestroy() {
@@ -180,6 +200,7 @@ class WorkingActivity : AppCompatActivity() {
                         Log.d("SSE_working", event.toString())
                         when (event) {
                             is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
                             else -> Unit
                         }
                     }
@@ -231,9 +252,8 @@ class WorkingActivity : AppCompatActivity() {
                         putExtra("token", token)
                     }
                     startActivity(intent)
+                    binding.callRequestCard.visibility = View.GONE
                 }
-
-
             }
         }
     }
@@ -265,46 +285,49 @@ class WorkingActivity : AppCompatActivity() {
         ttsRepository = TtsRepositoryImpl(this, mediaPlayerController, FASTAPI_SERVER_URL)
 
         // Socket.IO 클라이언트 초기화 (연결은 onResume에서)
-        socketIoSttClient = SocketIoSttClient(
-            serverUrl = FASTAPI_SERVER_URL,
-            onSttResult = { text, type, confidence ->
-                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
-                sttRepository.receiveFromRaspberryPi(text)
-            },
-            onClarifyResponse = { ragResponse ->
-                handleClarifyResponseFromSocket(ragResponse)
-            },
-            onIntentResult = { intentResult ->
-                handleIntentResult(intentResult)
-            },
-            onClarifyTurn = { clarifyTurn ->
-                handleClarifyTurn(clarifyTurn)
-            },
-            onFinalAnswer = { finalAnswer ->
-                handleFinalAnswerFromSocket(finalAnswer)
-            },
-            onStartSseConnection = { text ->
-                handleStartSseConnection(text)
-            },
-            onCvDetectionFailed = { cvFailed ->
-                handleCvDetectionFailed(cvFailed)
-            },
-            onClarifyQaTurn = { qaTurn ->
-                handleClarifyQaTurn(qaTurn)
-            },
-            onWakewordDetected = {
-                handleWakewordDetected()
-            },
-            onConnect = {
-                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
-            },
-            onDisconnect = {
-                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
-            },
-            onConnectError = { error ->
-                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
-            }
-        )
+        socketIoSttClient = SocketHolder.socketClient
+
+        setCallBack()
+//        socketIoSttClient = SocketIoSttClient(
+//            serverUrl = FASTAPI_SERVER_URL,
+//            onSttResult = { text, type, confidence ->
+//                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
+//                sttRepository.receiveFromRaspberryPi(text)
+//            },
+//            onClarifyResponse = { ragResponse ->
+//                handleClarifyResponseFromSocket(ragResponse)
+//            },
+//            onIntentResult = { intentResult ->
+//                handleIntentResult(intentResult)
+//            },
+//            onClarifyTurn = { clarifyTurn ->
+//                handleClarifyTurn(clarifyTurn)
+//            },
+//            onFinalAnswer = { finalAnswer ->
+//                handleFinalAnswerFromSocket(finalAnswer)
+//            },
+//            onStartSseConnection = { text ->
+//                handleStartSseConnection(text)
+//            },
+//            onCvDetectionFailed = { cvFailed ->
+//                handleCvDetectionFailed(cvFailed)
+//            },
+//            onClarifyQaTurn = { qaTurn ->
+//                handleClarifyQaTurn(qaTurn)
+//            },
+//            onWakewordDetected = {
+//                handleWakewordDetected()
+//            },
+//            onConnect = {
+//                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+//            },
+//            onDisconnect = {
+//                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+//            },
+//            onConnectError = { error ->
+//                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
+//            }
+//        )
 
         // 라즈베리파이 제어 API 초기화
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
@@ -665,4 +688,59 @@ class WorkingActivity : AppCompatActivity() {
         aiOnDialog = null
     }
 
+    private fun setCallBack() {
+        socketIoSttClient.setCallbacks(
+            onSttResult = { text, type, confidence ->
+                Log.i(TAG, "🧠 STT 텍스트 수신: $text")
+                sttRepository.receiveFromRaspberryPi(text)
+            },
+            onClarifyResponse = { ragResponse ->
+                handleClarifyResponseFromSocket(ragResponse)
+            },
+            onIntentResult = { intentResult ->
+                handleIntentResult(intentResult)
+            },
+            onClarifyTurn = { clarifyTurn ->
+                handleClarifyTurn(clarifyTurn)
+            },
+            onFinalAnswer = { finalAnswer ->
+                handleFinalAnswerFromSocket(finalAnswer)
+            },
+            onStartSseConnection = { text ->
+                handleStartSseConnection(text)
+            },
+            onCvDetectionFailed = { cv ->
+                handleCvDetectionFailed(cv)
+            },
+            onClarifyQaTurn = { qa ->
+                handleClarifyQaTurn(qa)
+            },
+            onWakewordDetected = {
+                handleWakewordDetected()
+            },
+            onConnect = {
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+            },
+            onDisconnect = {
+                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+            },
+            onConnectError = { error ->
+                Log.e(TAG, "❌ Socket 연결 오류: $error")
+            }
+        )
+    }
+
+    private fun removeCallback() {
+        socketIoSttClient.setCallbacks(
+            onSttResult = null,
+            onClarifyResponse = null,
+            onIntentResult = null,
+            onClarifyTurn = null,
+            onFinalAnswer = null,
+            onStartSseConnection = null,
+            onCvDetectionFailed = null,
+            onClarifyQaTurn = null,
+            onWakewordDetected = null,
+        )
+    }
 }
