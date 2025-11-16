@@ -352,13 +352,19 @@ async def handle_wakeword_detected(sid, data):
     print("=" * 60)
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
     
+    # 모바일 오디오 재생 시작 후 1초 대기
+    print("=" * 60)
+    print("⏳ 모바일 오디오 재생 시작 후 1초 대기 중...")
+    print("=" * 60)
+    await asyncio.sleep(1.0)
+    print("✅ 1초 대기 완료")
+    
     # 라즈베리파이 연결 상태 확인
     raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
     if raspi_sids:
-        # 모바일로 오디오 재생 이벤트를 보낸 직후 라즈베리파이로 버퍼링 STT 시작 신호 전송
-        # (오디오 재생 완료를 기다리지 않고 즉시 시작)
+        # 모바일로 오디오 재생 이벤트를 보낸 후 1초 대기 후 라즈베리파이로 버퍼링 STT 시작 신호 전송
         print("=" * 60)
-        print("📡 [단계 2-1-2] 라즈베리파이로 버퍼링 STT 시작 신호 전송 (오디오 재생과 동시에 시작)")
+        print("📡 [단계 2-1-2] 라즈베리파이로 버퍼링 STT 시작 신호 전송 (오디오 재생 시작 후 1초 대기 완료)")
         print("=" * 60)
         await broadcast_to("raspi", "wakeword_audio_completed", {
             "timestamp": None  # 필요시 추가
