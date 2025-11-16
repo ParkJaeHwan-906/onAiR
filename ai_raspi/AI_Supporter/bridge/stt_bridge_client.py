@@ -109,6 +109,56 @@ class SttBridgeClient:
     def is_connected(self):
         """브리지 서버 연결 상태 확인"""
         return self.connected and self.sio.connected
+    
+    def ensure_connected(self, timeout=2.0):
+        """
+        브리지 서버 연결 상태 확인 및 필요시 재연결 시도
+        
+        Args:
+            timeout: 재연결 대기 시간 (초)
+        
+        Returns:
+            bool: 연결 성공 여부
+        """
+        if self.is_connected():
+            return True
+        
+        # 이미 연결 시도 중이면 기다림
+        if self.sio.connected:
+            self.connected = True
+            return True
+        
+        # 재연결 시도
+        logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 재연결 시도...")
+        try:
+            # 재연결 시도 (비동기적으로 처리)
+            import threading
+            reconnect_success = [False]
+            
+            def reconnect_bridge():
+                try:
+                    self.sio.connect(self.bridge_url, wait_timeout=5)
+                    reconnect_success[0] = True
+                except Exception as e:
+                    logger.warning(f"⚠️ 브리지 서버 재연결 시도 중 오류: {e}")
+            
+            reconnect_thread = threading.Thread(target=reconnect_bridge, daemon=True)
+            reconnect_thread.start()
+            
+            # 연결 대기
+            import time
+            reconnect_thread.join(timeout=timeout)
+            
+            # 연결 상태 확인
+            if self.is_connected():
+                logger.info("✅ 브리지 서버 재연결 성공!")
+                return True
+            else:
+                logger.warning("⚠️ 브리지 서버 재연결 실패 (자동 재연결 대기 중...)")
+                return False
+        except Exception as e:
+            logger.error(f"❌ 브리지 서버 재연결 실패: {e}")
+            return False
 
     def emit_start_streaming_stt(self, session_id: str):
         """
