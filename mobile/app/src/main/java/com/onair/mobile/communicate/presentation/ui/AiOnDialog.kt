@@ -9,10 +9,9 @@ import androidx.fragment.app.DialogFragment
 import androidx.core.graphics.drawable.toDrawable
 import com.bumptech.glide.Glide
 import com.onair.mobile.R
-import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.databinding.DialogAiOnBinding
 
-class AiOnDialog(val intentType: IntentType) : DialogFragment(
+class AiOnDialog(val statusMessage: String) : DialogFragment(
 ) {
 
     private lateinit var binding: DialogAiOnBinding
@@ -37,12 +36,6 @@ class AiOnDialog(val intentType: IntentType) : DialogFragment(
             .load(R.drawable.logo_gif)
             .into(gif)
 
-        when (intentType) {
-            IntentType.AI_SUPPORTER -> {
-                binding.aiStatusText.text = "AI Support On"
-            }
-            IntentType.OPERATOR -> binding.aiStatusText.text = "OnAiR 서비스 시작"
-            IntentType.UNKNOWN -> ""
-        }
+        binding.aiStatusText.text = statusMessage
     }
 }

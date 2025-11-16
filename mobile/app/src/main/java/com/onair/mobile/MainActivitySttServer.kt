@@ -19,6 +19,7 @@ import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
@@ -66,6 +67,7 @@ class MainActivitySttServer : AppCompatActivity() {
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
+        private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_오퍼레이터와의_통신을_통해_문제.mp3"
     }
     
     // 서버 URL 설정
@@ -165,6 +167,10 @@ class MainActivitySttServer : AppCompatActivity() {
             onCvDetectionFailed = { cvFailed ->
                 // CV 모델 오류 탐지 실패 수신
                 handleCvDetectionFailed(cvFailed)
+            },
+            onCvDetectionNormal = { cvNormal ->
+                // CV 모델 정상 상태 탐지 수신
+                handleCvDetectionNormal(cvNormal)
             },
             onClarifyQaTurn = { qaTurn ->
                 // Clarify 질문/답변 턴 수신 (작업자 질문 + LLM 답변)
@@ -528,6 +534,74 @@ class MainActivitySttServer : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 실패 처리 실패: ${e.message}")
                 e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Socket.IO로부터 CV 탐지 정상 수신 처리
+     * FastAPI 서버에서 CV 모델이 정상 상태를 탐지했을 때 전송
+     */
+    private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
+        Log.i(TAG, "📩 CV 탐지 정상 수신: ${cvNormal.message}")
+        addLog("📩 CV 탐지 정상: ${cvNormal.message}")
+        
+        lifecycleScope.launch {
+            try {
+                // UI 업데이트: "통신 중..." 화면 표시
+                runOnUiThread {
+                    updateIntentUI(IntentType.OPERATOR, "통신 중...")
+                }
+                Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
+                addLog("📱 UI: 통신 중...")
+                
+                // CV 탐지 정상 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
+                addLog("🔊 CV 탐지 정상 음성 파일 재생: $CV_DETECTION_NORMAL_AUDIO_FILE")
+                
+                mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
+                    addLog("✅ CV 탐지 정상 음성 파일 재생 완료")
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendCvDetectionNormalAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 완료")
+                        addLog("📤 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 실패")
+                        addLog("❌ 재생 완료 이벤트 전송 실패")
+                    }
+                    
+                    // 재생 완료 직후 WebRTC 요청 API 호출 (OPERATOR와 동일한 로직)
+                    lifecycleScope.launch {
+                        val accessToken = authRepository.getAccessToken()
+                        if (accessToken.isNotEmpty()) {
+                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                            val receiverAccountId = -1L
+                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+                            
+                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                            if (success) {
+                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                                addLog("✅ WebRTC 연결 요청 완료")
+                            } else {
+                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                                addLog("❌ WebRTC 연결 요청 실패")
+                            }
+                        } else {
+                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+                            addLog("❌ AccessToken 없음")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ CV 탐지 정상 처리 실패: ${e.message}")
+                e.printStackTrace()
+                addLog("❌ CV 탐지 정상 처리 실패: ${e.message}")
+                // 오류 발생 시에도 재생 완료 이벤트 전송 시도
+                socketIoSttClient.sendCvDetectionNormalAudioCompleted()
             }
         }
     }
