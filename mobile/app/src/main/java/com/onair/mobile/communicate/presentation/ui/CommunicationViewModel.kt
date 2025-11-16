@@ -20,16 +20,6 @@ class CommunicationViewModel(
 )
     : ViewModel() {
         val eventFlow = repo.eventFlow
-//    private val _lines = MutableStateFlow<List<Stroke>>(emptyList())
-//    val lines : StateFlow<List<Stroke>> = _lines
-//
-//    init {
-//        viewModelScope.launch {
-//            repo.observeLines().collect { newLines ->
-//                _lines.value = newLines
-//            }
-//        }
-//    }
     fun startSSE() {
         repo.startSSE()
     }
