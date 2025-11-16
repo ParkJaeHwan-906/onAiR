@@ -20,6 +20,7 @@ data class ClarifyQaTurnDto(
     val audio_content: String? = null,  // TTS 음성 파일 (base64)
     val audio_encoding: String? = null,  // TTS 음성 인코딩 (예: "audio/mpeg")
     val need_clarify: Boolean = true,  // 추가 구체화 필요 여부
+    val gate_decision: String? = null,  // "RED" | "YELLOW" | "GREEN"
     val status: String = "success"  // "success" | "error"
 )
 

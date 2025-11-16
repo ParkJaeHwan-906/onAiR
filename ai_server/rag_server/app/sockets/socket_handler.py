@@ -351,12 +351,33 @@ async def handle_wakeword_detected(sid, data):
     print("✅ [단계 2-1-1 완료] 모바일로 Wakeword 감지 이벤트 전송 완료")
     print("=" * 60)
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
+    
+    # 라즈베리파이 연결 상태 확인
+    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
+    if raspi_sids:
+        # 모바일로 오디오 재생 이벤트를 보낸 직후 라즈베리파이로 버퍼링 STT 시작 신호 전송
+        # (오디오 재생 완료를 기다리지 않고 즉시 시작)
+        print("=" * 60)
+        print("📡 [단계 2-1-2] 라즈베리파이로 버퍼링 STT 시작 신호 전송 (오디오 재생과 동시에 시작)")
+        print("=" * 60)
+        await broadcast_to("raspi", "wakeword_audio_completed", {
+            "timestamp": None  # 필요시 추가
+        })
+        print("=" * 60)
+        print("✅ [단계 2-1-2 완료] 라즈베리파이로 버퍼링 STT 시작 신호 전송 완료")
+        print("=" * 60)
+        await wait_for_next_step("라즈베리파이로 버퍼링 STT 시작 신호 전송 완료", "2-1-2")
+    else:
+        print("=" * 60)
+        print("⚠️ [경고] 라즈베리파이 디바이스가 연결되어 있지 않아 버퍼링 STT 시작 신호를 전송할 수 없습니다.")
+        print("=" * 60)
 
 
 async def handle_wakeword_audio_completed(sid, data):
     """
     모바일로부터 음성 파일 재생 완료 이벤트 수신
-    라즈베리파이로 이벤트를 전송하여 버퍼링 STT 세션 시작
+    주의: 버퍼링 STT는 이미 wakeword_detected 이벤트 수신 시 시작되므로,
+    이 이벤트는 로깅만 수행합니다.
     """
     print("=" * 60)
     print(f"🔔 [이벤트 수신] wakeword_audio_completed 이벤트 도착")
@@ -381,34 +402,9 @@ async def handle_wakeword_audio_completed(sid, data):
     
     print("=" * 60)
     print(f"📝 [단계 2-2] FastAPI 서버: 모바일 음성 파일 재생 완료 이벤트 수신 [mobile]")
+    print("   주의: 버퍼링 STT는 이미 wakeword_detected 이벤트 수신 시 시작되었습니다.")
     print("=" * 60)
     await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
-    
-    # 라즈베리파이 연결 상태 확인
-    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
-    if not raspi_sids:
-        print("=" * 60)
-        print("⚠️ [오류] 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
-        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
-        print("=" * 60)
-        return
-    
-    print("=" * 60)
-    print(f"✅ 라즈베리파이 디바이스 연결 확인: {len(raspi_sids)}개")
-    print(f"   라즈베리파이 SID: {[s[:15] + '...' for s in raspi_sids]}")
-    print("=" * 60)
-    
-    # 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)
-    print("=" * 60)
-    print("📡 [단계 2-2-1] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)")
-    print("=" * 60)
-    await broadcast_to("raspi", "wakeword_audio_completed", {
-        "timestamp": None  # 필요시 추가
-    })
-    print("=" * 60)
-    print("✅ [단계 2-2-1 완료] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료")
-    print("=" * 60)
-    await wait_for_next_step("라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료", "2-2-1")
 
 
 async def handle_intent_audio_completed(sid, data):
