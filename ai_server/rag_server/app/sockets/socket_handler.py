@@ -1848,8 +1848,8 @@ async def communication_close(sid, data):
     print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
-    # 주의: 마이크는 handle_audio_stream({"start": False})에서 이미 재점유되어 ON 상태임
-    # 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
+    # 모바일 기기에 통신 종료 이벤트 전달
+    await broadcast_to("mobile", "communication_close", {})
     
     # Wakeword 감지 대기 시작
     print("=" * 60)
