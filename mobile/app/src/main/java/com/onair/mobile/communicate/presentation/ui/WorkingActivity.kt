@@ -40,6 +40,7 @@ import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
@@ -74,6 +75,7 @@ class WorkingActivity : AppCompatActivity() {
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1
+    private var aiOnDialog: AiOnDialog? = null
 
     private val TAG = "WorkingActivity"
 
@@ -82,6 +84,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
+        private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_오퍼레이터와의_통신을_통해_문제.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -285,6 +288,9 @@ class WorkingActivity : AppCompatActivity() {
             onCvDetectionFailed = { cvFailed ->
                 handleCvDetectionFailed(cvFailed)
             },
+            onCvDetectionNormal = { cvNormal ->
+                handleCvDetectionNormal(cvNormal)
+            },
             onClarifyQaTurn = { qaTurn ->
                 handleClarifyQaTurn(qaTurn)
             },
@@ -367,9 +373,17 @@ class WorkingActivity : AppCompatActivity() {
 
                         // 음성 파일 재생
                         Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
+                        // 모달 표시
+                        runOnUiThread {
+                            showModal("AI 서포터 on")
+                        }
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            // 모달 숨기기
+                            runOnUiThread {
+                                hideModal()
+                            }
                             
                             // FastAPI 서버로 재생 완료 이벤트 전송
                             val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
@@ -391,9 +405,17 @@ class WorkingActivity : AppCompatActivity() {
 
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
+                        // 모달 표시
+                        runOnUiThread {
+                            showModal("통신 연결 중...")
+                        }
                         mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
+                            // 모달 숨기기
+                            runOnUiThread {
+                                hideModal()
+                            }
                             
                             // FastAPI 서버로 재생 완료 이벤트 전송
                             val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
@@ -469,6 +491,69 @@ class WorkingActivity : AppCompatActivity() {
                 e.printStackTrace()
                 // 오류 발생 시에도 재생 완료 이벤트 전송 시도
                 socketIoSttClient.sendCvDetectionFailedAudioCompleted()
+            }
+        }
+    }
+
+    private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
+        Log.i(TAG, "📩 CV 탐지 정상 수신: ${cvNormal.message}")
+
+        lifecycleScope.launch {
+            try {
+                // UI 업데이트: "통신 중..." 표시
+                runOnUiThread {
+                    binding.taskName.text = "통신 중..."
+                }
+                Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
+                
+                // CV 탐지 정상 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
+                // 모달 표시
+                runOnUiThread {
+                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideModal()
+                    }
+                    
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendCvDetectionNormalAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 실패")
+                    }
+                    
+                    // 재생 완료 직후 WebRTC 요청 API 호출 (OPERATOR와 동일한 로직)
+                    lifecycleScope.launch {
+                        val accessToken = authRepository.getAccessToken()
+                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+                        
+                        if (accessToken.isNotEmpty()) {
+                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                            val receiverAccountId = -1L
+                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+                            
+                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                            if (success) {
+                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                            } else {
+                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                            }
+                        } else {
+                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ CV 탐지 정상 처리 실패: ${e.message}")
+                e.printStackTrace()
+                // 오류 발생 시에도 재생 완료 이벤트 전송 시도
+                socketIoSttClient.sendCvDetectionNormalAudioCompleted()
             }
         }
     }
@@ -705,6 +790,17 @@ class WorkingActivity : AppCompatActivity() {
                 socketIoSttClient.sendWakewordAudioCompleted()
             }
         }
+    }
+
+    private fun showModal(statusMessage: String) {
+        if (aiOnDialog?.isVisible == true) return
+        aiOnDialog = AiOnDialog(statusMessage)
+        aiOnDialog?.show(supportFragmentManager, "waiting call")
+    }
+
+    private fun hideModal() {
+        aiOnDialog?.dismiss()
+        aiOnDialog = null
     }
 
     // connectSseTaskStream 제거: 로그인 시 이미 /api/sse/stream에 연결되어 있음
