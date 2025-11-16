@@ -1704,7 +1704,7 @@ async def handle_video_frame(sid, data):
             })
         ar_markers[:] = updated
         # print(f"arr : {ar_markers}")
-        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+        await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -1968,7 +1968,7 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
 async def delete_marker(sid, data):
     """
@@ -1993,4 +1993,4 @@ async def delete_marker(sid, data):
         marker["idx"] = i
     
     # 전송을 하긴 하는데, 없어도 될듯?
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
