@@ -207,6 +207,9 @@ class WakewordDetector:
         self.is_paused = True
         if hasattr(self, 'audio_buffer'):
             self.audio_buffer.clear()
+        # pause 시에도 last_detection_time을 리셋하여 다음 resume 후 즉시 감지 가능하도록 함
+        if hasattr(self, 'last_detection_time'):
+            self.last_detection_time = 0
         print("🔇 Wakeword 감지기 일시 중지")
     
     def resume(self):
