@@ -242,6 +242,7 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
+        await start_device_detector_task()
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
@@ -250,7 +251,7 @@ async def handle_connect(sid, environ):
         # print(f"   User-Agent: {user_agent[:50]}...")
         # print(f"   현재 연결된 디바이스 수: {len(device_map)}")
         print("=" * 60)
-        
+
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
         # 연결 허용 (명시적으로 True 반환하거나 아무것도 반환하지 않으면 허용)
@@ -455,12 +456,26 @@ async def handle_intent_audio_completed(sid, data):
             anomalies = cv_raw.get("anomalies", {})
             has_anomaly = cv_raw.get("detected", False)
 
+            filtered_anomalies = {
+                k: v for k, v in anomalies.items()
+                if v.get("results") and len(v.get("results")) > 0
+            }      
+
+            raw_messages = cv_raw.get("messages", [])
+            filtered_msgs = [
+                msg for msg in raw_messages
+                if not any(kw in msg for kw in ("미검출", "없음"))
+            ]
+
+            if not has_anomaly and modules:
+                has_anomaly = "Normal"
+
             cv_result = {
                 "detected": has_anomaly,
                 "device_type": cv_raw.get("device_type"),
                 "modules": modules,
-                "anomalies": anomalies,
-                "message": cv_raw.get("message", "")
+                "anomalies": filtered_anomalies,
+                "message": filtered_msgs
             }
 
                 
