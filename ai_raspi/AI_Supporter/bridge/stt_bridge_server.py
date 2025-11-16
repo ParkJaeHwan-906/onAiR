@@ -48,6 +48,39 @@ def disconnect(sid):
     connected_clients.discard(sid)
     logger.info(f"❌ 브리지 클라이언트 연결 종료: {sid} (남은 연결: {len(connected_clients)}개)")
 
+# 버퍼링 STT 세션 종료 명령 수신 (Python 3.13 → Python 3.10)
+stop_buffered_stt_callback = None
+
+def set_stop_buffered_stt_callback(callback):
+    """버퍼링 STT 세션 종료 콜백 설정 (Python 3.10에서 호출)"""
+    global stop_buffered_stt_callback
+    stop_buffered_stt_callback = callback
+    logger.info("✅ 버퍼링 STT 세션 종료 콜백이 등록되었습니다")
+
+@sio.on('stop_buffered_stt')
+def handle_stop_buffered_stt(sid, data):
+    """Python 3.13에서 버퍼링 STT 세션 종료 명령 수신"""
+    reason = data.get("reason", "unknown")
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: 버퍼링 STT 세션 종료 명령 수신")
+    logger.info(f"   Reason: {reason}")
+    logger.info("=" * 60)
+    
+    if stop_buffered_stt_callback:
+        try:
+            stop_buffered_stt_callback(reason)
+            logger.info("=" * 60)
+            logger.info(f"✅ 브리지 서버: 버퍼링 STT 세션 종료 명령 처리 완료")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error(f"❌ 브리지 서버: 버퍼링 STT 세션 종료 명령 처리 실패: {e}")
+            logger.error("=" * 60)
+    else:
+        logger.warning("=" * 60)
+        logger.warning("⚠️ 버퍼링 STT 세션 종료 콜백이 등록되지 않았습니다")
+        logger.warning("=" * 60)
+
 # Streaming STT 시작 명령 수신 (Python 3.13 → Python 3.10)
 @sio.on('start_streaming_stt')
 def handle_start_streaming_stt(sid, data):
@@ -104,29 +137,22 @@ def handle_service_completed(sid, data):
 @sio.on('wakeword_audio_completed')
 def handle_wakeword_audio_completed(sid, data):
     """Python 3.13에서 모바일 음성 파일 재생 완료 신호 수신"""
-    logger.info("=" * 60)
-    logger.info(f"📥 [모바일 음성 재생 완료] 브리지 서버: 모바일 음성 파일 재생 완료 신호 수신")
-    logger.info("=" * 60)
+    logger.info("📥 모바일 음성 파일 재생 완료 신호 수신")
     
     if wakeword_audio_completed_callback:
         try:
             wakeword_audio_completed_callback()
-            logger.info("=" * 60)
-            logger.info(f"✅ [모바일 음성 재생 완료] 브리지 서버: 모바일 음성 파일 재생 완료 신호 처리 완료")
-            logger.info("=" * 60)
         except Exception as e:
-            logger.error("=" * 60)
-            logger.error(f"❌ [모바일 음성 재생 완료 실패] 모바일 음성 파일 재생 완료 신호 처리 실패: {e}")
-            logger.error("=" * 60)
+            logger.error(f"❌ 모바일 음성 재생 완료 신호 처리 실패: {e}")
     else:
-        logger.warning("=" * 60)
-        logger.warning("⚠️ 모바일 음성 파일 재생 완료 콜백이 등록되지 않았습니다")
-        logger.warning("=" * 60)
+        logger.warning("⚠️ 모바일 음성 재생 완료 콜백 미등록")
 
 # Wakeword 감지 대기 시작 이벤트 수신 (Python 3.13 → Python 3.10)
 wakeword_start_waiting_callback = None
 mic_off_callback = None
 mic_on_callback = None
+mic_release_callback = None  # 마이크 장치 해제 콜백 (WebRTC 프로세스가 마이크를 사용할 수 있도록)
+mic_acquire_callback = None  # 마이크 장치 재점유 콜백 (WebRTC 프로세스가 마이크를 해제한 후)
 
 def set_wakeword_start_waiting_callback(callback):
     """Wakeword 감지 대기 시작 콜백 등록"""
@@ -145,6 +171,18 @@ def set_mic_on_callback(callback):
     global mic_on_callback
     mic_on_callback = callback
     logger.info("✅ STT 목적 음성 수집 재개 콜백이 등록되었습니다")
+
+def set_mic_release_callback(callback):
+    """마이크 장치 해제 콜백 등록 (WebRTC 프로세스가 마이크를 사용할 수 있도록)"""
+    global mic_release_callback
+    mic_release_callback = callback
+    logger.info("✅ 마이크 장치 해제 콜백이 등록되었습니다")
+
+def set_mic_acquire_callback(callback):
+    """마이크 장치 재점유 콜백 등록 (WebRTC 프로세스가 마이크를 해제한 후)"""
+    global mic_acquire_callback
+    mic_acquire_callback = callback
+    logger.info("✅ 마이크 장치 재점유 콜백이 등록되었습니다")
 
 @sio.on('wakeword_start_waiting')
 def handle_wakeword_start_waiting(sid, data):
@@ -212,69 +250,130 @@ def handle_mic_on(sid, data):
         logger.warning("⚠️ 마이크 ON 콜백이 등록되지 않았습니다")
         logger.warning("=" * 60)
 
+@sio.on('handle_audio_stream')
+def handle_audio_stream(sid, data):
+    """WebRTC 오디오 스트리밍 시작/중지 이벤트 수신"""
+    logger.info("=" * 60)
+    logger.info(f"📥 브리지 서버: WebRTC 오디오 스트리밍 제어 이벤트 수신")
+    logger.info(f"   데이터: {data}")
+    logger.info("=" * 60)
+    
+    if data and data.get("start", False):
+        # WebRTC 오디오 스트리밍 시작: 마이크 장치 해제
+        logger.info("🎙️ WebRTC 오디오 스트리밍 시작 신호 수신")
+        logger.info("   Python 3.10 프로세스가 마이크 장치를 해제합니다.")
+        if mic_release_callback:
+            try:
+                mic_release_callback()
+                logger.info("=" * 60)
+                logger.info(f"✅ 브리지 서버: 마이크 장치 해제 완료 (WebRTC 프로세스가 사용할 수 있음)")
+                logger.info("=" * 60)
+            except Exception as e:
+                logger.error("=" * 60)
+                logger.error(f"❌ 브리지 서버: 마이크 장치 해제 실패: {e}")
+                logger.error("=" * 60)
+        else:
+            logger.warning("=" * 60)
+            logger.warning("⚠️ 마이크 장치 해제 콜백이 등록되지 않았습니다")
+            logger.warning("=" * 60)
+    else:
+        # WebRTC 오디오 스트리밍 중지: 마이크 장치 재점유
+        logger.info("🛑 WebRTC 오디오 스트리밍 중지 신호 수신")
+        logger.info("   Python 3.10 프로세스가 마이크 장치를 재점유합니다.")
+        if mic_acquire_callback:
+            try:
+                mic_acquire_callback()
+                logger.info("=" * 60)
+                logger.info(f"✅ 브리지 서버: 마이크 장치 재점유 완료")
+                logger.info("=" * 60)
+            except Exception as e:
+                logger.error("=" * 60)
+                logger.error(f"❌ 브리지 서버: 마이크 장치 재점유 실패: {e}")
+                logger.error("=" * 60)
+        else:
+            logger.warning("=" * 60)
+            logger.warning("⚠️ 마이크 장치 재점유 콜백이 등록되지 않았습니다")
+            logger.warning("=" * 60)
+
 # Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
 def send_wakeword_detected():
     """Wakeword 감지 이벤트를 브리지 클라이언트(3.13)에게 전송"""
-    logger.info("=" * 60)
-    logger.info(f"📤 [단계 2-1] 브리지 서버: Wakeword 감지 이벤트 전송 시작")
-    logger.info(f"   연결된 클라이언트: {len(connected_clients)}개")
-    logger.info("=" * 60)
-    
     if not connected_clients:
-        logger.warning("⚠️ 연결된 클라이언트가 없습니다. Wakeword 감지 이벤트를 전송할 수 없습니다.")
-        return
+        logger.warning("⚠️ 브리지 클라이언트 미연결 - Wakeword 이벤트 전송 불가")
+        return False
     
-    # 모든 연결된 클라이언트에게 전송
-    for client_sid in list(connected_clients):  # 리스트로 복사하여 안전하게 순회
+    success_count = 0
+    for client_sid in list(connected_clients):
         try:
             sio.emit('wakeword_detected', {}, room=client_sid)
-            logger.info(f"✅ 클라이언트 {client_sid[:10]}...에게 전송 완료")
+            success_count += 1
         except Exception as e:
-            logger.error(f"❌ 클라이언트 {client_sid}에게 전송 실패: {e}")
-            connected_clients.discard(client_sid)  # 실패한 클라이언트 제거
+            logger.error(f"❌ 클라이언트 {client_sid} 전송 실패: {e}")
+            connected_clients.discard(client_sid)
     
-    logger.info("=" * 60)
-    logger.info("✅ [단계 2-1 완료] 브리지 서버: Wakeword 감지 이벤트 전송 완료")
-    logger.info("=" * 60)
+    if success_count > 0:
+        logger.info("📤 Wakeword 감지 이벤트 전송 완료")
+        return True
+    else:
+        logger.error("❌ Wakeword 감지 이벤트 전송 실패")
+        return False
 
 # 3️⃣ 외부에서 호출될 함수 (STT 결과 emit)
 def send_stt_result(result: dict):
-    """
-    STT 결과를 브리지 클라이언트(3.13)에게 전송
-    Args:
-        result: {"type": "final", "text": "...", "confidence": 0.95}
-    """
-    logger.info("=" * 60)
-    logger.info(f"📤 [단계 4] 브리지 서버: STT 결과 수신 및 전송 시작")
-    logger.info(f"   타입: {result.get('type')}, 텍스트: {result.get('text', '')[:50]}...")
-    logger.info(f"   연결된 클라이언트: {len(connected_clients)}개")
-    logger.info("=" * 60)
-    
+    """STT 결과를 브리지 클라이언트(3.13)에게 전송"""
     if not connected_clients:
-        logger.warning("⚠️ 연결된 클라이언트가 없습니다. STT 결과를 전송할 수 없습니다.")
+        logger.warning("⚠️ 브리지 클라이언트 미연결 - STT 결과 전송 불가")
         return
     
-    # 모든 연결된 클라이언트에게 전송
-    for client_sid in list(connected_clients):  # 리스트로 복사하여 안전하게 순회
+    for client_sid in list(connected_clients):
         try:
             sio.emit('stt_result', result, room=client_sid)
-            logger.info(f"✅ 클라이언트 {client_sid[:10]}...에게 전송 완료")
+            logger.info(f"📤 STT 결과 전송: {result.get('type')} - {result.get('text', '')[:30]}...")
         except Exception as e:
-            logger.error(f"❌ 클라이언트 {client_sid}에게 전송 실패: {e}")
-            connected_clients.discard(client_sid)  # 실패한 클라이언트 제거
-    
-    logger.info("=" * 60)
-    logger.info("✅ [단계 4 완료] 브리지 서버: STT 결과 전송 완료")
-    logger.info("=" * 60)
+            logger.error(f"❌ STT 결과 전송 실패: {e}")
+            connected_clients.discard(client_sid)
 
 # 4️⃣ 서버 실행
 def run_server(host='127.0.0.1', port=5050):
     from werkzeug.serving import WSGIRequestHandler, make_server
+    import socket
     logging.basicConfig(level=logging.INFO)
     logger.info(f"🚀 STT 브리지 서버 시작 (Socket.IO): ws://{host}:{port}")
+    
+    # 포트가 이미 사용 중인지 확인
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.error("=" * 60)
+            logger.error(f"❌ 포트 {port}가 이미 사용 중입니다!")
+            logger.error("   해결 방법:")
+            logger.error(f"   1. 포트를 사용 중인 프로세스 확인: sudo lsof -i :{port}")
+            logger.error(f"   2. 프로세스 종료: sudo kill -9 <PID>")
+            logger.error(f"   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+            logger.error("=" * 60)
+            raise OSError(f"Port {port} is already in use")
+    except socket.error as e:
+        # 포트 확인 중 오류 발생 (무시 가능)
+        logger.debug(f"포트 확인 중 오류 (무시 가능): {e}")
+    
     # threading 모드를 사용하므로 werkzeug 서버 사용
-    server = make_server(host, port, app, request_handler=WSGIRequestHandler)
-    server.serve_forever()
+    try:
+        server = make_server(host, port, app, request_handler=WSGIRequestHandler)
+        logger.info(f"✅ 브리지 서버 바인딩 성공: ws://{host}:{port}")
+        server.serve_forever()
+    except OSError as e:
+        if "Address already in use" in str(e) or "already in use" in str(e).lower():
+            logger.error("=" * 60)
+            logger.error(f"❌ 포트 {port} 바인딩 실패: 포트가 이미 사용 중입니다")
+            logger.error("   해결 방법:")
+            logger.error(f"   1. 포트를 사용 중인 프로세스 확인: sudo lsof -i :{port}")
+            logger.error(f"   2. 프로세스 종료: sudo kill -9 <PID>")
+            logger.error(f"   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+            logger.error("=" * 60)
+        raise
 
 if __name__ == "__main__":
     run_server()

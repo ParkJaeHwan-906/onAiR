@@ -11,6 +11,7 @@ object SocketHolder {
             onClarifyTurn = { },
             onFinalAnswer = { },
             onStartSseConnection = { },
+            onCvDetectionNormal = { },
             onCvDetectionFailed = { },
             onClarifyQaTurn = { },
             onWakewordDetected = { },

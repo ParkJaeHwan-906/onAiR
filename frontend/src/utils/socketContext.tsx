@@ -15,7 +15,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 interface ServerToClientEvents {
   server_message: (data: { msg: string }) => void;
   pong: (data: { msg: string }) => void;
-  video_frame: (data: ArrayBuffer) => void;
+  video_frame: (data: { timestamp: number; frame: ArrayBuffer }) => void;
   audio_frame: (data: { timestamp: number; frame: ArrayBuffer }) => void;
   "marker-created": (data: { msg: string }) => void;
   "ar-info": (
@@ -26,6 +26,11 @@ interface ServerToClientEvents {
         y: number;
         size: number;
       };
+      type: string;
+      color: string;
+      pulseScale?: number;
+      pulseOpacity?: number;
+      opacity?: number;
     }>
   ) => void;
 }
@@ -39,7 +44,15 @@ interface ClientToServerEvents {
   accept_communication: (data: null) => void;
   "video-frame": (data: { frame: string }) => void;
   "audio-frame": (data: { frame: string }) => void;
-  "ar-marker": (data: { marker_x: number; marker_y: number }) => void;
+  "ar-marker": (data: {
+    marker_x: number;
+    marker_y: number;
+    type: string;
+    color: string;
+    pulseScale?: number;
+    pulseOpacity?: number;
+    opacity?: number;
+  }) => void;
   "delete-marker": (data: { idx: number }) => void;
 }
 // --- 타입 정의 끝 ---

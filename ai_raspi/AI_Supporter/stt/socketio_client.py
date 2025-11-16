@@ -108,77 +108,107 @@ class SocketIOClient:
             logger.info("=" * 60)
             
             # manager를 통해 종료 신호 전달
+            # 주의: 마이크는 계속 ON 상태로 유지되며, Streaming STT 세션만 종료됨
             if self.manager:
                 self.manager.add_stop_streaming_session(session_id)
-                
-                # STT 목적 음성 수집 중지 (통신 요청 수락 등으로 인한 중지 시)
-                # 주의: 마이크는 하나이며, STT 목적으로 사용 중이던 스트림을 중지합니다.
-                mic = self.manager.get_mic_stream()
-                if mic and mic.is_active():
-                    mic.pause()
-                    logger.info("🔇 STT 목적 음성 수집 중지 (Streaming STT 세션 종료)")
+                logger.info("✅ Streaming STT 세션 종료 신호 전달 완료 (마이크는 계속 ON 상태)")
+        
+        @self.sio.on("stop_buffered_stt")
+        async def handle_stop_buffered_stt(data):
+            """버퍼링 STT 세션 종료 신호 수신"""
+            reason = data.get("reason", "unknown")
+            logger.info("=" * 60)
+            logger.info(f"🛑 버퍼링 STT 세션 종료 신호 수신: reason={reason}")
+            logger.info("=" * 60)
+            
+            # 주의: 버퍼링 STT는 일회성으로 실행되며, 이미 완료되었을 가능성이 높음
+            # 마이크는 계속 ON 상태로 유지됨
+            # 버퍼링 STT가 실행 중이면 중지할 수 있도록 브리지 서버로 전달
+            if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                try:
+                    logger.info("📡 브리지 서버로 버퍼링 STT 세션 종료 신호 전달...")
+                    self.manager.bridge_client.sio.emit('stop_buffered_stt', data)
+                    logger.info("✅ 브리지 서버로 버퍼링 STT 세션 종료 신호 전달 완료")
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward stop_buffered_stt to bridge server: {e}")
+            else:
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+        
+        @self.sio.on("handle_audio_stream")
+        async def handle_handle_audio_stream(data):
+            """WebRTC 오디오 스트리밍 제어 이벤트 수신 (FastAPI 서버에서 전송)"""
+            logger.info("=" * 60)
+            logger.info(f"📩 라즈베리파이(Python 3.13): handle_audio_stream 이벤트 수신")
+            logger.info(f"   데이터: {data}")
+            logger.info("=" * 60)
+            
+            # 브리지 클라이언트를 통해 브리지 서버로 전달 (마이크 장치 해제/재점유)
+            if self.manager and hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                try:
+                    logger.info("📡 브리지 서버로 handle_audio_stream 이벤트 전달...")
+                    self.manager.bridge_client.sio.emit('handle_audio_stream', data)
+                    logger.info("=" * 60)
+                    logger.info("✅ 브리지 서버로 handle_audio_stream 이벤트 전달 완료")
+                    logger.info("=" * 60)
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward handle_audio_stream to bridge server: {e}")
+            else:
+                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다.")
+            
+            # 오디오 스트리밍 시작/중지 처리
+            if self.manager and hasattr(self.manager, 'audio_streamer') and self.manager.audio_streamer:
+                try:
+                    if data and data.get("start", False):
+                        # WebRTC 오디오 스트리밍 시작
+                        # 주의: Python 3.10 프로세스가 마이크 장치를 완전히 해제할 시간 확보
+                        logger.info("=" * 60)
+                        logger.info("⏳ Python 3.10 프로세스의 마이크 장치 해제 대기 중... (0.3초)")
+                        logger.info("=" * 60)
+                        await asyncio.sleep(0.3)  # 마이크 해제 완료 대기
+                        
+                        logger.info("=" * 60)
+                        logger.info("🎙️ WebRTC 오디오 스트리밍 시작")
+                        logger.info("=" * 60)
+                        self.manager.audio_streamer.start()
+                        logger.info("✅ 오디오 스트리밍 시작 완료")
+                    else:
+                        # WebRTC 오디오 스트리밍 중지
+                        logger.info("=" * 60)
+                        logger.info("🛑 WebRTC 오디오 스트리밍 중지")
+                        logger.info("=" * 60)
+                        self.manager.audio_streamer.stop()
+                        logger.info("✅ 오디오 스트리밍 중지 완료")
+                except Exception as e:
+                    logger.error(f"❌ 오디오 스트리밍 제어 실패: {e}")
+            else:
+                logger.warning("⚠️ 오디오 스트리머가 등록되지 않았습니다.")
         
         @self.sio.on("start_streaming_stt")
         async def handle_start_streaming_stt(data):
             """Streaming STT 시작 신호 수신 (FastAPI 서버에서 전송)"""
             session_id = data.get("session_id")
-            message = data.get("message", "")
-            logger.info("=" * 60)
-            logger.info(f"📩 [단계 12] 라즈베리파이(Python 3.13): start_streaming_stt 이벤트 수신")
-            logger.info(f"   Session ID: {session_id}")
-            logger.info(f"   Message: {message}")
-            logger.info("=" * 60)
+            logger.info(f"📩 start_streaming_stt 이벤트 수신: session_id={session_id}")
             
-            # 라즈베리파이: 마이크 ON + Streaming STT 즉시 시작
-            # 주의: Streaming STT는 Python 3.10 프로세스에서 실행되어야 함
-            # Python 3.13에서는 인스턴스만 등록하고, 실제 실행은 Python 3.10에서 처리
             if self.manager:
-                # STT 모드를 streaming으로 전환
                 self.manager.set_stt_mode("streaming")
                 
-                # 세션 ID 사용 (없으면 생성)
                 if not session_id:
                     import uuid
                     session_id = str(uuid.uuid4())
                 
-                logger.info("=" * 60)
-                logger.info(f"📤 [단계 12-1] 브리지 서버로 Streaming STT 시작 명령 전송 준비")
-                logger.info(f"   Session ID: {session_id}")
-                logger.info("=" * 60)
-                
-                # 브리지 클라이언트를 통해 Python 3.10에 Streaming STT 시작 명령 전송
                 if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
                     success = self.manager.bridge_client.emit_start_streaming_stt(session_id)
                     if success:
-                        logger.info("=" * 60)
-                        logger.info(f"✅ [단계 12-1 완료] 브리지 서버로 Streaming STT 시작 명령 전송 완료")
-                        logger.info(f"   Session ID: {session_id}")
-                        logger.info("=" * 60)
+                        logger.info(f"📤 Streaming STT 시작 명령 전송 완료: session_id={session_id}")
                     else:
-                        logger.error("=" * 60)
-                        logger.error(f"❌ [단계 12-1 실패] 브리지 서버로 Streaming STT 시작 명령 전송 실패")
-                        logger.error(f"   Session ID: {session_id}")
-                        logger.error("=" * 60)
+                        logger.error(f"❌ Streaming STT 시작 명령 전송 실패: session_id={session_id}")
                 else:
-                    logger.warning("=" * 60)
-                    logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. Streaming STT 시작 명령을 전송할 수 없습니다.")
-                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 클라이언트 미등록")
         
         @self.sio.on("cv_detection_failed")
         async def handle_cv_detection_failed(data):
             """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
-            message = data.get("message", "")
-            logger.info("=" * 60)
-            logger.info(f"📩 [단계 11] 라즈베리파이(Python 3.13): cv_detection_failed 이벤트 수신")
-            logger.info(f"   메시지: {message}")
-            logger.info("=" * 60)
-            
-            # 주의: 모바일에서 음성 파일 재생 완료 이벤트를 받은 후에 start_streaming_stt 이벤트가 전송됨
-            # 따라서 여기서는 Streaming STT를 시작하지 않고, start_streaming_stt 이벤트를 기다림
-            logger.info("=" * 60)
-            logger.info("⏳ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 대기 중...")
-            logger.info("   start_streaming_stt 이벤트 수신 후 Streaming STT 세션을 시작합니다.")
-            logger.info("=" * 60)
+            logger.info("📩 cv_detection_failed 이벤트 수신 - start_streaming_stt 대기 중")
         
         @self.sio.on("control_raspi")
         async def handle_control_raspi(data):
