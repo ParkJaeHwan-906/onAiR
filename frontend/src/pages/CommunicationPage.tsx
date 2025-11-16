@@ -80,6 +80,7 @@ export const CommunicationPage = () => {
         token={token}
         serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
         connect={true}
+        audio={true}
       >
         <VideoFrame
           handleSerialize={handleSerialize}
