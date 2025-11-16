@@ -477,8 +477,16 @@ class WorkingActivity : AppCompatActivity() {
                 
                 // CV 탐지 실패 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
+                // 모달 표시
+                runOnUiThread {
+                    showModal("오류 탐지에 실패하였습니다.\nAI 서포터와의 대화를 통해 문제 상황을 해결해드리겠습니다.")
+                }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideModal()
+                    }
                     val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
                     if (success) {
                         Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 완료")
