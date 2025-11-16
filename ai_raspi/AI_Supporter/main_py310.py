@@ -352,9 +352,34 @@ def run_stt_loop():
                         mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
                     continue
                 
-                # Wakeword 감지 이벤트 전송 직후 버퍼링 STT 세션 시작
-                # (모바일 오디오 재생 완료를 기다리지 않고 즉시 시작)
-                logger.info("🎤 버퍼링 STT 세션 시작 (오디오 재생과 동시에 시작)")
+                # 모바일에서 음성 파일 재생 완료 대기
+                logger.info("⏳ 모바일 음성 파일 재생 완료 대기 중...")
+                
+                wakeword_audio_completed_flag = {"completed": False}  # 딕셔너리로 래핑하여 참조 전달
+                
+                def on_wakeword_audio_completed():
+                    """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                    wakeword_audio_completed_flag["completed"] = True
+                    logger.info("✅ 모바일 음성 파일 재생 완료 신호 수신")
+                
+                # 모바일 음성 파일 재생 완료 콜백 등록
+                set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
+                
+                max_wait_time = 30  # 최대 30초 대기 (음성 파일 재생 시간)
+                wait_start = time.time()
+                
+                while not wakeword_audio_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
+                    time.sleep(0.5)  # 0.5초마다 확인
+                
+                if not wakeword_audio_completed_flag["completed"]:
+                    logger.warning("⚠️ 모바일 음성 파일 재생 완료 신호 미수신 - Wakeword 대기 상태로 복귀")
+                    if wakeword_detector and wakeword_detector.interpreter is not None:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                    continue
+                
+                # 모바일 음성 파일 재생 완료 → 버퍼링 STT 세션 시작
+                logger.info("🎤 버퍼링 STT 세션 시작")
                 
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
                 loop.run_until_complete(stt_session())
