@@ -462,7 +462,7 @@ async def handle_intent_audio_completed(sid, data):
             raw_messages = cv_raw.get("messages", [])
             filtered_msgs = [
                 msg for msg in raw_messages
-                if not any(kw in msg for kw in ("미검출", "없음"))
+                if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
 
             if not has_anomaly and modules:
@@ -1694,7 +1694,7 @@ async def handle_video_frame(sid, data):
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
-                    "z": round(z_size, 4),
+                    # "z": round(z_size, 4),
                     "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 },
                 "color": m["color"],
@@ -1704,7 +1704,7 @@ async def handle_video_frame(sid, data):
             })
         ar_markers[:] = updated
         # print(f"arr : {ar_markers}")
-        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+        await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -1848,8 +1848,8 @@ async def communication_close(sid, data):
     print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
-    # 주의: 마이크는 handle_audio_stream({"start": False})에서 이미 재점유되어 ON 상태임
-    # 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
+    # 모바일 기기에 통신 종료 이벤트 전달
+    await broadcast_to("mobile", "communication_close", {})
     
     # Wakeword 감지 대기 시작
     print("=" * 60)
@@ -1968,7 +1968,7 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
 async def delete_marker(sid, data):
     """
@@ -1993,4 +1993,4 @@ async def delete_marker(sid, data):
         marker["idx"] = i
     
     # 전송을 하긴 하는데, 없어도 될듯?
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
