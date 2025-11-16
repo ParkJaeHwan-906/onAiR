@@ -144,161 +144,164 @@ fun WhiteboardCanvas(
                 )
             }
         }
+
+        var completedPaths = remember { mutableStateListOf<TimedPath>() }
+        var currentPath by remember { mutableStateOf<Path?>(null) }
+        var currentColor by remember { mutableStateOf(Color.White) }
+        var pathTrigger by remember { mutableIntStateOf(0) }
+
+    //    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
+        val markers by viewModel.arMarkers.collectAsState(initial = emptyList<ArMarker>())
+        LaunchedEffect(Unit) {
+            viewModel.arMarkers.collect {
+                Log.i("CallActivity", "🎨 Activity에서 AR 마커 UI 업데이트: ${it.size}")
+            }
+        }
+        val context = LocalContext.current
+
+    //    LaunchedEffect(Unit) {
+    //        while (true) {
+    //            delay(100)
+    //            markers = markers.map { marker ->
+    //                val newScale = marker.pulseScale + 0.03f
+    //                val newOpacity = marker.pulseOpacity - 0.2f
+    //                if (newScale > 1.6f) {
+    //                    marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+    //                } else {
+    //                    marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+    //                }
+    //            }
+    //        }
+    //    }
+
+        LaunchedEffect(viewModel) {
+            viewModel.dataReceived.collect { jsonString ->
+                try {
+                    val json = JSONObject(jsonString)
+                    val eventType = json.getString("event")
+                    val x = json.optDouble("x", 0.0).toFloat()
+                    val y = json.optDouble("y", 0.0).toFloat()
+                    val tool = json.optString("tool", "pen")
+
+                    val colorString = json.optString("color", "white")
+                    currentColor =  when (colorString) {
+                        "red" -> Color.Red
+                        "blue" -> Color.Blue
+                        "yellow" -> Color.Yellow
+                        else -> Color.White
+                    }
+                    if (tool == "pen") {
+                        when (eventType) {
+                            "draw-start" -> {
+                                val p = transform(x, y)
+                                currentPath = Path().apply { moveTo(p.x, p.y) }
+                                pathTrigger++
+                            }
+                            "draw-move" -> {
+                                val p = transform(x,y)
+                                currentPath?.lineTo(p.x, p.y)
+                                pathTrigger++
+                            }
+                            "draw-end" -> {
+                                currentPath?.let {
+                                    completedPaths.add(
+                                        TimedPath(path = it, color = currentColor)
+                                    )
+                                }
+                                currentPath = null
+                                pathTrigger++
+                            }
+                        }
+                    }
+                } catch (e: Exception){
+                    Log.e("json parsing", e.message.toString())
+                }
+            }
+        }
+        LaunchedEffect(Unit) {
+            while (true) {
+                val aSecondsAgo = System.currentTimeMillis() - 1000
+                completedPaths.removeAll { it.timestamp < aSecondsAgo }
+                delay(100)
+
+            }
+        }
+        val linePaint = remember {
+            Paint().apply {
+                style = PaintingStyle.Stroke
+                strokeWidth = 5F
+                strokeCap = StrokeCap.Round
+                strokeJoin = StrokeJoin.Round
+                isAntiAlias = true
+            }
+        }
+        val frameworkPaint = remember {
+            linePaint.asFrameworkPaint()
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = modifier) {
+                val path = Path()
+                var currentColor: Color? = null
+                val shadowRadius = 15f
+
+                drawRect(Color.Black)
+
+                val trigger = pathTrigger
+                val now = System.currentTimeMillis()
+                val fadeDurationMillis = 1000L
+
+                drawIntoCanvas { canvas ->
+                    completedPaths.forEach { timedPath ->
+                        val age = now - timedPath.timestamp
+                        val alpha = ( 1.0f - (age.toFloat() / fadeDurationMillis)).coerceAtLeast(0.0f)
+
+                        linePaint.color = Color.White.copy(alpha = alpha)
+                        frameworkPaint.setShadowLayer(
+                            shadowRadius,
+                            0f, 0f,
+                            timedPath.color.copy(alpha = alpha).toArgb()
+                        )
+                        canvas.drawPath(timedPath.path, linePaint)
+                    }
+                    currentPath?.let {
+                        linePaint.color = Color.White
+                        frameworkPaint.setShadowLayer(
+                            shadowRadius, 0f, 0f,
+                            (currentColor ?: Color.White).toArgb()
+                        )
+                        canvas.drawPath(it, linePaint)
+                    }
+                }
+    //            markers.forEach { marker ->
+    //                ArMarker(marker = marker)
+    ////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
+    ////                drawCircle(
+    ////                    color = marker.color.copy(alpha = alpha),
+    ////                    radius = 100 * marker.pulseOpacity,
+    ////                    center = Offset(marker.x, marker.y)
+    ////                )
+    //            }
+            }
+            Log.d("CallActivity marker", markers.toString())
+            markers.forEach { marker ->
+                val p = transform(marker.info.x, marker.info.y)
+                ArMarker(marker = marker, p.x, p.y)
+            }
+    //        SmallFloatingActionButton(
+    //            onClick = { (context as? Activity)?.finish() },
+    //            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+    //            contentColor = MaterialTheme.colorScheme.secondary
+    //        ) {
+    //            Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
+    //        }
+        }
     }
 //    val points = remember { mutableStateListOf<Points>() }
     // 웹이랑 똑같게
-
-    var completedPaths = remember { mutableStateListOf<TimedPath>() }
-    var currentPath by remember { mutableStateOf<Path?>(null) }
-    var currentColor by remember { mutableStateOf(Color.White) }
-    var pathTrigger by remember { mutableIntStateOf(0) }
-
-//    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
-    val markers by viewModel.arMarkers.collectAsState(initial = emptyList<ArMarker>())
-    LaunchedEffect(Unit) {
-        viewModel.arMarkers.collect {
-            Log.i("CallActivity", "🎨 Activity에서 AR 마커 UI 업데이트: ${it.size}")
-        }
-    }
-    val context = LocalContext.current
-
-//    LaunchedEffect(Unit) {
-//        while (true) {
-//            delay(100)
-//            markers = markers.map { marker ->
-//                val newScale = marker.pulseScale + 0.03f
-//                val newOpacity = marker.pulseOpacity - 0.2f
-//                if (newScale > 1.6f) {
-//                    marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
-//                } else {
-//                    marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
-//                }
-//            }
-//        }
-//    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.dataReceived.collect { jsonString ->
-            try {
-                val json = JSONObject(jsonString)
-                val eventType = json.getString("event")
-                val x = json.optDouble("x", 0.0).toFloat()
-                val y = json.optDouble("y", 0.0).toFloat()
-                val tool = json.optString("tool", "pen")
-
-                val colorString = json.optString("color", "white")
-                currentColor =  when (colorString) {
-                    "red" -> Color.Red
-                    "blue" -> Color.Blue
-                    "yellow" -> Color.Yellow
-                    else -> Color.White
-                }
-                if (tool == "pen") {
-                    when (eventType) {
-                        "draw-start" -> {
-                            currentPath = Path().apply { moveTo(x, y) }
-                            pathTrigger++
-                        }
-                        "draw-move" -> {
-                            currentPath?.lineTo(x, y)
-                            pathTrigger++
-                        }
-                        "draw-end" -> {
-                            currentPath?.let {
-                                completedPaths.add(
-                                    TimedPath(path = it, color = currentColor)
-                                )
-                            }
-                            currentPath = null
-                            pathTrigger++
-                        }
-                    }
-                }
-            } catch (e: Exception){
-                Log.e("json parsing", e.message.toString())
-            }
-        }
-    }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val aSecondsAgo = System.currentTimeMillis() - 1000
-            completedPaths.removeAll { it.timestamp < aSecondsAgo }
-            delay(100)
-
-        }
-    }
-    val linePaint = remember {
-        Paint().apply {
-            style = PaintingStyle.Stroke
-            strokeWidth = 5F
-            strokeCap = StrokeCap.Round
-            strokeJoin = StrokeJoin.Round
-            isAntiAlias = true
-        }
-    }
-    val frameworkPaint = remember {
-        linePaint.asFrameworkPaint()
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = modifier) {
-            val path = Path()
-            var currentColor: Color? = null
-            val shadowRadius = 15f
-
-            drawRect(Color.Black)
-
-            val trigger = pathTrigger
-            val now = System.currentTimeMillis()
-            val fadeDurationMillis = 1000L
-
-            drawIntoCanvas { canvas ->
-                completedPaths.forEach { timedPath ->
-                    val age = now - timedPath.timestamp
-                    val alpha = ( 1.0f - (age.toFloat() / fadeDurationMillis)).coerceAtLeast(0.0f)
-
-                    linePaint.color = Color.White.copy(alpha = alpha)
-                    frameworkPaint.setShadowLayer(
-                        shadowRadius,
-                        0f, 0f,
-                        timedPath.color.copy(alpha = alpha).toArgb()
-                    )
-                    canvas.drawPath(timedPath.path, linePaint)
-                }
-                currentPath?.let {
-                    linePaint.color = Color.White
-                    frameworkPaint.setShadowLayer(
-                        shadowRadius, 0f, 0f,
-                        (currentColor ?: Color.White).toArgb()
-                    )
-                    canvas.drawPath(it, linePaint)
-                }
-            }
-//            markers.forEach { marker ->
-//                ArMarker(marker = marker)
-////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
-////                drawCircle(
-////                    color = marker.color.copy(alpha = alpha),
-////                    radius = 100 * marker.pulseOpacity,
-////                    center = Offset(marker.x, marker.y)
-////                )
-//            }
-        }
-        Log.d("CallActivity marker", markers.toString())
-        markers.forEach { marker ->
-                ArMarker(marker = marker)
-        }
-        SmallFloatingActionButton(
-            onClick = { (context as? Activity)?.finish() },
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.secondary
-        ) {
-            Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
-        }
-    }
 }
 private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<Float, Float, Float> {
     val scale = screenHeight / REMOTE_HEIGHT
@@ -309,7 +312,7 @@ private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<
     return Triple(scale, offsetX, offsetY)
 }
 @Composable
-fun ArMarker(marker: ArMarker) {
+fun ArMarker(marker: ArMarker, x: Float, y: Float) {
     val transition = rememberInfiniteTransition()
 
     val scale by transition.animateFloat(
@@ -333,13 +336,13 @@ fun ArMarker(marker: ArMarker) {
         drawCircle(
             color = parseColor(marker.color),
             radius = marker.info.size,
-            center = Offset(marker.info.x, marker.info.y)
+            center = Offset(x, y)
         )
 
         drawCircle(
             color = parseColor(marker.color).copy(alpha = pulseAlpha),
             radius = marker.pulseScale,
-            center = Offset(marker.info.x, marker.info.y),
+            center = Offset(x, y),
             style = Stroke(width = 4f)
         )
     }
