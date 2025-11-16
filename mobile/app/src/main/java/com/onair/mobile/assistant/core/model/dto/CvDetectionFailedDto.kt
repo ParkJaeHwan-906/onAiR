@@ -9,6 +9,14 @@ data class CvDetectionFailedDto(
 )
 
 /**
+ * CV 모델 정상 탐지 이벤트 DTO
+ * FastAPI 서버에서 CV 모델이 정상 상태를 탐지했을 때 전송
+ */
+data class CvDetectionNormalDto(
+    val message: String = "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
+)
+
+/**
  * Clarify 질문/답변 턴 DTO (작업자 질문 + LLM 답변)
  * Streaming STT 세션 중 Clarify 루프에서 사용
  */

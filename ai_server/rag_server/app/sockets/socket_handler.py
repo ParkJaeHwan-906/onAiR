@@ -503,7 +503,9 @@ async def handle_intent_audio_completed(sid, data):
             
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
-            if not cv_result.get("detected", False):
+            detected_value = cv_result.get("detected", False)
+            
+            if not detected_value:
                 # CV 모델이 오류를 탐지하지 못한 경우
                 print("=" * 60)
                 print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
@@ -532,6 +534,26 @@ async def handle_intent_audio_completed(sid, data):
                 
                 # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
                 # (라즈베리파이에서 이 이벤트를 받아서 처리)
+            elif detected_value == "Normal":
+                # CV 모델이 정상 상태를 탐지한 경우
+                print("=" * 60)
+                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
+                print("=" * 60)
+                await wait_for_next_step("CV 모델 정상 상태 탐지", "9")
+                
+                # 모바일로 cv_detection_normal 이벤트 전송
+                print("=" * 60)
+                print("📤 [단계 10] 모바일로 cv_detection_normal 이벤트 전송 시작")
+                print("=" * 60)
+                await broadcast_to("mobile", "cv_detection_normal", {
+                    "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
+                })
+                print("✅ [단계 10 완료] 모바일로 cv_detection_normal 이벤트 전송 완료")
+                print("=" * 60)
+                await wait_for_next_step("모바일로 cv_detection_normal 이벤트 전송 완료", "10")
+                
+                # 라즈베리파이로 CV 탐지 정상 알림 (마이크는 OFF 상태 유지)
+                await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
             else:
                 # CV 모델이 오류를 탐지한 경우
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
@@ -692,6 +714,7 @@ async def handle_audio_playback_completed(sid, data):
     """
     모바일로부터 오디오 재생 완료 이벤트 수신
     - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+    - type="cv_detection_normal": CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="clarify_qa_turn": Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
     """
     sender_device = device_map.get(sid, "unknown")
@@ -727,6 +750,18 @@ async def handle_audio_playback_completed(sid, data):
         })
         print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
         await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        
+    elif audio_type == "cv_detection_normal":
+        # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+        print("=" * 60)
+        print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
+        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+        print("=" * 60)
+        await wait_for_next_step("CV 탐지 정상 음성 파일 재생 완료 처리", "10-1")
+        
+        print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
+        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+        print("=" * 60)
         
     elif audio_type == "clarify_qa_turn":
         # Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
