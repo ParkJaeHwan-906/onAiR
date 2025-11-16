@@ -462,7 +462,7 @@ async def handle_intent_audio_completed(sid, data):
             raw_messages = cv_raw.get("messages", [])
             filtered_msgs = [
                 msg for msg in raw_messages
-                if not any(kw in msg for kw in ("미검출", "없음"))
+                if not any(kw in msg for kw in ("미검출", "없음", "없어"))
             ]
 
             if not has_anomaly and modules:
