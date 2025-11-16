@@ -13,7 +13,7 @@ CHANNELS = 1            # 마이크 채널 (모노)
 DEVICE_INDEX = None     # 기본 마이크 자동 선택
 
 # === STT 버퍼링 설정 ===
-STT_BUFFER_DURATION_SEC = 3.0  # 버퍼링 STT 수행 시간 (초)
+STT_BUFFER_DURATION_SEC = 4.0  # 3~5초 사이 추천
 
 # === STT 스트리밍 설정 ===
 SILENCE_TIMEOUT_SEC = 1.5  # 침묵 타임아웃 (초) - 한 문장이 끝났음을 감지하기 위한 대기 시간
