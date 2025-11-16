@@ -40,70 +40,66 @@ class SttBridgeClient:
         # STT 결과 수신 이벤트
         @self.sio.on('stt_result')
         def on_stt_result(data):
-            """When STT result is received from bridge server, send to FastAPI server."""
-            logger.info("=" * 60)
-            logger.info(f"📥 [단계 5] 브리지 클라이언트: STT 결과 수신")
-            logger.info(f"   타입: {data.get('type')}, 텍스트: {data.get('text', '')[:50]}...")
-            logger.info("=" * 60)
+            """STT 결과를 FastAPI 서버로 전송"""
+            logger.info(f"📥 STT 결과 수신: {data.get('type')} - {data.get('text', '')[:30]}...")
             
-            # FastAPI 서버로 전송
             if self.socketio_fastapi_client and self.socketio_fastapi_client.is_connected():
                 try:
-                    # SocketIOClient는 래퍼 클래스이므로 emit_stt_result() 메서드 사용
-                    # 동기 스레드에서 비동기 함수 호출: 새 이벤트 루프 생성
                     def send_async():
-                        """새 이벤트 루프에서 비동기 함수 실행"""
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:
-                            logger.info("📡 [단계 5-1] FastAPI 서버로 STT 결과 전송 시작...")
                             new_loop.run_until_complete(self.socketio_fastapi_client.emit_stt_result(data))
-                            logger.info("=" * 60)
-                            logger.info("✅ [단계 5 완료] FastAPI 서버로 STT 결과 전송 완료")
-                            logger.info("=" * 60)
+                            logger.info("📤 STT 결과 전송 완료")
                         finally:
                             new_loop.close()
                     
-                    # 별도 스레드에서 실행 (이벤트 루프 충돌 방지)
                     import threading
                     thread = threading.Thread(target=send_async, daemon=True)
                     thread.start()
                 except Exception as e:
-                    logger.error(f"❌ Failed to forward STT result to FastAPI: {e}")
+                    logger.error(f"❌ STT 결과 전송 실패: {e}")
             else:
-                logger.warning("⚠️ FastAPI Socket.IO 클라이언트가 연결되지 않음, 전송 대기")
+                logger.warning("⚠️ FastAPI 클라이언트 미연결")
         
         # Wakeword 감지 이벤트 수신 (Python 3.10 → Python 3.13 → FastAPI)
         @self.sio.on('wakeword_detected')
         def on_wakeword_detected(data):
             """Wakeword 감지 이벤트를 FastAPI 서버로 전달"""
-            logger.info("=" * 60)
-            logger.info(f"📥 [단계 2-1] 브리지 클라이언트: Wakeword 감지 이벤트 수신")
-            logger.info("=" * 60)
+            logger.info("📥 Wakeword 감지 이벤트 수신")
             
-            # FastAPI 서버로 전송
             if self.socketio_fastapi_client and self.socketio_fastapi_client.is_connected():
                 try:
+                    send_success = [False]
+                    
                     def send_async():
-                        """새 이벤트 루프에서 비동기 함수 실행"""
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:
-                            logger.info("📡 [단계 2-1] FastAPI 서버로 Wakeword 감지 이벤트 전송 시작...")
-                            new_loop.run_until_complete(self.socketio_fastapi_client.emit_wakeword_detected())
-                            logger.info("=" * 60)
-                            logger.info("✅ [단계 2-1 완료] FastAPI 서버로 Wakeword 감지 이벤트 전송 완료")
-                            logger.info("=" * 60)
+                            result = new_loop.run_until_complete(self.socketio_fastapi_client.emit_wakeword_detected())
+                            send_success[0] = result
+                            if result:
+                                logger.info("📤 Wakeword 감지 이벤트 전송 완료")
+                            else:
+                                logger.error("❌ Wakeword 감지 이벤트 전송 실패")
+                        except Exception as e:
+                            logger.error(f"❌ Wakeword 이벤트 전송 오류: {e}")
+                            send_success[0] = False
                         finally:
                             new_loop.close()
                     
                     import threading
-                    thread = threading.Thread(target=send_async, daemon=True)
+                    thread = threading.Thread(target=send_async, daemon=False)
                     thread.start()
+                    thread.join(timeout=5)
+                    
+                    if not send_success[0]:
+                        logger.error("❌ FastAPI 서버 응답 없음")
                 except Exception as e:
-                    logger.error(f"❌ Failed to forward wakeword_detected to FastAPI: {e}")
+                    logger.error(f"❌ Wakeword 이벤트 전송 실패: {e}")
             else:
-                logger.warning("⚠️ FastAPI Socket.IO 클라이언트가 연결되지 않음, 전송 대기")
+                logger.error("❌ FastAPI 클라이언트 미연결")
+        
 
     def set_fastapi_socketio_client(self, socketio_client):
         """FastAPI 서버 Socket.IO 클라이언트 주입"""

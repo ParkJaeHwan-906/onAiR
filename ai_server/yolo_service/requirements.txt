@@ -8,4 +8,5 @@ opencv-python-headless==4.10.0.84
 python-multipart>=0.0.9
 ultralytics==8.3.221
 pillow==10.4.0
-
+pytesseract==0.3.10
+redis[asyncio]==5.0.4 

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+import os
 
 class Settings(BaseSettings):
     JSONL_PATH: str = "app/data/samkos_cleaned.jsonl"
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     # =======================================
     # 💾 Conversation Memory (Redis)
     # =======================================
-    REDIS_URL: str = "redis://localhost:6380/0"
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
     REDIS_PREFIX: str = "rag_chat"
 
     # =======================================
@@ -53,16 +54,23 @@ class Settings(BaseSettings):
     # Intent 분류는 Gemini-Flash를 사용합니다 (app/services/intent_service.py)
     # Phi-3 및 ONNX 모델 관련 설정 제거됨
 
+    # # =======================================
+    # # 🌐 FastAPI Server URL
+    # # =======================================
+    # # FastAPI 서버 URL (모바일 앱에서 접근할 URL)
+    # # EC2 배포: "http://k13a407.p.ssafy.io/ai"
+    # # 로컬 개발: "http://localhost:8000"
+    # # 같은 네트워크: "http://192.168.0.100:8000"
+    # FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
+    # FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
+    # FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
+    
     # =======================================
-    # 🌐 FastAPI Server URL
+    # 📞 WebRTC API URL
     # =======================================
-    # FastAPI 서버 URL (모바일 앱에서 접근할 URL)
-    # EC2 배포: "http://k13a407.p.ssafy.io/ai"
-    # 로컬 개발: "http://localhost:8000"
-    # 같은 네트워크: "http://192.168.0.100:8000"
-    FASTAPI_SERVER_URL: str = "http://k13a407.p.ssafy.io/ai"  # EC2 배포 URL
-    FASTAPI_SERVER_HOST: str = "0.0.0.0"  # 서버 바인딩 호스트 (EC2에서는 0.0.0.0 사용)
-    FASTAPI_SERVER_PORT: int = 8000  # 서버 포트
+    # WebRTC 요청 API URL
+    # EC2 배포: "http://k13a407.p.ssafy.io" 또는 실제 API 서버 URL
+    WEBRTC_API_URL: str = os.getenv("WEBRTC_API_URL", "https://onair.ai.kr/api")
 
     # =======================================
     # 🔊 TTS (Text-to-Speech) - GCP TTS
@@ -91,7 +99,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # 디버그: API 키 로드 상태 확인 (서버 시작 시 한 번만 출력)
-import os
+
 env_gms_key = os.getenv("GMS_API_KEY")
 if env_gms_key:
     print(f"🔍 [Config] 환경 변수 GMS_API_KEY 발견: {env_gms_key[:10]}... (길이: {len(env_gms_key)})")
