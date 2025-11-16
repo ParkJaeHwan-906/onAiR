@@ -95,6 +95,70 @@ def init(K_in: np.ndarray | None = None, D_in: np.ndarray | None = None):
 
 
 # ==========================================================
+# 🔧 prev_pts / pts 정규화 유틸 (feature_tracker와 동일한 안정판)
+# ==========================================================
+def _normalize_points_to_n12(pts):
+    if pts is None:
+        return None
+
+    try:
+        if isinstance(pts, (list, tuple)) and len(pts) > 0 \
+            and isinstance(pts[0], (np.ndarray, list, tuple)):
+
+            parts = []
+            for p in pts:
+                if p is None:
+                    continue
+                a = np.asarray(p, dtype=np.float32)
+
+                if a.ndim == 1:
+                    if a.size < 2:
+                        continue
+                    a = a[:2].reshape(1, 1, 2)
+                elif a.ndim == 2:
+                    if a.shape[1] < 2:
+                        continue
+                    a = a[:, :2].reshape(-1, 1, 2)
+                elif a.ndim >= 3:
+                    if a.shape[-1] < 2:
+                        continue
+                    a = a[..., :2].reshape(-1, 1, 2)
+
+                if len(a) > 0:
+                    parts.append(a)
+
+            if not parts:
+                return None
+
+            pts_arr = np.vstack(parts)
+
+        else:
+            pts_arr = np.asarray(pts, dtype=np.float32)
+
+        if pts_arr.ndim == 1:
+            if pts_arr.size < 2:
+                return None
+            pts_arr = pts_arr[:2].reshape(1, 1, 2)
+
+        elif pts_arr.ndim == 2:
+            if pts_arr.shape[1] < 2:
+                return None
+            pts_arr = pts_arr[:, :2].reshape(-1, 1, 2)
+
+        elif pts_arr.ndim >= 3:
+            if pts_arr.shape[-1] < 2:
+                return None
+            pts_arr = pts_arr[..., :2].reshape(-1, 1, 2)
+
+        if len(pts_arr) == 0:
+            return None
+
+        return pts_arr.astype(np.float32)
+
+    except ValueError:
+        return None
+
+# ==========================================================
 # 🔧 Optical Flow 평균 이동 계산
 # ==========================================================
 def compute_flow_mean(prev_pts, next_pts):
@@ -255,7 +319,7 @@ def process_frame(frame_bgr, sid=None):
         # 재추출 성공 → init 상태로 복귀
         # print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
         prev_gray = gray.copy()
-        prev_pts = pts
+        prev_pts = None
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
 
         return {
