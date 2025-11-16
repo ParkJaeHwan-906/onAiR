@@ -34,77 +34,91 @@ def detect_gauge_angle_fast(roi, cfg):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
+    # --- circle detection ---
     circles = cv2.HoughCircles(
-        blur, cv2.HOUGH_GRADIENT, 1, 200,
-        param1=100, param2=22,
-        minRadius=50, maxRadius=0
+        blur,
+        cv2.HOUGH_GRADIENT,
+        1,
+        200,
+        param1=100,
+        param2=22,
+        minRadius=50,
+        maxRadius=0,
     )
 
+    # ROI 중심 / 반경 robust 계산
     img_center = np.array([w / 2, h / 2])
 
     if circles is None:
+        # fallback radius: 절대 음수 금지
+        R = max(min(h, w) * 0.45, 20)
         x0, y0 = w // 2, h // 2
-        R = min(h, w) // 2 - 40
     else:
         circles = np.uint16(np.around(circles))[0]
         x0, y0, R = max(
             circles,
             key=lambda c: (c[2] * 0.7) - np.linalg.norm(np.array([c[0], c[1]]) - img_center)
         )
+        # clamp radius
+        R = max(min(R, min(h, w) * 0.45), 20)
 
+    # --- edges ---
     edges = cv2.Canny(blur, 50, 150)
     yy, xx = np.indices(edges.shape)
     rr = np.sqrt((xx - x0) ** 2 + (yy - y0) ** 2)
 
     mask_annulus = (rr > R * 0.20) & (rr < R * 0.90)
     mask_textband = (rr > R * 0.50) & (rr < R * 0.70)
+
     edges[~mask_annulus] = 0
     edges[mask_textband] = 0
 
+    # --- voting angles ---
     thetas = np.deg2rad(np.arange(0, 360, 2.0))
     scores = []
 
     for th in thetas:
-        xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.90, 60)).astype(int)
-        ys = (x0 - np.sin(th) * np.linspace(R * 0.25, R * 0.90, 60)).astype(int)
+        xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
+        ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
+
         xs = np.clip(xs, 0, w - 1)
         ys = np.clip(ys, 0, h - 1)
+
         scores.append(edges[ys, xs].sum())
 
-    if not scores:
+    if len(scores) == 0:
         return None
 
     best_idx = int(np.argmax(scores))
     angle = (np.rad2deg(thetas[best_idx]) + 360) % 360
 
-    # 반전 체크
-    opp_angle = (angle + 180) % 360
+    # --- reverse check FIX ---
+    def safe_sample(th):
+        xs = (x0 + np.cos(np.deg2rad(th)) * np.linspace(R*0.3, R*0.9, 30)).astype(int)
+        ys = (y0 - np.sin(np.deg2rad(th)) * np.linspace(R*0.3, R*0.9, 30)).astype(int)
+        xs = np.clip(xs, 0, w - 1)
+        ys = np.clip(ys, 0, h - 1)
+        return edges[ys, xs].sum()
 
-    xs1 = (x0 + np.cos(np.deg2rad(angle)) * np.linspace(R * 0.30, R * 0.90, 30)).astype(int)
-    ys1 = (y0 - np.sin(np.deg2rad(angle)) * np.linspace(R * 0.30, R * 0.90, 30)).astype(int)
-
-    xs2 = (x0 + np.cos(np.deg2rad(opp_angle)) * np.linspace(R * 0.30, R * 0.90, 30)).astype(int)
-    ys2 = (y0 - np.sin(np.deg2rad(opp_angle)) * np.linspace(R * 0.30, R * 0.90, 30)).astype(int)
-
-    score1 = edges[ys1, xs1].sum()
-    score2 = edges[ys2, xs2].sum()
+    score1 = safe_sample(angle)
+    score2 = safe_sample((angle + 180) % 360)
 
     if score2 > score1 * 1.15:
-        angle = opp_angle
+        angle = (angle + 180) % 360
 
-    # 각도 → 값 변환
+    # --- convert to value ---
     def cw_delta(a, b): return (a - b) % 360
 
     sweep_cw = cw_delta(cfg["min_angle"], cfg["max_angle"])
-    if sweep_cw == 0:
-        sweep_cw = 360
+    sweep_cw = sweep_cw or 360
 
     progressed = cw_delta(cfg["min_angle"], angle)
-    ratio = float(np.clip(progressed / sweep_cw, 0, 1))
+    ratio = np.clip(progressed / sweep_cw, 0, 1)
 
     value = cfg["min_val"] + ratio * (cfg["max_val"] - cfg["min_val"])
 
     return angle, value
+
 
 
 # -------------------------------------
