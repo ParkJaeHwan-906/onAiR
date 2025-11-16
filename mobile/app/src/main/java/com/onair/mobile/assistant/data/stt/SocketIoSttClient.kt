@@ -685,6 +685,7 @@ class SocketIoSttClient(
         onClarifyTurn: ((ClarifyTurnDto) -> Unit)? = null,  // Clarify 턴 콜백
         onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
         onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
+        onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
         onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백

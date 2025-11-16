@@ -883,6 +883,7 @@ class WorkingActivity : AppCompatActivity() {
             onClarifyTurn = null,
             onFinalAnswer = null,
             onStartSseConnection = null,
+            onCvDetectionNormal = null,
             onCvDetectionFailed = null,
             onClarifyQaTurn = null,
             onWakewordDetected = null,
