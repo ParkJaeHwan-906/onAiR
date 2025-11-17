@@ -8,6 +8,7 @@ import EquipmentPage from "./pages/EquipmentPage";
 import { CommunicationPage } from "./pages/CommunicationPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import BackdoorPage from "./pages/BackdoorPage"
 import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { SocketProvider } from "./utils/socketContext";
@@ -56,6 +57,7 @@ function App() {
         <Route path="employees" element={<EmployeePage />} />
         <Route path="work" element={<WorkPage />} />
         <Route path="equipment" element={<EquipmentPage />} />
+        <Route path="backdoor" element={<BackdoorPage />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
