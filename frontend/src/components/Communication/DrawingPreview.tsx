@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader, OrbitControls } from "three-stdlib";
 
+import { useRoomContext } from "@livekit/components-react";
+import { Track } from "livekit-client";
+
 const BLUEPRINT_PATH = "/models/blueprint.glb";
 const AHU_PATH = "/models/air_handling_unit.glb";
 const AHU_SCALE = 0.1;
@@ -21,6 +24,10 @@ const DrawingPreview = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const resetFocusRef = useRef<(() => void) | null>(null);
+
+  // 라이브킷
+  // const room = useRoomContext();
+  // const trackRef = useRef<MediaStreamTrack | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -42,6 +49,17 @@ const DrawingPreview = () => {
     renderer.setSize(clientWidth, clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
+
+    // 모델 모바일 연동 30fps
+    // const canvas = renderer.domElement as HTMLCanvasElement;
+    // const stream = canvas.captureStream(30);
+    // const [track] = stream.getVideoTracks();
+    // trackRef.current = track;
+
+    // room.localParticipant.publishTrack(track, {
+    //   name: "blueprint-canvas",
+    //   source: Track.Source.ScreenShare,
+    // });
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -325,6 +343,13 @@ const DrawingPreview = () => {
           }
         }
       });
+
+      // 라이브킷 클린업
+      // const track = trackRef.current;
+      // if (track && room) {
+      //   room.localParticipant.unpublishTrack(track, true);
+      //   track.stop();
+      // }
     };
   }, []);
 

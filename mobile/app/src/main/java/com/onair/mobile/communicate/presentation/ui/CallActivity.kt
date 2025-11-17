@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -52,6 +53,7 @@ import com.onair.mobile.R
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import kotlinx.coroutines.delay
 import org.json.JSONObject
+import android.app.Application
 
 //data class Points(
 //    val x: Float,
@@ -135,10 +137,11 @@ fun CallScreen(viewModel: CallViewModel) {
         )
     }
 }
+
 @Composable
 fun WhiteboardCanvas(
     viewModel: CallViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ){
 //    val points = remember { mutableStateListOf<Points>() }
     // 웹이랑 똑같게
