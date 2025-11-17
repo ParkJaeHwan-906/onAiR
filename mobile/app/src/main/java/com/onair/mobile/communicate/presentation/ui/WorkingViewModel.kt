@@ -3,10 +3,12 @@ package com.onair.mobile.communicate.presentation.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -46,6 +48,8 @@ class WorkingViewModel(
         val acceptConnect = data.getBoolean("acceptConnection")
         if (acceptConnect) {
             _liveKitToken.value = data.getString("accessToken")
+        } else {
+            Log.e("Live kit", "요청이 거절됨")
         }
     }
 }
