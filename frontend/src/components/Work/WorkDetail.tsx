@@ -35,7 +35,8 @@ function WorkDetail({ work }: WorkDetailProps) {
       if (!isConnected) connect();
 
       // 작업자가 요청할 때는 receiverAccountId를 -1로 전송
-      const res = await sendConnectionRequest(-1);
+      // [TODO] : 여기 인자 2개인데, 1개 있길래 더미로 우선 넣었어요
+      const res = await sendConnectionRequest(-1, "선우형 여기에 더미로 데이터 넣었어요.");
 
       if (!res.success) {
         alert(res.message || "연결 요청 중 오류가 발생했습니다.");
