@@ -354,7 +354,7 @@ def process_frame(frame_bgr, sid=None):
         inlier_count = int(np.count_nonzero(mask))
         total = len(mask)
         ransac_ratio = (inlier_count / total) * 100.0 if total > 0 else 0.0
-        print(f"[DEBUG]  ▶ RANSAC 결과: inliers={inlier_count}/{total} ({ransac_ratio:.1f}%)")
+        # print(f"[DEBUG]  ▶ RANSAC 결과: inliers={inlier_count}/{total} ({ransac_ratio:.1f}%)")
     else:
         # RANSAC 실패 시 전체를 inlier 로 사용
         # print("[DEBUG]  ▶ RANSAC 실패 → 모든 포인트를 inlier로 사용")
