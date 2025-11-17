@@ -163,6 +163,7 @@ def init_socketio():
     sio.on("register_device")(handle_register_device)
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
+    sio.on("wakeword_waiting_ready")(handle_wakeword_waiting_ready)  # 라즈베리파이에서 Wakeword 대기 준비 완료 이벤트 수신 (YOLO 서버 API 요청 트리거)
     sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("intent_audio_completed")(handle_intent_audio_completed)  # 모바일에서 Intent 음성 파일 재생 완료 이벤트 수신 (AI_SUPPORTER용)
     sio.on("audio_playback_completed")(handle_audio_playback_completed)  # 모바일에서 오디오 재생 완료 이벤트 수신 (CV 탐지 실패, Clarify Q&A 턴 등)
@@ -353,6 +354,38 @@ async def handle_wakeword_detected(sid, data):
     print("=" * 60)
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
 
+
+async def handle_wakeword_waiting_ready(sid, data):
+    """
+    라즈베리파이로부터 Wakeword 대기 준비 완료 이벤트 수신
+    YOLO 서버로 API 요청을 보내기 위한 트리거
+    """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] wakeword_waiting_ready 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   Data: {data}")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+    print("=" * 60)
+    
+    sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print("=" * 60)
+        print(f"⚠️ [오류] Wakeword 대기 준비 완료 이벤트는 라즈베리파이에서만 받을 수 있습니다.")
+        print(f"   수신자: {sender_device}")
+        print("=" * 60)
+        return
+    
+    print("=" * 60)
+    print(f"✅ [FastAPI] Wakeword 대기 준비 완료 이벤트 수신 [raspi]")
+    print(f"   💡 YOLO 서버로 API 요청을 보내기 위한 트리거")
+    print("=" * 60)
+    
+    await start_device_detector_task()
+    print("✅ YOLO 서버 시작")
 
 async def handle_wakeword_audio_completed(sid, data):
     """

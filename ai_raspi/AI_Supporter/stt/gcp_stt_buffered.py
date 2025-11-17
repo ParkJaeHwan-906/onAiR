@@ -177,25 +177,47 @@ class GcpBufferedStt:
             response = await loop.run_in_executor(None, blocking_recognize)
             
             # 결과 처리
-            if response.results:
+            if response.results and len(response.results) > 0:
+                has_valid_result = False
                 for result in response.results:
-                    transcript = result.alternatives[0].transcript
-                    confidence = result.alternatives[0].confidence
-                    
-                    # Socket.IO로 결과 전송
-                    stt_data = {
-                        "type": "final",
-                        "text": transcript,
-                        "confidence": confidence
-                    }
-                    await broadcaster(stt_data)
-                    print(f"📤 STT 결과 전송: {transcript[:30]}...")
+                    if result.alternatives and len(result.alternatives) > 0:
+                        transcript = result.alternatives[0].transcript
+                        confidence = result.alternatives[0].confidence
+                        
+                        # 빈 텍스트 체크
+                        if transcript and transcript.strip():
+                            has_valid_result = True
+                            # Socket.IO로 결과 전송
+                            stt_data = {
+                                "type": "final",
+                                "text": transcript,
+                                "confidence": confidence
+                            }
+                            await broadcaster(stt_data)
+                            print(f"📤 STT 결과 전송: {transcript[:30]}...")
+                
+                # 유효한 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
+                if not has_valid_result:
+                    error_msg = "STT 결과가 None이거나 빈 텍스트입니다"
+                    print(f"⚠️ {error_msg}")
+                    await broadcaster({
+                        "type": "error",
+                        "text": error_msg
+                    })
+                    raise ValueError(error_msg)
             else:
+                # 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
+                error_msg = "음성이 인식되지 않았습니다 (STT 결과 없음)"
+                print(f"⚠️ {error_msg}")
                 await broadcaster({
                     "type": "info",
-                    "text": "음성이 인식되지 않았습니다."
+                    "text": error_msg
                 })
+                raise ValueError(error_msg)
                 
+        except ValueError as e:
+            # STT 결과가 None이거나 빈 텍스트인 경우
+            raise  # 상위로 전파하여 wakeword 대기 상태로 복귀
         except Exception as e:
             error_msg = str(e)
             print(f"❌ STT 오류: {error_msg}")
@@ -204,4 +226,5 @@ class GcpBufferedStt:
                 "text": error_msg
             })
             # 마이크는 계속 ON 상태로 유지됨
+            raise  # 상위로 예외 전파하여 wakeword 대기 상태로 복귀
 
