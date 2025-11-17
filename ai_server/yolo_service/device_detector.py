@@ -1,28 +1,26 @@
 # yolo_service/device_detector.py
 
+
 import asyncio
 from loguru import logger
 
 from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
-from ai_server.yolo_service.redis_client import save_device_state, get_device_state, get_latest_frame
-
+from ai_server.yolo_service.redis_client import (
+    save_device_state,
+    get_device_state,
+    get_latest_frame
+)
 
 YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
-DETECTION_INTERVAL = 2.0
 
-# 안정성 파라미터
 CONF_THRESHOLD = 0.65
 STABLE_COUNT_REQUIRED = 2
 
-# 모델 및 Task (Task는 main.py가 가지고 있음)
 _device_model = None
 
 
-# ----------------------------------------------------------
-# 1) 메인 디바이스 감지 루프 (cancel 대응 완료)
-# ----------------------------------------------------------
 async def device_detector_loop():
-    """장비(AHU/Boiler/Chiller 등)를 2초마다 감지하는 메인 루프."""
+    """13fps 스트림 중 절반 프레임(≈6~7fps) YOLO 감지 루프"""
 
     global _device_model
 
@@ -46,24 +44,31 @@ async def device_detector_loop():
 
     logger.info(f"[device_monitor] 초기 prev_state = {prev_state}")
 
-    # 3) 감지 루프
+    frame_count = 0
+    # 3) 프레임 기반 감지 루프
     while True:
         try:
             frame = await get_latest_frame()
-            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
 
             if frame is None:
-                await asyncio.sleep(DETECTION_INTERVAL)
+                await asyncio.sleep(0.01)
                 continue
+
+            frame_count += 1
+
+            # -----------------------------------------------------
+            # YOLO 실행: 13fps → 절반 프레임(≈6.5fps) 처리
+            # -----------------------------------------------------
+            if frame_count % 2 != 0:
+                continue  # skip half the frames
 
             detections = yolo_infer(_device_model, frame, return_boxes=False)
 
             if not detections:
                 stable_counter = 0
-                await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 가장 신뢰도 높은 label 선택
+            # 가장 높은 confidence 선택
             top = max(detections, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
 
@@ -72,17 +77,15 @@ async def device_detector_loop():
             # confidence 기준 미달
             if confidence < CONF_THRESHOLD:
                 stable_counter = 0
-                await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 기존 상태와 같으면 후보 초기화
+            # 기존 상태와 같으면 안정화 초기화
             if label == prev_state:
                 candidate_label = None
                 stable_counter = 0
-                await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 후보 라벨 안정화 검사
+            # 후보 라벨 안정화
             if candidate_label != label:
                 candidate_label = label
                 stable_counter = 1
@@ -94,11 +97,13 @@ async def device_detector_loop():
                     f"{stable_counter}/{STABLE_COUNT_REQUIRED}"
                 )
 
-            # 안정성 만족 시 prev_state 업데이트
+            # 안정성 조건 만족 → 상태 업데이트
             if stable_counter >= STABLE_COUNT_REQUIRED:
                 prev_state = candidate_label
                 await save_device_state(prev_state, confidence)
-                logger.info(f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})")
+                logger.info(
+                    f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})"
+                )
 
                 candidate_label = None
                 stable_counter = 0
@@ -109,15 +114,13 @@ async def device_detector_loop():
 
         except Exception as e:
             logger.exception(f"[device_monitor] 🚨 오류: {e}")
-
-        await asyncio.sleep(DETECTION_INTERVAL)
+            continue
 
     logger.info("[device_monitor] 디바이스 감지 루프 종료 완료")
 
 
-# ----------------------------------------------------------
+
 # 2) start_device_detector — Task 생성하지 말고 loop만 실행
-# ----------------------------------------------------------
 async def start_device_detector():
     """main.py에서 Task로 실행할 엔트리 포인트.
     Task는 main.py가 관리.
