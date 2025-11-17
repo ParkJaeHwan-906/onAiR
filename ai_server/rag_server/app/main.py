@@ -43,9 +43,6 @@ app.include_router(cv_rag_router.router)
 def root():
     return {
         "message": "RAG Server is running 🚀",
-        "server_url": settings.FASTAPI_SERVER_URL,
-        "host": settings.FASTAPI_SERVER_HOST,
-        "port": settings.FASTAPI_SERVER_PORT,
         "endpoints": {
             "tts": "/api/tts",
             "cv_rag": "/api/cv/rag",
