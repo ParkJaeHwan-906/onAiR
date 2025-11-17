@@ -277,12 +277,12 @@ def handle_audio_stream(sid, data):
             logger.warning("⚠️ 마이크 장치 해제 콜백이 등록되지 않았습니다")
             logger.warning("=" * 60)
     else:
-        # WebRTC 오디오 스트리밍 중지: 마이크 장치 재점유
+        # WebRTC 오디오 스트리밍 중지: 마이크 장치 재점유 및 Wakeword 감지 대기 시작
         logger.info("🛑 WebRTC 오디오 스트리밍 중지 신호 수신")
-        logger.info("   Python 3.10 프로세스가 마이크 장치를 재점유합니다.")
+        logger.info("   Python 3.10 프로세스가 마이크 장치를 재점유하고 Wakeword 감지 대기 상태로 복귀합니다.")
         if mic_acquire_callback:
             try:
-                mic_acquire_callback()
+                mic_acquire_callback()  # 마이크 재점유 및 Wakeword 감지기 재활성화
                 logger.info("=" * 60)
                 logger.info(f"✅ 브리지 서버: 마이크 장치 재점유 완료")
                 logger.info("=" * 60)
@@ -294,6 +294,41 @@ def handle_audio_stream(sid, data):
             logger.warning("=" * 60)
             logger.warning("⚠️ 마이크 장치 재점유 콜백이 등록되지 않았습니다")
             logger.warning("=" * 60)
+        
+        # Wakeword 감지 대기 시작 (이미 mic_acquire_callback에서 처리되지만, 안전을 위해 별도로도 호출)
+        if wakeword_start_waiting_callback:
+            try:
+                wakeword_start_waiting_callback()
+                logger.info("=" * 60)
+                logger.info(f"✅ 브리지 서버: Wakeword 감지 대기 시작 완료")
+                logger.info("=" * 60)
+            except Exception as e:
+                logger.warning("=" * 60)
+                logger.warning(f"⚠️ 브리지 서버: Wakeword 감지 대기 시작 실패 (무시 가능): {e}")
+                logger.warning("=" * 60)
+
+# Wakeword 감지 대기 준비 완료 이벤트 전송 함수 (Python 3.10에서 호출)
+def send_wakeword_waiting_ready():
+    """Wakeword 감지 대기 상태로 복귀 완료 이벤트를 브리지 클라이언트(3.13)에게 전송"""
+    if not connected_clients:
+        logger.warning("⚠️ 브리지 클라이언트 미연결 - Wakeword 대기 준비 이벤트 전송 불가")
+        return False
+    
+    success_count = 0
+    for client_sid in list(connected_clients):
+        try:
+            sio.emit('wakeword_waiting_ready', {}, room=client_sid)
+            success_count += 1
+            logger.info(f"📤 브리지 서버: Wakeword 대기 준비 이벤트 전송 (client_sid={client_sid[:15]}...)")
+        except Exception as e:
+            logger.error(f"❌ 브리지 서버: Wakeword 대기 준비 이벤트 전송 실패 (client_sid={client_sid[:15]}...): {e}")
+    
+    if success_count > 0:
+        logger.info(f"✅ 브리지 서버: Wakeword 대기 준비 이벤트 전송 완료 ({success_count}개 클라이언트)")
+        return True
+    else:
+        logger.warning("⚠️ 브리지 서버: Wakeword 대기 준비 이벤트 전송 실패 (모든 클라이언트 실패)")
+        return False
 
 # Wakeword 감지 이벤트 전송 함수 (Python 3.10에서 호출)
 def send_wakeword_detected():

@@ -602,6 +602,26 @@ class SocketIOClient:
         
         return await self.emit_stt_result(stt_data)
     
+    async def emit_wakeword_waiting_ready(self):
+        """
+        FastAPI 서버로 Wakeword 대기 준비 완료 이벤트 전송
+        (YOLO 서버 API 요청 트리거용)
+        
+        Returns:
+            bool: 전송 성공 여부
+        """
+        if not self.is_connected():
+            logger.warning("⚠️ FastAPI 서버에 연결되어 있지 않습니다. Wakeword 대기 준비 완료 이벤트를 전송할 수 없습니다.")
+            return False
+        
+        try:
+            await self.sio.emit("wakeword_waiting_ready", {})
+            logger.info("📤 FastAPI 서버로 Wakeword 대기 준비 완료 이벤트 전송 완료")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Wakeword 대기 준비 완료 이벤트 전송 실패: {e}")
+            return False
+    
     async def emit_wakeword_detected(self):
         """
         Wakeword 감지 이벤트를 Socket.IO 서버로 전송합니다.
