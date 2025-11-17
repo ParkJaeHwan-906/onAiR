@@ -156,17 +156,17 @@ public class SseManager {
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("관리자가 부재중입니다."));
 
         // SSE Emitter 를 지우지 않고, 기록하고 있으므로 Emitter 가 유효한지 확인
-        SseEmitter adminEmitter = emitters.get(admin.getUserAccountId());
-        try {
-            // 더미 데이터 보내기
-            adminEmitter.send(SseEmitter
-                    .event()
-                    .name("checkOnline")
-                    .data(new Object())
-                    .comment("flush"));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("관리자가 부재중입니다.");
-        }
+//        SseEmitter adminEmitter = emitters.get(admin.getUserAccountId());
+//        try {
+//            // 더미 데이터 보내기
+//            adminEmitter.send(SseEmitter
+//                    .event()
+//                    .name("checkOnline")
+//                    .data(new Object())
+//                    .comment("flush"));
+//        } catch (Exception e) {
+//            throw new IllegalArgumentException("관리자가 부재중입니다.");
+//        }
 
         log.debug("receiver(admin) info : {}", admin);
 
