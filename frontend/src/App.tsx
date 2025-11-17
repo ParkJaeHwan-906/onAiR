@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { SocketProvider } from "./utils/socketContext";
 import { useSSEStore } from "./store/useSSEStore";
+import CCTVPage from "./pages/CCTVPage";
 
 function App() {
   const restoreSession = useAuthStore((state) => state.restoreSession);
@@ -59,6 +60,7 @@ function App() {
         <Route path="equipment" element={<EquipmentPage />} />
         <Route path="backdoor" element={<BackdoorPage />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
+        <Route path="cctv" element={<CCTVPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
