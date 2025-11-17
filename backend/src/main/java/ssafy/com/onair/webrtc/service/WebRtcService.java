@@ -81,6 +81,15 @@ public class WebRtcService {
             // 관리자 -> 작업자
             sseManager.sendRequestAdminToWorker(webRtcResponseDto.senderAccountId(), responseDto, "callResponse");
         }
+
+        // 대기 중인 방 리스트에서 제거
+        StringBuilder roomName = new StringBuilder();
+        roomName.append(webRtcResponseDto.senderAccountId()).append(' ').append(receiverInfo.getUserAccountId());
+        try{
+            webRtcManager.getWaitingRoomList().remove(roomName.toString());
+        }catch (Exception e){
+            log.error(e.getMessage());
+        }
     }
 
     public String createToken(String participantName, String participantId, String metadata, String roomName) {
