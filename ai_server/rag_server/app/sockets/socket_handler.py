@@ -24,6 +24,7 @@ from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 import httpx
+from app.services.yolo_overlay import get_latest_yolo_result
 
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
@@ -1661,7 +1662,7 @@ async def handle_video_frame(sid, data):
     #--- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame)
+        await add_frame(frame, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
@@ -1712,6 +1713,24 @@ async def handle_video_frame(sid, data):
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
+    
+    try:
+        yolo_res = await get_latest_yolo_result()
+        if yolo_res:
+            frame_ts = yolo_res.get("frame_ts")
+            # 타임스탬프가 너무 멀면 무시 (예: 200ms 이상 차이)
+            if frame_ts and abs(frame_ts - timestamp) <= 200:
+                await broadcast_to(['pc', 'mobile'], "video_overlay", {
+                    "timestamp": frame_ts,
+                    "boxes": yolo_res.get("boxes", []),
+                    "modules": yolo_res.get("modules", []),
+                    "device_type": yolo_res.get("device_type"),
+                    "status": yolo_res.get("status"),
+                })
+    except Exception as e:
+        print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
+
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리

@@ -12,8 +12,13 @@ redis_client = redis.from_url("redis://redis:6379", decode_responses=False)
 
 # 통합 Redis Key
 DEVICE_STATE_KEY = "cv:state:device"
-LATEST_FRAME_KEY = "cv:frame:latest"
-FRAME_BUFFER_KEY = "cv:frame:cv_buffer"
+LATEST_FRAME_KEY = "cv:frame:latest:jpg"
+LATEST_TS_KEY    = "cv:frame:latest:ts"
+FRAME_BUFFER_KEY = "cv:frame:buffer:jpg"
+TS_BUFFER_KEY    = "cv:frame:buffer:ts"
+YOLO_RESULT_KEY = "cv:yolo:latest:result"
+
+BUFFER_SIZE = 30
 
 # ---------------------------
 # Device State 저장/조회
@@ -38,6 +43,23 @@ async def get_device_state() -> dict | None:
     except:
         return None
 
+async def save_yolo_result(ts, label, confidence, box):
+    data = {
+        "frame_ts": ts,
+        "boxes": [
+            {
+                "label": label,
+                "confidence": float(confidence),
+                "x1": int(box["x1"]),
+                "y1": int(box["y1"]),
+                "x2": int(box["x2"]),
+                "y2": int(box["y2"]),
+            }
+        ],
+        "status": "ok",
+        "updated_at": int(time.time() * 1000)
+    }
+    await redis_client.set(YOLO_RESULT_KEY, json.dumps(data))
 
 # ---------------------------
 # Frame Read-only (YOLO용)
@@ -61,3 +83,5 @@ async def get_cv_buffer_frames(n=30):
         if frame is not None:
             result.append(frame)
     return result
+
+
