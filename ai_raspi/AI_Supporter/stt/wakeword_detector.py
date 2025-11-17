@@ -221,6 +221,14 @@ class WakewordDetector:
         if hasattr(self, 'audio_buffer'):
             self.audio_buffer.clear()
         self.last_detection_time = 0  # 재개 시 중복 방지 타이머 리셋
+        
+        # 큐에 남아있는 값 제거 (이전 감지 신호가 남아있으면 즉시 반환되는 것을 방지)
+        while not self.detection_queue.empty():
+            try:
+                self.detection_queue.get_nowait()
+            except queue.Empty:
+                break
+        
         print("🔊 Wakeword 감지기 재개")
     
     def stop(self):

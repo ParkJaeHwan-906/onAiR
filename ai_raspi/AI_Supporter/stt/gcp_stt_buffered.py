@@ -194,12 +194,12 @@ class GcpBufferedStt:
                                 "confidence": confidence
                             }
                             await broadcaster(stt_data)
-                            print(f"📤 STT 결과 전송: {transcript[:30]}...")
+                            # 로그 최소화: 정상 전송 시 로그 제거
                 
                 # 유효한 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
                 if not has_valid_result:
                     error_msg = "STT 결과가 None이거나 빈 텍스트입니다"
-                    print(f"⚠️ {error_msg}")
+                    # 로그 최소화: 경고 로그 제거
                     await broadcaster({
                         "type": "error",
                         "text": error_msg
@@ -208,7 +208,7 @@ class GcpBufferedStt:
             else:
                 # 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
                 error_msg = "음성이 인식되지 않았습니다 (STT 결과 없음)"
-                print(f"⚠️ {error_msg}")
+                # 로그 최소화: 경고 로그 제거
                 await broadcaster({
                     "type": "info",
                     "text": error_msg
@@ -220,7 +220,7 @@ class GcpBufferedStt:
             raise  # 상위로 전파하여 wakeword 대기 상태로 복귀
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ STT 오류: {error_msg}")
+            # 로그 최소화: 오류 로그는 메인 루프에서 처리
             await broadcaster({
                 "type": "error",
                 "text": error_msg
