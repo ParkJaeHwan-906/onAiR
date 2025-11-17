@@ -1708,7 +1708,7 @@ async def handle_video_frame(sid, data):
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", {
+    await broadcast_to(['pc', 'mobile'], "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
