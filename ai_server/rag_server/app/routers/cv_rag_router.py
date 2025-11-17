@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 from app.services.retrieve_service import hybrid_retrieve, rerank
@@ -26,11 +26,18 @@ class CvRagResponse(BaseModel):
     citations: List[Dict[str, Any]]
 
 @router.post("/cv/rag")
-def process_cv_detection_rag(request: CvDetectionRequest = Body(...)) -> CvRagResponse:
+def process_cv_detection_rag(
+    request: CvDetectionRequest = Body(...),
+    include_tts: bool = Query(False, description="TTS 변환 포함 여부 (기본값: False)")
+) -> CvRagResponse:
     """
     YOLO CV 탐지 결과를 받아서 RAG 기반 GPT-4o 답변 생성
     
     실제 서비스 로직을 그대로 재사용합니다 (socket_handler.py의 handle_intent_audio_completed 로직)
+    
+    Args:
+        request: CV 탐지 결과
+        include_tts: True면 TTS 변환 포함, False면 텍스트만 반환 (기본값: False)
     """
     try:
         # 1. CV 결과에서 쿼리 생성 (socket_handler.py 564-583줄 로직)
@@ -75,16 +82,17 @@ def process_cv_detection_rag(request: CvDetectionRequest = Body(...)) -> CvRagRe
             answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
             structured_answer = answer_result
         
-        # 4. TTS 변환 (선택적) - socket_handler.py 646줄 로직
+        # 4. TTS 변환 (선택적) - include_tts 파라미터로 제어
         audio_content = None
         audio_encoding = None
-        try:
-            tts_result = text_to_speech(answer_text)
-            audio_content = tts_result.get("audio_content")
-            audio_encoding = tts_result.get("mime_type")
-        except Exception as e:
-            # TTS 실패해도 답변은 반환
-            pass
+        if include_tts:
+            try:
+                tts_result = text_to_speech(answer_text)
+                audio_content = tts_result.get("audio_content")
+                audio_encoding = tts_result.get("mime_type")
+            except Exception as e:
+                # TTS 실패해도 답변은 반환
+                pass
         
         # 5. 응답 구성
         return CvRagResponse(
