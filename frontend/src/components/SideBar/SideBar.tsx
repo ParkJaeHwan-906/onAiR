@@ -37,7 +37,7 @@ function SideBar() {
       <div className="logo-container">
         <img src="/icons/logo.png" alt="logo" />
         <div className="logo-text">
-          <span className="upper">OnAiR</span>
+          <span className="upper">onAiR</span>
           <span className="down">산업 관리 시스템</span>
         </div>
       </div>
