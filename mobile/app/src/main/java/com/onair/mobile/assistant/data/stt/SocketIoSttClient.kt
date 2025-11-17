@@ -678,6 +678,32 @@ class SocketIoSttClient(
     }
     
     /**
+     * 통신 종료 이벤트 전송 (WorkingActivity 비정상 종료 시 wakeword 대기 상태로 복귀)
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendCommunicationClose(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        
+        return try {
+            val payload = JSONObject().apply {
+                put("timestamp", System.currentTimeMillis())
+            }
+            
+            socket?.emit("communication_close", payload)
+            Log.i(TAG, "📤 모바일 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 통신 종료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
      * Ping 전송 (연결 테스트용)
      */
     fun ping() {
