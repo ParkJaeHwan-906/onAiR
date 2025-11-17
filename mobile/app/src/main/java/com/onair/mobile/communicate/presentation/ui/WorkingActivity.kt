@@ -76,6 +76,8 @@ class WorkingActivity : AppCompatActivity() {
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1
     private var aiOnDialog: AiOnDialog? = null
+    private var isActivityResumed = false  // Activity가 resume 상태인지 추적
+    private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
     private val TAG = "WorkingActivity"
 
@@ -135,6 +137,16 @@ class WorkingActivity : AppCompatActivity() {
         super.onResume()
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
+            
+            // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
+            // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
+            if (!isActivityResumed) {
+                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
+                resetToWakewordWaitingState()
+                isActivityResumed = true
+            } else {
+                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
+            }
         }
         // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
 //        Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
@@ -151,10 +163,20 @@ class WorkingActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // WorkingActivity가 background로 가면 Socket.IO 연결 종료
-        Log.i(TAG, "🟡 WorkingActivity onPause: Socket.IO 연결 종료")
+        // WorkingActivity가 background로 가면 콜백 제거 및 wakeword 대기 상태로 복귀
+        Log.i(TAG, "🟡 WorkingActivity onPause: 콜백 제거 및 wakeword 대기 상태로 복귀")
+        isActivityResumed = false  // pause 상태로 변경
+        
         if (::socketIoSttClient.isInitialized) {
             removeCallback()
+            // 비정상 종료 시 wakeword 대기 상태로 복귀
+            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
+            if (!hasSentCommunicationClose) {
+                sendCommunicationCloseForRecovery()
+                hasSentCommunicationClose = true
+            } else {
+                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
+            }
         }
 //        if (::socketIoSttClient.isInitialized) {
 //            socketIoSttClient.disconnect()
@@ -165,8 +187,18 @@ class WorkingActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // 리소스 정리
-        Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리")
+        Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리 및 wakeword 대기 상태로 복귀")
+        isActivityResumed = false  // destroy 상태로 변경
+        
+        // 비정상 종료 시 wakeword 대기 상태로 복귀
+        // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
         if (::socketIoSttClient.isInitialized) {
+            if (!hasSentCommunicationClose) {
+                sendCommunicationCloseForRecovery()
+                hasSentCommunicationClose = true
+            } else {
+                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
+            }
             socketIoSttClient.disconnect()
         }
         if (::sttRepository.isInitialized) {
@@ -800,6 +832,9 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun handleWakewordDetected() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
+        
+        // Wakeword 감지 시 communication_close 플래그 리셋 (새로운 서비스 시작)
+        hasSentCommunicationClose = false
 
         lifecycleScope.launch {
             try {
@@ -890,5 +925,73 @@ class WorkingActivity : AppCompatActivity() {
             onClarifyQaTurn = null,
             onWakewordDetected = null,
         )
+    }
+    
+    /**
+     * 비정상 종료 시 wakeword 대기 상태로 복귀하기 위한 통신 종료 이벤트 전송
+     */
+    private fun sendCommunicationCloseForRecovery() {
+        try {
+            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+                val success = socketIoSttClient.sendCommunicationClose()
+                if (success) {
+                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
+                    hasSentCommunicationClose = true
+                } else {
+                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+                }
+            } else {
+                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 상태 초기화 및 wakeword 대기 상태로 복귀
+     * (onResume에서 호출하여 비정상 종료 후 다시 들어온 경우를 처리)
+     */
+    private fun resetToWakewordWaitingState() {
+        try {
+            Log.i(TAG, "🔄 상태 초기화 시작")
+            
+            // 세션 상태 초기화
+            isWaitingForClarification = false
+            currentSessionId = null
+            currentTurnId = 1
+            sessionManager.resetSession()
+            
+            // UI 초기화
+            runOnUiThread {
+                binding.taskName.text = "대기 중..."
+                hideModal()
+            }
+            
+            // 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)
+            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
+            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+                if (!hasSentCommunicationClose) {
+                    val success = socketIoSttClient.sendCommunicationClose()
+                    if (success) {
+                        Log.i(TAG, "✅ 상태 초기화 및 wakeword 대기 상태로 복귀 완료")
+                        hasSentCommunicationClose = true
+                    } else {
+                        Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+                    }
+                } else {
+                    Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (상태 초기화만 수행)")
+                }
+            } else {
+                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 상태 복귀 이벤트를 전송할 수 없습니다")
+            }
+            
+            // 다음 wakeword 감지를 위해 플래그 리셋
+            hasSentCommunicationClose = false
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 상태 초기화 중 오류: ${e.message}")
+            e.printStackTrace()
+        }
     }
 }

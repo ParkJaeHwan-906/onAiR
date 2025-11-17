@@ -318,8 +318,12 @@ def process_frame(frame_bgr, sid=None):
 
         # 재추출 성공 → init 상태로 복귀
         # print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
+        if prev_valid is not None and len(prev_valid) > 0:
+            prev_pts = np.vstack([prev_valid, pts])
+        else:
+            prev_pts = pts
+
         prev_gray = gray.copy()
-        prev_pts = None
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
 
         return {
@@ -387,11 +391,11 @@ def process_frame(frame_bgr, sid=None):
             R_total[:] = R @ R_total
             t_total[:] = t_total + (R_total @ t)
         # else:
-            # print("[DEBUG]  ▶ pose_ok=False → size_acc 유지")
+        #     print("[DEBUG]  ▶ pose_ok=False → size_acc 유지")
 
     except Exception as e:
         # Essential 계산 실패해도 크래시 나지 않게 보호
-        print(f"⚠️ [motion_core] estimate_motion 실패: {e}")
+        # print(f"⚠️ [motion_core] estimate_motion 실패: {e}")
         pose_ok = False
 
     # --- 6) 다음 프레임용 특징점 준비 ---
