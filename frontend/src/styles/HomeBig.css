@@ -152,12 +152,18 @@
 }
 
 .home-table.request-list .col-description {
-  display: flex;
+  /* display: flex; */
   width: 26%;
   align-items: center;
   padding-right: 8px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-body-md);
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* 최대 2줄 */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal; /* 줄바꿈 허용 */
 }
 
 .home-table.request-list .col-status {

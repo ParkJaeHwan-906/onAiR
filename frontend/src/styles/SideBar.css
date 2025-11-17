@@ -87,3 +87,14 @@
   color: var(--color-text-primary);
   font-weight: 700;
 }
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+
+.nav-button.active .nav-icon {
+  stroke-width: 2.7;
+  color: var(--color-text-primary);
+}
