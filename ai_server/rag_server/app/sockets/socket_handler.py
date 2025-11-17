@@ -1671,7 +1671,7 @@ async def handle_video_frame(sid, data):
     if result["status"] not in ("ok", "init"):
         # print("[DEBUG] 모션 추적에 실패했습니다.")
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        await broadcast_to(['pc', 'mobile'], "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
