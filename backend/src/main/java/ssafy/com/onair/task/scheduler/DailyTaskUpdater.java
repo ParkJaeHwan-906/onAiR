@@ -9,9 +9,11 @@ import ssafy.com.onair.task.repository.TasksRepository;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class TaskScheduler {
+public class DailyTaskUpdater {
+
     private final TasksRepository tasksRepository;
 
+    // 매일 00:00:10 실행
     @Scheduled(cron = "10 0 0 * * *")
     public void updateTodayTasks() {
         Integer updatedTasks = tasksRepository.updateTodayTasks();
