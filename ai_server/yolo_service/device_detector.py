@@ -8,11 +8,11 @@ import time
 
 
 YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
-DETECTION_INTERVAL = 2.0
+DETECTION_INTERVAL = 0.5
 
 # 안정성 파라미터
-CONF_THRESHOLD = 0.7
-STABLE_COUNT_REQUIRED = 3
+CONF_THRESHOLD = 0.75
+STABLE_COUNT_REQUIRED = 5
 
 # 모델 및 Task (Task는 main.py가 가지고 있음)
 _device_model = None
