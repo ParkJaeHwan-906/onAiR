@@ -373,6 +373,13 @@ def run_stt_loop():
                 # ① 대기 상태 (마이크 ON, Wakeword 감지 중)
                 logger.info("⏳ Wakeword 감지 대기 중...")
                 
+                # Wakeword 감지기가 활성화되어 있는지 확인 (루프 시작 시 항상 확인)
+                if wakeword_detector and wakeword_detector.interpreter is not None:
+                    if wakeword_detector.is_paused:
+                        wakeword_detector.resume()
+                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                        logger.info("✅ Wakeword 감지기 재활성화 (루프 시작 시)")
+                
                 # ② Wakeword 감지 대기
                 try:
                     wakeword_detected = wait_for_wakeword()
@@ -502,12 +509,9 @@ def run_stt_loop():
                     reset_to_wakeword_waiting("서비스 완료 신호 미수신 (타임아웃)")
                     continue
                 
-                # 서비스 완료 후 wakeword 콜백 재활성화 (옵션)
-                if settings.REENABLE_WAKEWORD_AFTER_SERVICE:
-                    if wakeword_detector and wakeword_detector.interpreter is not None:
-                        wakeword_detector.resume()
-                        mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-                        service_completed_flag["completed"] = False
+                # 서비스 완료 후 wakeword 감지 대기 상태로 복귀 (항상 실행)
+                # 모든 상황에서 wakeword 감지 대기 상태로 복귀하도록 보장
+                reset_to_wakeword_waiting("서비스 완료")
                 
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
             except Exception as e:
