@@ -782,21 +782,35 @@ async def handle_audio_playback_completed(sid, data):
     await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
     
     if audio_type == "cv_detection_failed":
-        # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+        # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태 (normal과 동일)
         print("=" * 60)
-        print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
+        print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
+        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+        print("=" * 60)
+        await wait_for_next_step("CV 탐지 실패 음성 파일 재생 완료 처리", "10-1")
+        
+        print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
+        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
         print("=" * 60)
         
-        # 세션 ID 생성 (Clarify 세션용)
-        import uuid
-        session_id = str(uuid.uuid4())
-        
-        await broadcast_to("raspi", "start_streaming_stt", {
-            "session_id": session_id,
-            "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
-        })
-        print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
-        await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        # ========================================
+        # [주석처리] 추후 사용을 위한 Streaming STT 로직
+        # ========================================
+        # # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+        # print("=" * 60)
+        # print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
+        # print("=" * 60)
+        # 
+        # # 세션 ID 생성 (Clarify 세션용)
+        # import uuid
+        # session_id = str(uuid.uuid4())
+        # 
+        # await broadcast_to("raspi", "start_streaming_stt", {
+        #     "session_id": session_id,
+        #     "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
+        # })
+        # print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
+        # await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
         
     elif audio_type == "cv_detection_normal":
         # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태

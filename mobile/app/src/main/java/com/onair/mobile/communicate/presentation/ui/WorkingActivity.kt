@@ -83,10 +83,10 @@ class WorkingActivity : AppCompatActivity() {
 
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
-        private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
+        private const val AI_SUPPORTER_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
-        private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_오퍼레이터와의_통신을_통해_문제.mp3"
+        private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -522,9 +522,9 @@ class WorkingActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
+                // UI 업데이트: "통신 중..." 표시 (normal과 동일)
                 runOnUiThread {
-                    binding.taskName.text = message
+                    binding.taskName.text = "통신 중..."
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
 
@@ -532,21 +532,48 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
                 // 모달 표시
                 runOnUiThread {
-                    showModal("오류 탐지에 실패하였습니다.\nAI 서포터와의 대화를 통해 문제 상황을 해결해드리겠습니다.")
+                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
                 }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
+                    // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
                     // 모달 숨기기
                     runOnUiThread {
                         hideModal()
                     }
+
+                    // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
                     if (success) {
                         Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 완료")
                     } else {
                         Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패")
                     }
+
+                    // WebRTC 연결 요청 전송 (normal과 동일한 로직)
+                    lifecycleScope.launch {
+                        val accessToken = authRepository.getAccessToken()
+                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+
+                        if (accessToken.isNotEmpty()) {
+                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                            val receiverAccountId = -1L
+                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+
+                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                            if (success) {
+                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                            } else {
+                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                            }
+                        } else {
+                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+                        }
+                    }
                 }
+                
+                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 실패 처리 실패: ${e.message}")
                 e.printStackTrace()
