@@ -37,20 +37,21 @@ async def device_detector_loop():
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            detections = yolo_infer(_device_model, frame, return_boxes=False)
+            detections = yolo_infer(_device_model, frame, return_boxes=True)
 
             # YOLO 박스 표준 스키마로 변환
             all_boxes = []
             for d in detections:
-                box = d["box"]  # YOLO util 에서 dict로 들어옴
-                all_boxes.append({
-                    "label": d["label"],
-                    "confidence": float(d["confidence"]),
-                    "x1": int(box["x1"]),
-                    "y1": int(box["y1"]),
-                    "x2": int(box["x2"]),
-                    "y2": int(box["y2"]),
-                })
+                # return_boxes=True일 때 x1, y1, x2, y2가 직접 포함됨
+                if "x1" in d and "y1" in d and "x2" in d and "y2" in d:
+                    all_boxes.append({
+                        "label": d["label"],
+                        "confidence": float(d["confidence"]),
+                        "x1": int(d["x1"]),
+                        "y1": int(d["y1"]),
+                        "x2": int(d["x2"]),
+                        "y2": int(d["y2"]),
+                    })
 
             await save_yolo_result(ts, all_boxes)
 
@@ -90,4 +91,3 @@ async def device_detector_loop():
             logger.exception(f"[device_monitor] 🚨 오류: {e}")
 
         await asyncio.sleep(DETECTION_INTERVAL)
-
