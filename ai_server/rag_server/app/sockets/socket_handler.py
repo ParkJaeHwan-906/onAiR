@@ -382,11 +382,6 @@ async def handle_wakeword_waiting_ready(sid, data):
     
     print("=" * 60)
     print(f"✅ [FastAPI] Wakeword 대기 준비 완료 이벤트 수신 [raspi]")
-    print(f"   💡 YOLO 서버로 API 요청을 보내기 위한 트리거")
-    print("=" * 60)
-    
-    await start_device_detector_task()
-    print("✅ YOLO 서버 시작")
 
 async def handle_wakeword_audio_completed(sid, data):
     """
