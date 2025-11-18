@@ -3,7 +3,7 @@ package com.onair.mobile.communicate.data
 import android.util.Log
 import com.launchdarkly.eventsource.MessageEvent
 import com.launchdarkly.eventsource.background.BackgroundEventHandler
-import com.onair.mobile.communicate.data.sse.SseClient
+import com.onair.mobile.communicate.data.source.remote.SseClient
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

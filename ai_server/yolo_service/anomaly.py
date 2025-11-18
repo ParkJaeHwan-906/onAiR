@@ -3,12 +3,14 @@ import numpy as np
 from loguru import logger
 from ultralytics import YOLO
 
-from ai_server.yolo_service.redis_client import get_cv_buffer_frames, get_device_state
+from ai_server.yolo_service.redis_client import get_device_state, get_latest_yolo_result, get_latest_frame
 from ai_server.yolo_service.fan_belt_anomaly import analyze_fan_belt
 from ai_server.yolo_service.gauge_anomaly import analyze_gauge
 from ai_server.yolo_service.panel_anomaly import analyze_panel
+from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, MODULE_CLASSES, PANEL_parts
+from ai_server.yolo_service.device_detector import _device_model
 
-MODULE_MODEL_PATH = "/app/ai_server/yolo_service/models/module_best.pt"
+MODULE_MODEL_PATH = ALL_MODEL_PATH
 _module_model = None
 
 MIN_SHARPNESS = 70.0
@@ -17,16 +19,6 @@ MIN_BOX_AREA = 15000
 
 TOTAL_FRAMES = 30
 SHARPNESS_FRAMES = 10
-
-
-def load_module_model():
-    global _module_model
-    if _module_model is None:
-        _module_model = YOLO(MODULE_MODEL_PATH)
-        _module_model.fuse()
-        logger.info("module_best YOLO 로드 완료")
-    return _module_model
-
 
 def calc_sharpness(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -45,109 +37,118 @@ def format_boxes(results, names):
             boxes.append({
                 "label": label,
                 "confidence": conf,
-                "xyxy": (x1, y1, x2, y2),
+                "x1": x1, "y1": y1,
+                "x2": x2, "y2": y2,
                 "area": area
             })
     return boxes
 
 
 async def run_anomaly_detection():
-    logger.info("🚀 run_anomaly_detection() 시작")
+    logger.info("🚀 anomaly_detection() 시작")
 
     # 1) 장비 타입 확인
     device_info = await get_device_state()
-    if not device_info:
-        return {
-            "detected": False,
-            "device_type": None,
-            "modules": [],
-            "anomalies": {},
-            "messages": [],
-            "message": "디바이스 상태가 설정되지 않음"
-        }
+    device_label = device_info.get("label") if device_info else None
 
-    device_label = device_info.get("label")
     if device_label != "AHU":
         return {
             "detected": False,
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
-            "messages": [],
             "message": "AHU가 아님"
         }
 
-    # 2) 프레임 획득
-    frames = await get_cv_buffer_frames(n=TOTAL_FRAMES)
-    if not frames:
+    # 2) 최신 프레임 가져오기
+    frame, frame_ts = await get_latest_frame()
+    if frame is None:
         return {
             "detected": False,
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
-            "messages": [],
             "message": "프레임 없음"
         }
 
-    # 3) sharpest frame 선택
-    sharp_frames = frames[:SHARPNESS_FRAMES]
+    # 3) YOLO 박스 가져오기
+    yolo_data = await get_latest_yolo_result()
+    if not yolo_data:
+        return {
+            "detected": False,
+            "device_type": device_label,
+            "modules": [],
+            "anomalies": {},
+            "message": "YOLO 결과 없음"
+        }
 
-    sharp_list = [(f, calc_sharpness(f)) for f in sharp_frames]
-    sharp_list = [(f, s) for f, s in sharp_list if s > MIN_SHARPNESS]
+    raw_boxes = yolo_data.get("boxes", [])
+    latest_ts = yolo_data.get("frame_ts")
 
-    if not sharp_list:
-        sharpest_frame, best_score = frames[-1], 0.0
-    else:
-        sharpest_frame, best_score = max(sharp_list, key=lambda x: x[1])
+    logger.info(f"📦 YOLO 박스 {len(raw_boxes)}개 가져옴 (ts={latest_ts})")
 
-    logger.info(f"📸 sharpest sharpness={best_score:.1f}")
+    # 4) 박스 분류
+    module_boxes = [b for b in raw_boxes if b["label"] in MODULE_CLASSES]
+    panel_boxes = [b for b in raw_boxes if b["label"] in ("control_panel", "AHU_pannel")]
+    panel_parts_boxes = [b for b in raw_boxes if b["label"] in PANEL_parts]
 
-    # 4) YOLO 실행
-    module_model = load_module_model()
-    yolo_res = module_model.predict(sharpest_frame, conf=MIN_CONF, verbose=False)
-    raw_boxes = format_boxes(yolo_res, module_model.names)
-
-    module_boxes = [
+    gauge_boxes = [
         b for b in raw_boxes
-        if b["confidence"] >= MIN_CONF and b["area"] >= MIN_BOX_AREA
+        if b["label"] in ("pressure_gauge", "thermometer", "temperature_FND")
     ]
 
-    logger.info(f"📦 module boxes={module_boxes}")
+    belt_boxes = [b for b in raw_boxes if b["label"] == "belt"]
 
-    # 5) anomaly 모듈 실행
-    fan_belt_result = await analyze_fan_belt(frames, sharpest_frame, best_score, module_boxes)
-    gauge_result = await analyze_gauge(sharpest_frame, best_score, module_boxes)
-    panel_result = await analyze_panel(sharpest_frame, best_score, module_boxes)
+    # ---------------------------------------
+    # 5) 이상 탐지 (표준 스키마)
+    # ---------------------------------------
+    anomalies = {}
 
-    anomalies = {
-        "fan_belt": fan_belt_result,
-        "gauge": gauge_result,
-        "panel": panel_result
-    }
+    # Fan/Belt
+    if belt_boxes:
+        anomalies["fan_belt"] = await analyze_fan_belt([frame], belt_boxes)
+    else:
+        anomalies["fan_belt"] = {
+            "type": "fan_belt",
+            "status": "not_found",
+            "detail": "no_belt_detected",
+            "message": "벨트가 탐지되지 않음",
+            "results": {}
+        }
 
-    # 6) 모듈 메시지 수집
-    collected_messages = []
-    for key, res in anomalies.items():
-        if isinstance(res, dict) and res.get("message"):
-            collected_messages.append(res["message"])
+    # Gauge
+    if gauge_boxes:
+        anomalies["gauge"] = await analyze_gauge(frame, gauge_boxes)
+    else:
+        anomalies["gauge"] = {
+            "type": "gauge",
+            "status": "not_found",
+            "detail": "no_gauge_detected",
+            "message": "게이지가 탐지되지 않음",
+            "results": {}
+        }
 
-    # 7) anomaly 여부 판정
-    def is_abnormal(res):
-        return res and res.get("status") == "anomaly"
+    # Panel
+    if panel_boxes:
+        anomalies["panel"] = await analyze_panel(frame, panel_boxes, panel_parts_boxes)
+    else:
+        anomalies["panel"] = {
+            "type": "panel",
+            "status": "not_found",
+            "detail": "no_panel_detected",
+            "message": "제어판이 탐지되지 않음",
+            "results": {}
+        }
 
-    has_anomaly = any(is_abnormal(v) for v in anomalies.values())
-
-    final_message = (
-        " / ".join(collected_messages)
-        if collected_messages else
-        ("이상 탐지됨" if has_anomaly else "정상")
-    )
-
+    # ---------------------------------------
+    # 6) 최종 반환
+    # ---------------------------------------
     return {
-        "detected": has_anomaly,
+        "detected": True,
         "device_type": device_label,
-        "modules": [{"label": b["label"], "confidence": b["confidence"]} for b in module_boxes],
+        "timestamp": latest_ts,
+        "modules": module_boxes,
         "anomalies": anomalies,
-        "messages": collected_messages,     # 모든 모듈 메시지 배열
-        "message": final_message            # 최종 자연 문장
+        "yolo_count": len(raw_boxes),
+        "message": "OK"
     }
