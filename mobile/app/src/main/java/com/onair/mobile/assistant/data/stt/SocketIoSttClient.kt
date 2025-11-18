@@ -17,11 +17,11 @@ import org.json.JSONObject
 import java.net.URISyntaxException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -52,7 +52,6 @@ class SocketIoSttClient(
     private var onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
-//    private var onCommunicationClose: (() -> Unit)? = null,
     private var onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
     private var onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
     private var onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -63,8 +62,10 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-    private val _callEnd = MutableSharedFlow<Boolean>(replay = 1)
-    val callEnd = _callEnd.asSharedFlow()
+//    private val _callEnd = MutableSharedFlow<Boolean>(replay = 0)
+//    val callEnd = _callEnd.asSharedFlow()
+    private val _callEnd = Channel<Unit>(Channel.BUFFERED)
+    val callEnd = _callEnd.receiveAsFlow()
 
     /**
      * Socket.IO 서버에 연결
@@ -289,11 +290,9 @@ class SocketIoSttClient(
 
             socket?.on("ar-info") { args ->
                 try {
-//                    Log.i(TAG, "AR-INFO 호출됨")
                     val data = args[0].toString()
                     val markers = Json.decodeFromString<ArMarkerResponse>(data)
 
-//                    onArMarkerDetected?.invoke(markers)
                     _arMarkers.tryEmit(markers.markers)
                 } catch (e: Exception) {
                     Log.e(TAG, "AR 마커 처리 오류: ${e.message}")
@@ -351,9 +350,8 @@ class SocketIoSttClient(
             }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
-                _callEnd.tryEmit(true)
-//                onCommunicationClose?.invoke()
-
+//                _callEnd.tryEmit(true)
+                _callEnd.trySend(Unit)
             }
             
             // 서버 메시지 수신 (디버깅용)
@@ -727,7 +725,6 @@ class SocketIoSttClient(
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
         onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
-        onCommunicationClose: (() -> Unit)? = null,
         onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
         onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
         onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -742,7 +739,6 @@ class SocketIoSttClient(
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
         if (onClarifyQaTurn != null) this.onClarifyQaTurn = onClarifyQaTurn
         if (onWakewordDetected != null) this.onWakewordDetected = onWakewordDetected
-//        if (onCommunicationClose != null) this.onCommunicationClose = onCommunicationClose
         if (onConnect != null) this.onConnect = onConnect
         if (onDisconnect != null) this.onDisconnect = onDisconnect
         if (onConnectError != null) this.onConnectError = onConnectError
