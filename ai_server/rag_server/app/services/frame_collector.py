@@ -1,4 +1,4 @@
-# ai_server/yolo_service/frame_collector.py
+# ai_server/rag_server/services/frame_collector.py
 
 import redis.asyncio as redis
 import cv2
