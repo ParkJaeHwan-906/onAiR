@@ -44,6 +44,7 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -132,12 +133,11 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onResume() {
         super.onResume()
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
-            
+
             // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
             // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
             if (!isActivityResumed) {
@@ -166,7 +166,7 @@ class WorkingActivity : AppCompatActivity() {
         // WorkingActivity가 background로 가면 콜백 제거 및 wakeword 대기 상태로 복귀
         Log.i(TAG, "🟡 WorkingActivity onPause: 콜백 제거 및 wakeword 대기 상태로 복귀")
         isActivityResumed = false  // pause 상태로 변경
-        
+
         if (::socketIoSttClient.isInitialized) {
             removeCallback()
             // 비정상 종료 시 wakeword 대기 상태로 복귀
@@ -189,7 +189,7 @@ class WorkingActivity : AppCompatActivity() {
         // 리소스 정리
         Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리 및 wakeword 대기 상태로 복귀")
         isActivityResumed = false  // destroy 상태로 변경
-        
+
         // 비정상 종료 시 wakeword 대기 상태로 복귀
         // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
         if (::socketIoSttClient.isInitialized) {
@@ -218,40 +218,37 @@ class WorkingActivity : AppCompatActivity() {
 
         val taskId = intent.getLongExtra("taskId", 0)
         val taskName = intent.getStringExtra("taskName")
+
         binding.taskName.text = taskName
         binding.endButton.setOnClickListener {
             workingViewModel.endTask(taskId, "")
         }
     }
-
     private fun observeViewModel() {
         lifecycleScope.launch {
-//            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    sseViewModel.eventFlow.collectLatest { event ->
-                        Log.d("SSE_working", event.toString())
-                        when (event) {
-                            is SseEvent.CallRequest -> showCallRequestCard(event.data)
-                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
-                            else -> Unit
-                        }
+            launch {
+                sseViewModel.eventFlow.collectLatest { event ->
+                    Log.d("SSE_working", event.toString())
+                    when (event) {
+                        is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                        is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
+                        else -> Unit
                     }
                 }
-                launch {
-                    workingViewModel.endStatus.collect { success ->
-                        if (success) {
-                            setResult(RESULT_OK)
-                            finish()
-                        } else {
-                            Toast.makeText(
-                                this@WorkingActivity,
-                                "작업 완료 처리 실패",
-                                Toast.LENGTH_SHORT).show()
-                        }
+            }
+            launch {
+                workingViewModel.endStatus.collect { success ->
+                    if (success) {
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        Toast.makeText(
+                            this@WorkingActivity,
+                            "작업 완료 처리 실패",
+                            Toast.LENGTH_SHORT).show()
                     }
                 }
-
-
+            }
         }
     }
     private fun showCallRequestCard(data: JSONObject) {
@@ -278,7 +275,7 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
-                if (!token.isNullOrBlank()) {
+                if (token.isNotBlank()) {
                     val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
@@ -413,14 +410,15 @@ class WorkingActivity : AppCompatActivity() {
 
                         // UI 업데이트: "AI Supporter on" (1초간)
                         runOnUiThread {
-                            binding.taskName.text = "AI Supporter on"
+//                            binding.taskName.text = "AI Supporter on"
                         }
 
                         // 1초 후 "오류 탐지 중..." 표시
                         lifecycleScope.launch {
                             kotlinx.coroutines.delay(1000)
                             runOnUiThread {
-                                binding.taskName.text = "오류 탐지 중..."
+//                                binding.taskName.text = "오류 탐지 중..."
+                                showModal("오류 탐지 중...")
                             }
                         }
 
@@ -452,9 +450,9 @@ class WorkingActivity : AppCompatActivity() {
                         Log.i(TAG, "✅ OPERATOR 분기 처리 시작")
 
                         // UI 업데이트: "통신 중..." 표시
-                        runOnUiThread {
-                            binding.taskName.text = "통신 중..."
-                        }
+//                        runOnUiThread {
+//                            binding.taskName.text = "통신 중..."
+//                        }
 
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
@@ -571,7 +569,7 @@ class WorkingActivity : AppCompatActivity() {
                         }
                     }
                 }
-                
+
                 // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                 raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
@@ -589,16 +587,16 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 // UI 업데이트: "통신 중..." 표시
-                runOnUiThread {
-                    binding.taskName.text = "통신 중..."
-                }
+//                runOnUiThread {
+//                    binding.taskName.text = "통신 중..."
+//                }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
                 // 모달 표시
                 runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                    showModal("관리자와 통신 연결 중...")
                 }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
                     // 재생 완료 콜백
@@ -636,7 +634,7 @@ class WorkingActivity : AppCompatActivity() {
                         }
                     }
                 }
-                
+
                 // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                 raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
@@ -859,7 +857,7 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun handleWakewordDetected() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
-        
+
         // Wakeword 감지 시 communication_close 플래그 리셋 (새로운 서비스 시작)
         hasSentCommunicationClose = false
 
@@ -895,7 +893,6 @@ class WorkingActivity : AppCompatActivity() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
     }
-
 
     private fun setCallBack() {
         socketIoSttClient.setCallbacks(
@@ -953,7 +950,7 @@ class WorkingActivity : AppCompatActivity() {
             onWakewordDetected = null,
         )
     }
-    
+
     /**
      * 비정상 종료 시 wakeword 대기 상태로 복귀하기 위한 통신 종료 이벤트 전송
      */
@@ -975,7 +972,7 @@ class WorkingActivity : AppCompatActivity() {
             e.printStackTrace()
         }
     }
-    
+
     /**
      * 상태 초기화 및 wakeword 대기 상태로 복귀
      * (onResume에서 호출하여 비정상 종료 후 다시 들어온 경우를 처리)
@@ -983,19 +980,19 @@ class WorkingActivity : AppCompatActivity() {
     private fun resetToWakewordWaitingState() {
         try {
             Log.i(TAG, "🔄 상태 초기화 시작")
-            
+
             // 세션 상태 초기화
             isWaitingForClarification = false
             currentSessionId = null
             currentTurnId = 1
             sessionManager.resetSession()
-            
+
             // UI 초기화
             runOnUiThread {
                 binding.taskName.text = "대기 중..."
                 hideModal()
             }
-            
+
             // 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)
             // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
             if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
@@ -1013,7 +1010,7 @@ class WorkingActivity : AppCompatActivity() {
             } else {
                 Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 상태 복귀 이벤트를 전송할 수 없습니다")
             }
-            
+
             // 다음 wakeword 감지를 위해 플래그 리셋
             hasSentCommunicationClose = false
         } catch (e: Exception) {
