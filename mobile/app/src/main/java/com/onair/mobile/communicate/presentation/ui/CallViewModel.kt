@@ -1,18 +1,16 @@
 package com.onair.mobile.communicate.presentation.ui
 
-import SocketHolder
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import android.app.Application
-import android.preference.PreferenceManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import io.livekit.android.AudioOptions
-import io.livekit.android.ConnectOptions
+import io.livekit.android.AudioType
 import io.livekit.android.LiveKit
 import io.livekit.android.LiveKitOverrides
 import io.livekit.android.RoomOptions
-import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
@@ -23,14 +21,15 @@ import io.livekit.android.room.track.RemoteVideoTrack
 import io.livekit.android.room.track.TrackPublication
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
+import io.livekit.android.room.track.LocalAudioTrackOptions
+import io.livekit.android.room.track.RemoteAudioTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import io.livekit.android.room.track.Track
+import kotlinx.coroutines.flow.StateFlow
 
 
 class CallViewModel(
@@ -40,72 +39,28 @@ class CallViewModel(
 ) : AndroidViewModel(application) {
     val room = LiveKit.create(
         appContext = application,
-//        overrides = LiveKitOverrides(
-//            audioOptions = AudioOptions(
-//                audioProcessorOptions = null
-//            )
-//        )
+        overrides = LiveKitOverrides(
+            audioOptions = AudioOptions(
+                audioOutputType = AudioType.MediaAudioType()
+            )
+        ),
         options = RoomOptions(
             adaptiveStream = true,
             dynacast = true,
         )
     )
-//    private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
-//    val audioHandler = room.audioHandler as AudioSwitchHandler
-//
-//    val participants = room::remoteParticipants.flow
-//        .map { remoteParticipants ->
-//            listOf<Participant>(room.localParticipant) +
-//                    remoteParticipants
-//                        .keys
-//                        .sortedBy { it.value }
-//                        .mapNotNull { remoteParticipants[it] }
-//        }
-//
-//    private val _error = MutableStateFlow<Throwable?>(null)
-
-//    private val _primarySpeaker = MutableStateFlow<Participant?>(null)
-//    val primarySpeaker : StateFlow<Participant?> = _primarySpeaker
-//
-//    val activeSpeakers = room::activeSpeakers.flow
-//
-//    private var localScreencastVideoTrack : LocalScreencastVideoTrack? = null
-//
-//    // Controls
-//    val micEnabled = room.localParticipant::isMicrophoneEnabled.flow
-//    val cameraEnabled = room.localParticipant::isCameraEnabled.flow
-//    val screenshareEnabled = room.localParticipant::isScreenShareEnabled.flow
-//
-//    private val _enhancedNsEnabled = MutableStateFlow(false)
-//    val enhancedNsEnabled = _enhancedNsEnabled.asStateFlow()
-//
-//    private val _enableAudioProcessor = MutableStateFlow(true)
-//    val enableAudioProcessor = _enableAudioProcessor.asStateFlow()
-
+    var remoteAudioTrack : RemoteAudioTrack? = null
     // Emits a string whenever a data message is received.
     private val _dataReceived = MutableSharedFlow<String>()
     val dataReceived = _dataReceived
-
-    // Whether other participants are allowed to subscribe to this participant's tracks.
-    private val _permissionAllowed = MutableStateFlow(true)
-    val permissionAllowed = _permissionAllowed.asStateFlow()
-
     val arMarkers = SocketHolder.socketClient.arMarkers
+    val finishEvent = SocketHolder.socketClient.callEnd
 
     // blueprint-canvas 영상 트랙
     private val _blueprintTrack = MutableStateFlow<RemoteVideoTrack?>(null)
     val blueprintTrack: StateFlow<RemoteVideoTrack?> = _blueprintTrack.asStateFlow()
 
     init {
-//        room.registerTextStreamHandler(
-//            topic = "1k.chat",
-//            handler = { receiver: TextStreamReceiver, identity: Participant.Identity ->
-//                viewModelScope.launch {
-//                    val message = receiver.readAll().joinToString(" ")
-//                    _dataReceived.emit("$identity: $message")
-//                }
-//            }
-//        )
         viewModelScope.launch {
             room.events.collect { event ->
                 when (event) {
@@ -145,18 +100,23 @@ class CallViewModel(
                 room.connect(
                     url = url,
                     token = token,
-//                    options = ConnectOptions(autoSubscribe = false)
                 )
 
                 room.localParticipant.setMicrophoneEnabled(false)
                 room.localParticipant.setCameraEnabled(false)
+
+                room.remoteParticipants.values.forEach { participant ->
+                    participant.audioTrackPublications.forEach { t ->
+                        if (t.second is RemoteAudioTrack) {
+                            remoteAudioTrack = t.second as RemoteAudioTrack
+                        }
+                    }
+                }
             } catch (e: Throwable) {
                 Log.e("connectToRoom", "연결 중 오류 발생"+e.message.toString())
             }
         }
     }
-
-
     override fun onCleared() {
         super.onCleared()
         room.disconnect()

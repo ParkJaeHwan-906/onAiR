@@ -12,8 +12,13 @@ redis_client = redis.from_url("redis://redis:6379", decode_responses=False)
 
 # 통합 Redis Key
 DEVICE_STATE_KEY = "cv:state:device"
-LATEST_FRAME_KEY = "cv:frame:latest"
-FRAME_BUFFER_KEY = "cv:frame:cv_buffer"
+LATEST_FRAME_KEY = "cv:frame:latest:jpg"
+LATEST_TS_KEY    = "cv:frame:latest:ts"
+FRAME_BUFFER_KEY = "cv:frame:buffer:jpg"
+TS_BUFFER_KEY    = "cv:frame:buffer:ts"
+YOLO_RESULT_KEY = "cv:yolo:latest:result"
+
+BUFFER_SIZE = 30
 
 # ---------------------------
 # Device State 저장/조회
@@ -38,18 +43,38 @@ async def get_device_state() -> dict | None:
     except:
         return None
 
+async def save_yolo_result(frame_ts: int, boxes: list):
+    try:
+        payload = {
+            "frame_ts": frame_ts,
+            "boxes": boxes,                   # 여러 박스 저장
+            "status": "ok",
+            "updated_at": int(time.time() * 1000),
+        }
+
+        await redis_client.set(YOLO_RESULT_KEY, json.dumps(payload))
+
+    except Exception as e:
+        return None
 
 # ---------------------------
 # Frame Read-only (YOLO용)
 # ---------------------------
 
 async def get_latest_frame():
-    data = await redis_client.get(LATEST_FRAME_KEY)
-    if not data:
-        return None
+    # 최신 프레임 + TS 둘 다 가져옴
+    jpg = await redis_client.get(LATEST_FRAME_KEY)
+    ts  = await redis_client.get(LATEST_TS_KEY)
 
-    jpg = np.frombuffer(data, dtype=np.uint8)
-    return cv2.imdecode(jpg, cv2.IMREAD_COLOR)
+    if jpg is None or ts is None:
+        return None, None
+
+    jpg_np = np.frombuffer(jpg, dtype=np.uint8)
+    frame = cv2.imdecode(jpg_np, cv2.IMREAD_COLOR)
+    timestamp = int(ts)
+
+    return frame, timestamp
+
 
 
 async def get_cv_buffer_frames(n=30):
@@ -60,4 +85,30 @@ async def get_cv_buffer_frames(n=30):
         frame = cv2.imdecode(jpg, cv2.IMREAD_COLOR)
         if frame is not None:
             result.append(frame)
+    return result
+
+
+async def get_latest_yolo_result():
+    """
+    Redis에 저장된 YOLO 결과(JSON)를 그대로 반환한다.
+    frame_ts, boxes, status만 그대로 프론트에 전달한다.
+    """
+
+    data = await redis_client.get(YOLO_RESULT_KEY)
+    if not data:
+        return None
+
+    try:
+        raw = json.loads(data)
+    except Exception:
+        return None
+
+    # --- 여기서 정합성 유지용 필드만 추출 ---
+    result = {
+        "frame_ts": raw.get("frame_ts"),
+        "boxes": raw.get("boxes", []),
+        "status": raw.get("status", "ok"),
+        "updated_at" : raw.get("updated_at", None)
+    }
+
     return result

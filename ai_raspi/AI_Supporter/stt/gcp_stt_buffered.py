@@ -114,8 +114,11 @@ class GcpBufferedStt:
         start_time = time.time()
         target_duration = self.buffer_duration
         
-        # 음성 입력 타임아웃: 3초 동안 실제 음성이 들어오지 않으면 타임아웃
-        SPEECH_TIMEOUT_SEC = 3.0
+        # 음성 입력 타임아웃: 7초 동안 실제 음성이 들어오지 않으면 타임아웃
+        # (모바일 오디오 재생 완료 후 사용자가 말을 시작할 시간을 고려하여 7초로 설정)
+        SPEECH_TIMEOUT_SEC = 7.0
+        # 초기 대기 시간: 모바일 오디오 재생 완료 후 사용자가 말을 시작할 시간 (2초)
+        INITIAL_GRACE_PERIOD = 2.0
         last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
         MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
         
@@ -125,6 +128,9 @@ class GcpBufferedStt:
             if chunk is None:
                 break
             
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            
             # 실제 음성인지 확인 (RMS 값으로)
             has_speech = False
             if isinstance(chunk, np.ndarray):
@@ -133,7 +139,7 @@ class GcpBufferedStt:
                 rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
                 if rms >= MIN_RMS_THRESHOLD:
                     has_speech = True
-                    last_speech_time = time.time()
+                    last_speech_time = current_time
                 buffer.append(chunk.tobytes())
             else:
                 # bytes인 경우 numpy로 변환하여 확인
@@ -142,21 +148,22 @@ class GcpBufferedStt:
                     rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
                     if rms >= MIN_RMS_THRESHOLD:
                         has_speech = True
-                        last_speech_time = time.time()
+                        last_speech_time = current_time
                 except:
                     pass
                 buffer.append(chunk)
             
-            # 타임아웃 확인: 3초 동안 실제 음성이 없으면 타임아웃
-            current_time = time.time()
-            if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
-                # 타임아웃 발생
-                error_msg = "음성 입력 타임아웃 (3초 동안 음성이 감지되지 않음)"
-                await broadcaster({
-                    "type": "error",
-                    "text": error_msg
-                })
-                raise ValueError(error_msg)
+            # 타임아웃 확인: 초기 대기 시간 이후에만 타임아웃 체크
+            # (초기 대기 시간 동안은 사용자가 말을 시작할 시간을 제공)
+            if elapsed_time > INITIAL_GRACE_PERIOD:
+                if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
+                    # 타임아웃 발생
+                    error_msg = f"음성 입력 타임아웃 ({int(SPEECH_TIMEOUT_SEC)}초 동안 음성이 감지되지 않음)"
+                    await broadcaster({
+                        "type": "error",
+                        "text": error_msg
+                    })
+                    raise ValueError(error_msg)
         
         if not buffer:
             await broadcaster({

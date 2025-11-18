@@ -44,6 +44,7 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -497,10 +498,11 @@ class WorkingActivity : AppCompatActivity() {
                                 } else {
                                     Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
                                 }
+                                
+                                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (CV 탐지 실패/정상과 동일한 로직)
+                                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                             }
                         }
-
-                        raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
 
                     else -> {
@@ -550,7 +552,7 @@ class WorkingActivity : AppCompatActivity() {
                         Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패")
                     }
 
-                    // WebRTC 연결 요청 전송 (normal과 동일한 로직)
+                    // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
                         val accessToken = authRepository.getAccessToken()
                         Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
@@ -569,11 +571,11 @@ class WorkingActivity : AppCompatActivity() {
                         } else {
                             Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
                         }
+                        
+                        // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                        raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
                 }
-                
-                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
-                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 실패 처리 실패: ${e.message}")
                 e.printStackTrace()
@@ -616,6 +618,7 @@ class WorkingActivity : AppCompatActivity() {
                         Log.e(TAG, "❌ 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 실패")
                     }
 
+                    // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
                         val accessToken = authRepository.getAccessToken()
                         Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
@@ -634,11 +637,11 @@ class WorkingActivity : AppCompatActivity() {
                         } else {
                             Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
                         }
+                        
+                        // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                        raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
                 }
-                
-                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
-                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 정상 처리 실패: ${e.message}")
                 e.printStackTrace()
