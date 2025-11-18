@@ -1,4 +1,12 @@
-import { Video, House, Users, ListChecks, Wrench, Cctv } from "lucide-react";
+import {
+  Video,
+  House,
+  Users,
+  ListChecks,
+  Wrench,
+  Cctv,
+  AlertTriangle,
+} from "lucide-react";
 import { NavLink } from "react-router-dom";
 import "../../styles/SideBar.css";
 
@@ -28,6 +36,12 @@ const navItems = [
     label: "CCTV 모니터링",
     icon: Cctv,
     to: "/cctv",
+  },
+  {
+    id: "anomaly",
+    label: "이상탐지 모니터링",
+    icon: AlertTriangle,
+    to: "/anomaly",
   },
 ];
 
