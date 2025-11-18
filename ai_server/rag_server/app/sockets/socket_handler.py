@@ -483,7 +483,7 @@ async def handle_intent_audio_completed(sid, data):
 
             cv_raw = await run_anomaly_detection()
             print("CV 결과:", cv_raw)
-
+            
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
             has_anomaly = cv_raw.get("detected", False)
@@ -589,7 +589,7 @@ async def handle_intent_audio_completed(sid, data):
                 # 라즈베리파이로 CV 탐지 정상 알림 (마이크는 OFF 상태 유지)
                 await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
             else:
-                # CV 모델이 오류를 탐지한 경우
+                # CV 모델이 오류(=anomaly)를 탐지한 경우
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
@@ -597,6 +597,17 @@ async def handle_intent_audio_completed(sid, data):
                 device_type = cv_result.get("device_type", "unknown")
                 anomalies = cv_result.get("anomalies", {})
 
+                # ---------------------------
+                # 1) anomaly 존재 여부 확인
+                # ---------------------------
+                has_anomaly = any(
+                    m.get("status") == "anomaly"
+                    for m in anomalies.values()
+                )
+
+                # ---------------------------
+                # 2) RAG용 질의 문장 생성
+                # ---------------------------
                 query_parts = []
 
                 # 장비 유형
@@ -610,11 +621,13 @@ async def handle_intent_audio_completed(sid, data):
                         detected_modules.append(module_name)
 
                 if detected_modules:
-                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+                    # panel, gauge처럼 사실 메시지가 더 좋음 → 확장 가능
+                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다.")
                 else:
-                    query_parts.append("이상이 탐지되었습니다")
+                    query_parts.append("이상이 탐지되었습니다.")
 
                 query = " ".join(query_parts)
+
                 
                 print("=" * 60)
                 print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
@@ -1751,17 +1764,17 @@ async def handle_video_frame(sid, data):
         yolo_res = await get_latest_yolo_result()
         if yolo_res:
             frame_ts = yolo_res.get("frame_ts")
-            # 타임스탬프가 너무 멀면 무시 (예: 200ms 이상 차이)
+
             if frame_ts and abs(frame_ts - timestamp) <= 200:
-                await broadcast_to(['pc', 'mobile'], "video_overlay", {
+                payload = {
                     "timestamp": frame_ts,
                     "boxes": yolo_res.get("boxes", []),
-                    "modules": yolo_res.get("modules", []),
-                    "device_type": yolo_res.get("device_type"),
-                    "status": yolo_res.get("status"),
-                })
+                }
+                await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
+
     except Exception as e:
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
 
 
 
