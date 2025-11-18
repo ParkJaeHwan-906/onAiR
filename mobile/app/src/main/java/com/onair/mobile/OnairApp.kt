@@ -4,7 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.onair.mobile.communicate.data.SSERepository
 import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.sse.SseClient
+import com.onair.mobile.communicate.data.source.remote.SseClient
 import com.onair.mobile.communicate.presentation.ui.CommunicationViewModel
 
 //class OnairApp : Application() {
