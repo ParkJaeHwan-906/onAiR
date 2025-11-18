@@ -22,7 +22,6 @@ async def device_detector_loop():
     _device_model = load_yolo_model(ALL_MODEL_PATH)
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
-    # 2) Redis 상태 초기화
     info = await get_device_state()
     prev_state = info["label"] if info else None
     candidate_label = None
@@ -30,22 +29,35 @@ async def device_detector_loop():
 
     logger.info(f"[device_monitor] 초기 prev_state = {prev_state}")
 
-    # 3) 감지 루프
     while True:
         try:
-            frame, ts = await get_latest_frame()
-            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
+            # --- 1) 최신 프레임 읽기 ---
+            res = await get_latest_frame()
+            if not res:
+                await asyncio.sleep(DETECTION_INTERVAL)
+                continue
+
+            # res가 tuple인지 dict인지 안전하게 처리
+            if isinstance(res, tuple):
+                frame, ts = res
+            elif isinstance(res, dict):
+                frame = res.get("frame")
+                ts = res.get("ts") or res.get("timestamp")
+            else:
+                logger.warning("[device_monitor] 잘못된 frame 포맷")
+                await asyncio.sleep(DETECTION_INTERVAL)
+                continue
 
             if frame is None:
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # YOLO 추론
+            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
+
+            # --- 2) YOLO 추론 ---
             detections = yolo_infer(_device_model, frame, return_boxes=False)
 
-            # ─────────────────────────────
-            # (A) 모든 박스 저장용 리스트
-            # ─────────────────────────────
+            # --- 3) 모든 박스 Redis 저장 ---
             all_boxes = []
             for d in detections:
                 b = d["box"]
@@ -58,63 +70,51 @@ async def device_detector_loop():
                     "y2": int(b[3]),
                 })
 
-            # 오버레이 저장 (전체 박스)
             try:
                 await save_yolo_result(ts, all_boxes)
                 logger.debug("[device_monitor] 📤 ALL YOLO 박스 Redis 저장 완료")
             except Exception as e:
                 logger.exception(f"[device_monitor] overlay 저장 오류: {e}")
 
-            # ─────────────────────────────
-            # (B) 디바이스 상태 감지만 DEVICE_CLASSES 필터
-            # ─────────────────────────────
+            # --- 4) 디바이스 후보 필터링 ---
             device_candidates = [
                 d for d in detections
                 if d["label"] in DEVICE_CLASSES and d["confidence"] >= CONF_THRESHOLD
             ]
 
-            # 감지 없음
             if not device_candidates:
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 최고 confidence 디바이스
             top = max(device_candidates, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
             logger.debug(f"[device_monitor] 감지: {label} ({confidence:.2f})")
 
-            # confidence 기준 미달
             if confidence < CONF_THRESHOLD:
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 기존 상태와 같으면 안정화 초기화
+            # --- 5) 안정화 로직 ---
             if label == prev_state:
                 candidate_label = None
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 라벨 변경
             if candidate_label != label:
                 candidate_label = label
                 stable_counter = 1
                 logger.debug(f"[device_monitor] 후보 라벨 변경 → {candidate_label}")
             else:
                 stable_counter += 1
-                logger.debug(
-                    f"[device_monitor] 후보 안정화 진행 {candidate_label}: "
-                    f"{stable_counter}/{STABLE_COUNT_REQUIRED}"
-                )
+                logger.debug(f"[device_monitor] 안정화 {candidate_label}: {stable_counter}/{STABLE_COUNT_REQUIRED}")
 
-            # 안정화 완료 → 저장
             if stable_counter >= STABLE_COUNT_REQUIRED:
                 prev_state = candidate_label
                 await save_device_state(prev_state, confidence)
                 logger.info(f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})")
-
                 candidate_label = None
                 stable_counter = 0
 
@@ -128,6 +128,7 @@ async def device_detector_loop():
         await asyncio.sleep(DETECTION_INTERVAL)
 
     logger.info("[device_monitor] 디바이스 감지 루프 종료 완료")
+
 
 
 
