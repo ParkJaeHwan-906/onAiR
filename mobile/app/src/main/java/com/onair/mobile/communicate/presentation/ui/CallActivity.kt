@@ -74,16 +74,6 @@ class CallActivity : ComponentActivity() {
         )
     }
 
-    private val screenCaptureIntentLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            val resultCode = result.resultCode
-            val data = result.data
-            if (resultCode != RESULT_OK || data == null) {
-                return@registerForActivityResult
-            }
-        }
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,16 +89,6 @@ class CallActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 CallScreen(callViewModel)
-            }
-        }
-    }
-
-    private fun handleCommunicationClose() {
-        lifecycleScope.launch {
-            try {
-                finish()
-            } catch (e: Exception) {
-
             }
         }
     }

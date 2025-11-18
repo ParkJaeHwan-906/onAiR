@@ -280,7 +280,8 @@ class WorkingActivity : AppCompatActivity() {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
                 if (!token.isNullOrBlank()) {
-                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+//                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
                     }
