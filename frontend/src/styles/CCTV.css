@@ -1,0 +1,242 @@
+/* =============================
+  CCTV Page Container
+============================= */
+.cctv-page-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =============================
+  Grid (작은 CCTV 6개)
+============================= */
+/* 전체 그리드 컨테이너 */
+.cctv-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(10px, 1vw, 14px);
+  width: 100%;
+  height: 100%; /* 핵심! 빈 공간 제거 */
+  padding: 0;
+
+  align-items: stretch; /* 타일 세로로 꽉 채우기 */
+  justify-items: stretch;
+}
+
+/* 💡 반응형 - 1200px 이하 → 2열 */
+@media (max-width: 1200px) {
+  .cctv-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 💡 반응형 - 768px 이하 → 1열 */
+@media (max-width: 768px) {
+  .cctv-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+/* =============================
+  Tile (각 영상 박스)
+============================= */
+.cctv-tile {
+  position: relative;
+  background: var(--color-surface-base);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  height: 100%;
+}
+
+.cctv-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+/* 영상 */
+.cctv-video {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  border-radius: 12px;
+}
+
+/* 라벨 */
+.cctv-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* =============================
+  DETAIL VIEW (전체 화면)
+============================= */
+.detail-view {
+  width: 100%;
+  height: calc(100vh - 80px); /* TopBar 만큼 제외 */
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* 제한된 사용자 화면 스타일 */
+.detail-view.restricted {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f4f5f7;
+}
+
+/* 닫기 버튼 */
+.detail-close-inline {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+}
+
+.detail-close-inline:hover {
+  background: rgba(40, 40, 40, 0.65);
+}
+
+/* =============================
+  비디오 영역
+============================= */
+.detail-video-box {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
+}
+
+.detail-video-inline {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  background: #000;
+}
+
+/* =============================
+  좌하단 라벨 + 버튼 한 줄
+============================= */
+.detail-info-inline {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 50;
+}
+
+/* 라벨 */
+.detail-label-inline {
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+
+/* 버튼 세트 */
+.detail-inline-buttons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 버튼 공통 */
+.detail-ctrl-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.detail-ctrl-btn.call:hover {
+  background: rgba(59, 220, 114, 0.45);
+}
+
+.detail-ctrl-btn.listen:hover {
+  background: rgba(77, 107, 255, 0.45);
+}
+
+.detail-ctrl-btn.talk:hover {
+  background: rgba(255, 112, 67, 0.45);
+}
+
+.cctv-tile.disabled {
+  pointer-events: none; /* 클릭 막기 */
+  filter: grayscale(100%); /* 흐리게 */
+  opacity: 0.5;
+}
+
+/* LIVE 배지 */
+.live-badge {
+  margin-left: 6px;
+  color: #ff4d4d;
+  font-weight: bold;
+}
+
+/* OFFLINE 박스 */
+.cctv-offline-box {
+  width: 100%;
+  height: 100%;
+  background: #1b1b1b;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border-radius: 10px;
+}
+.offline-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #444;
+}
+
+.offline-sub {
+  font-size: 14px;
+  color: #777;
+}

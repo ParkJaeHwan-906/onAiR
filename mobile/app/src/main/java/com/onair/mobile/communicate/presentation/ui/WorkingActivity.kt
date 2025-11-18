@@ -40,10 +40,10 @@ import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
-import com.onair.mobile.assistant.data.task.SseTaskClient
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -58,7 +58,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
 
-    // MainActivitySttServer 로직 통합
+    // Socket.IO 클라이언트 및 Assistant 로직
     private lateinit var socketIoSttClient: SocketIoSttClient
     private lateinit var sttRepository: SttRepositoryImpl
     private lateinit var intentRepository: IntentRepositoryImpl
@@ -67,7 +67,6 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var ttsRepository: TtsRepositoryImpl
     private lateinit var mediaPlayerController: MediaPlayerController
     private lateinit var raspberryPiControlRepository: RaspberryPiControlRepository
-    private var sseTaskClient: SseTaskClient? = null
     private lateinit var tokenManager: TokenManager
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
@@ -76,13 +75,18 @@ class WorkingActivity : AppCompatActivity() {
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1
+    private var aiOnDialog: AiOnDialog? = null
+    private var isActivityResumed = false  // Activity가 resume 상태인지 추적
+    private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
     private val TAG = "WorkingActivity"
 
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
-        private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
+        private const val AI_SUPPORTER_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
+        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
+        private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -110,14 +114,12 @@ class WorkingActivity : AppCompatActivity() {
         initView()
         observeViewModel()
         goCall()
-        // MainActivitySttServer 로직 초기화 (연결은 onResume에서)
+        // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
     }
 
-
-    override fun onResume() {
-        super.onResume()
-        // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
+    override fun onStart() {
+        super.onStart()
         Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
         try {
             if (::socketIoSttClient.isInitialized) {
@@ -130,22 +132,73 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
+
+    override fun onResume() {
+        super.onResume()
+        if (::socketIoSttClient.isInitialized) {
+            setCallBack()
+            
+            // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
+            // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
+            if (!isActivityResumed) {
+                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
+                resetToWakewordWaitingState()
+                isActivityResumed = true
+            } else {
+                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
+            }
+        }
+        // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
+//        Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
+//        try {
+//            if (::socketIoSttClient.isInitialized) {
+//                socketIoSttClient.connect()
+//                Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
+//            }
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
+//            e.printStackTrace()
+//        }
+    }
+
     override fun onPause() {
         super.onPause()
-        // WorkingActivity가 background로 가면 Socket.IO 연결 종료
-        Log.i(TAG, "🟡 WorkingActivity onPause: Socket.IO 연결 종료")
+        // WorkingActivity가 background로 가면 콜백 제거 및 wakeword 대기 상태로 복귀
+        Log.i(TAG, "🟡 WorkingActivity onPause: 콜백 제거 및 wakeword 대기 상태로 복귀")
+        isActivityResumed = false  // pause 상태로 변경
+        
         if (::socketIoSttClient.isInitialized) {
-            socketIoSttClient.disconnect()
-            Log.i(TAG, "🔌 Socket.IO 연결 종료")
+            removeCallback()
+            // 비정상 종료 시 wakeword 대기 상태로 복귀
+            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
+            if (!hasSentCommunicationClose) {
+                sendCommunicationCloseForRecovery()
+                hasSentCommunicationClose = true
+            } else {
+                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
+            }
         }
+//        if (::socketIoSttClient.isInitialized) {
+//            socketIoSttClient.disconnect()
+//            Log.i(TAG, "🔌 Socket.IO 연결 종료")
+//        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         // 리소스 정리
-        Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리")
-        sseTaskClient?.disconnect()
+        Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리 및 wakeword 대기 상태로 복귀")
+        isActivityResumed = false  // destroy 상태로 변경
+        
+        // 비정상 종료 시 wakeword 대기 상태로 복귀
+        // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
         if (::socketIoSttClient.isInitialized) {
+            if (!hasSentCommunicationClose) {
+                sendCommunicationCloseForRecovery()
+                hasSentCommunicationClose = true
+            } else {
+                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
+            }
             socketIoSttClient.disconnect()
         }
         if (::sttRepository.isInitialized) {
@@ -179,6 +232,7 @@ class WorkingActivity : AppCompatActivity() {
                         Log.d("SSE_working", event.toString())
                         when (event) {
                             is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
                             else -> Unit
                         }
                     }
@@ -230,15 +284,14 @@ class WorkingActivity : AppCompatActivity() {
                         putExtra("token", token)
                     }
                     startActivity(intent)
+                    binding.callRequestCard.visibility = View.GONE
                 }
-
-
             }
         }
     }
 
     /**
-     * MainActivitySttServer의 로직 초기화
+     * Assistant 로직 초기화
      * WorkingActivity가 활성화된 상태에서만 동작하도록 설정
      */
     private fun initAssistantLogic() {
@@ -264,46 +317,49 @@ class WorkingActivity : AppCompatActivity() {
         ttsRepository = TtsRepositoryImpl(this, mediaPlayerController, FASTAPI_SERVER_URL)
 
         // Socket.IO 클라이언트 초기화 (연결은 onResume에서)
-        socketIoSttClient = SocketIoSttClient(
-            serverUrl = FASTAPI_SERVER_URL,
-            onSttResult = { text, type, confidence ->
-                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
-                sttRepository.receiveFromRaspberryPi(text)
-            },
-            onClarifyResponse = { ragResponse ->
-                handleClarifyResponseFromSocket(ragResponse)
-            },
-            onIntentResult = { intentResult ->
-                handleIntentResult(intentResult)
-            },
-            onClarifyTurn = { clarifyTurn ->
-                handleClarifyTurn(clarifyTurn)
-            },
-            onFinalAnswer = { finalAnswer ->
-                handleFinalAnswerFromSocket(finalAnswer)
-            },
-            onStartSseConnection = { text ->
-                handleStartSseConnection(text)
-            },
-            onCvDetectionFailed = { cvFailed ->
-                handleCvDetectionFailed(cvFailed)
-            },
-            onClarifyQaTurn = { qaTurn ->
-                handleClarifyQaTurn(qaTurn)
-            },
-            onWakewordDetected = {
-                handleWakewordDetected()
-            },
-            onConnect = {
-                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
-            },
-            onDisconnect = {
-                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
-            },
-            onConnectError = { error ->
-                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
-            }
-        )
+        socketIoSttClient = SocketHolder.socketClient
+
+        setCallBack()
+//        socketIoSttClient = SocketIoSttClient(
+//            serverUrl = FASTAPI_SERVER_URL,
+//            onSttResult = { text, type, confidence ->
+//                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
+//                sttRepository.receiveFromRaspberryPi(text)
+//            },
+//            onClarifyResponse = { ragResponse ->
+//                handleClarifyResponseFromSocket(ragResponse)
+//            },
+//            onIntentResult = { intentResult ->
+//                handleIntentResult(intentResult)
+//            },
+//            onClarifyTurn = { clarifyTurn ->
+//                handleClarifyTurn(clarifyTurn)
+//            },
+//            onFinalAnswer = { finalAnswer ->
+//                handleFinalAnswerFromSocket(finalAnswer)
+//            },
+//            onStartSseConnection = { text ->
+//                handleStartSseConnection(text)
+//            },
+//            onCvDetectionFailed = { cvFailed ->
+//                handleCvDetectionFailed(cvFailed)
+//            },
+//            onClarifyQaTurn = { qaTurn ->
+//                handleClarifyQaTurn(qaTurn)
+//            },
+//            onWakewordDetected = {
+//                handleWakewordDetected()
+//            },
+//            onConnect = {
+//                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+//            },
+//            onDisconnect = {
+//                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+//            },
+//            onConnectError = { error ->
+//                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
+//            }
+//        )
 
         // 라즈베리파이 제어 API 초기화
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
@@ -337,18 +393,8 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "✅ Assistant 로직 초기화 완료")
     }
 
-    // MainActivitySttServer의 핵심 메서드들 (간소화 버전)
-    private fun handleStartSseConnection(text: String?) {
-        Log.i(TAG, "📡 SSE 연결 시작 요청 수신: text=${text?.take(50)}...")
-        lifecycleScope.launch {
-            try {
-                connectSseTaskStream()
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ SSE 연결 시작 요청 처리 실패: ${e.message}")
-                e.printStackTrace()
-            }
-        }
-    }
+    // Assistant 핵심 메서드들
+    // handleStartSseConnection 제거: 로그인 시 이미 /api/sse/stream에 연결되어 있음
 
     private fun handleIntentResult(intentResult: IntentResultDto) {
         Log.i(TAG, "📩 Intent 결과 수신: text=${intentResult.text}, intent=${intentResult.intent}, confidence=${intentResult.confidence}")
@@ -380,8 +426,25 @@ class WorkingActivity : AppCompatActivity() {
 
                         // 음성 파일 재생
                         Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
+                        // 모달 표시
+                        runOnUiThread {
+                            showModal("AI 서포터 on")
+                        }
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
+                            // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
+                            // 모달 숨기기
+                            runOnUiThread {
+                                hideModal()
+                            }
+
+                            // FastAPI 서버로 재생 완료 이벤트 전송
+                            val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
+                            if (success) {
+                                Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
+                            } else {
+                                Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                            }
                         }
                     }
 
@@ -395,10 +458,18 @@ class WorkingActivity : AppCompatActivity() {
 
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
+                        // 모달 표시
+                        runOnUiThread {
+                            showModal("통신 연결 중...")
+                        }
                         mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
-                            
+                            // 모달 숨기기
+                            runOnUiThread {
+                                hideModal()
+                            }
+
                             // FastAPI 서버로 재생 완료 이벤트 전송
                             val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
                             if (success) {
@@ -406,17 +477,25 @@ class WorkingActivity : AppCompatActivity() {
                             } else {
                                 Log.e(TAG, "❌ 모바일 OPERATOR 음성 파일 재생 완료 이벤트 전송 실패")
                             }
-                        }
 
-                        lifecycleScope.launch {
-                            val accessToken = authRepository.getAccessToken()
-                            if (accessToken.isNotEmpty()) {
-                                val receiverAccountId = 0L
-                                val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                                if (success) {
-                                    Log.i(TAG, "✅ WebRTC 연결 요청 완료")
+                            // intent_audio_completed 이벤트 전송 직후 WebRTC 요청 API 호출
+                            lifecycleScope.launch {
+                                val accessToken = authRepository.getAccessToken()
+                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+
+                                if (accessToken.isNotEmpty()) {
+                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                                    val receiverAccountId = -1L
+                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+
+                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                                    if (success) {
+                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                                    } else {
+                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                                    }
                                 } else {
-                                    Log.e(TAG, "❌ WebRTC 연결 요청 실패")
+                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
                                 }
                             }
                         }
@@ -443,25 +522,144 @@ class WorkingActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
+                // UI 업데이트: "통신 중..." 표시 (normal과 동일)
                 runOnUiThread {
-                    binding.taskName.text = message
+                    binding.taskName.text = "통신 중..."
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
+
+                // CV 탐지 실패 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
+                // 모달 표시
+                runOnUiThread {
+                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideModal()
+                    }
+
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송 실패")
+                    }
+
+                    // WebRTC 연결 요청 전송 (normal과 동일한 로직)
+                    lifecycleScope.launch {
+                        val accessToken = authRepository.getAccessToken()
+                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+
+                        if (accessToken.isNotEmpty()) {
+                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                            val receiverAccountId = -1L
+                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+
+                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                            if (success) {
+                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                            } else {
+                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                            }
+                        } else {
+                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+                        }
+                    }
+                }
+                
+                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ CV 탐지 실패 처리 실패: ${e.message}")
                 e.printStackTrace()
+                // 오류 발생 시에도 재생 완료 이벤트 전송 시도
+                socketIoSttClient.sendCvDetectionFailedAudioCompleted()
+            }
+        }
+    }
+
+    private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
+        Log.i(TAG, "📩 CV 탐지 정상 수신: ${cvNormal.message}")
+
+        lifecycleScope.launch {
+            try {
+                // UI 업데이트: "통신 중..." 표시
+                runOnUiThread {
+                    binding.taskName.text = "통신 중..."
+                }
+                Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
+
+                // CV 탐지 정상 음성 파일 재생
+                Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
+                // 모달 표시
+                runOnUiThread {
+                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
+                    // 재생 완료 콜백
+                    Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideModal()
+                    }
+
+                    // FastAPI 서버로 재생 완료 이벤트 전송
+                    val success = socketIoSttClient.sendCvDetectionNormalAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 완료")
+                    } else {
+                        Log.e(TAG, "❌ 모바일 CV 탐지 정상 음성 파일 재생 완료 이벤트 전송 실패")
+                    }
+
+                    lifecycleScope.launch {
+                        val accessToken = authRepository.getAccessToken()
+                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+
+                        if (accessToken.isNotEmpty()) {
+                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+                            val receiverAccountId = -1L
+                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+
+                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+                            if (success) {
+                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+                            } else {
+                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+                            }
+                        } else {
+                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+                        }
+                    }
+                }
+                
+                // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
+                raspberryPiControlRepository.notifyIntentDone("OPERATOR")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ CV 탐지 정상 처리 실패: ${e.message}")
+                e.printStackTrace()
+                // 오류 발생 시에도 재생 완료 이벤트 전송 시도
+                socketIoSttClient.sendCvDetectionNormalAudioCompleted()
             }
         }
     }
 
     private fun handleClarifyQaTurn(qaTurn: ClarifyQaTurnDto) {
-        Log.i(TAG, "📩 Clarify 질문/답변 턴 수신: session_id=${qaTurn.session_id}, turn_id=${qaTurn.turn_id}")
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📩 [모바일] Clarify 질문/답변 턴 수신")
+        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
+        Log.i(TAG, "   Gate Decision: ${qaTurn.gate_decision}")
+        Log.i(TAG, "   Need Clarify: ${qaTurn.need_clarify}")
+        Log.i(TAG, "============================================================")
 
         lifecycleScope.launch {
             try {
                 if (qaTurn.status == "error") {
-                    Log.e(TAG, "❌ Clarify 질문/답변 턴 오류: ${qaTurn.user_question}")
+                    Log.e(TAG, "❌ [모바일] Clarify 질문/답변 턴 오류: ${qaTurn.user_question}")
                     return@launch
                 }
 
@@ -469,18 +667,53 @@ class WorkingActivity : AppCompatActivity() {
                     binding.taskName.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
                 }
 
-                Log.i(TAG, "💬 작업자 질문: ${qaTurn.user_question}")
-                Log.i(TAG, "🤖 LLM 답변: ${qaTurn.llm_answer}")
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "💬 [모바일] 작업자 질문: ${qaTurn.user_question}")
+                Log.i(TAG, "🤖 [모바일] LLM 답변: ${qaTurn.llm_answer}")
+                Log.i(TAG, "============================================================")
 
                 if (qaTurn.audio_content != null && qaTurn.audio_content.isNotBlank()) {
-                    ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding)
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "🔊 [모바일] TTS 재생 시작")
+                    Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
+                    Log.i(TAG, "   오디오 인코딩: ${qaTurn.audio_encoding}")
+                    Log.i(TAG, "============================================================")
+                    ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding) {
+                        Log.i(TAG, "============================================================")
+                        Log.i(TAG, "✅ [모바일] TTS 재생 완료")
+                        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
+                        Log.i(TAG, "============================================================")
+                        Log.i(TAG, "============================================================")
+                        Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
+                        Log.i(TAG, "   Type: clarify_qa_turn")
+                        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
+                        Log.i(TAG, "============================================================")
+                        val success = socketIoSttClient.sendClarifyQaTurnAudioCompleted(
+                            qaTurn.session_id ?: "",
+                            qaTurn.turn_id ?: 1
+                        )
+                        if (success) {
+                            Log.i(TAG, "============================================================")
+                            Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
+                            Log.i(TAG, "   💡 라즈베리파이 Streaming STT는 계속 실행 중 (다음 질문 대기)")
+                            Log.i(TAG, "============================================================")
+                        } else {
+                            Log.e(TAG, "============================================================")
+                            Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
+                            Log.e(TAG, "============================================================")
+                        }
+                    }
                 }
 
                 if (!qaTurn.need_clarify) {
-                    Log.i(TAG, "✅ 충분히 구체화됨 - 최종 답변 대기 중")
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "✅ [모바일] 충분히 구체화됨 - 최종 답변 대기 중")
+                    Log.i(TAG, "============================================================")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Clarify 질문/답변 턴 처리 실패: ${e.message}")
+                Log.e(TAG, "============================================================")
+                Log.e(TAG, "❌ [모바일] Clarify 질문/답변 턴 처리 실패: ${e.message}")
+                Log.e(TAG, "============================================================")
                 e.printStackTrace()
             }
         }
@@ -507,7 +740,11 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
-        Log.i(TAG, "✅ 최종 답변 수신: session_id=${finalAnswer.session_id}, answer=${finalAnswer.answer.take(50)}...")
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "✅ [모바일] 최종 답변 수신 (GREEN → GPT-4o 생성 완료)")
+        Log.i(TAG, "   Session ID: ${finalAnswer.session_id}, Turn ID: ${finalAnswer.turn_id}")
+        Log.i(TAG, "   답변: ${finalAnswer.answer.take(100)}...")
+        Log.i(TAG, "============================================================")
 
         runOnUiThread {
             binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
@@ -520,7 +757,11 @@ class WorkingActivity : AppCompatActivity() {
         )
 
         if (finalAnswer.audio_content != null && finalAnswer.audio_content.isNotBlank()) {
-            Log.i(TAG, "🔊 최종 답변 TTS 재생 시작")
+            Log.i(TAG, "============================================================")
+            Log.i(TAG, "🔊 [모바일] 최종 답변 TTS 재생 시작")
+            Log.i(TAG, "   Session ID: ${finalAnswer.session_id}, Turn ID: ${finalAnswer.turn_id}")
+            Log.i(TAG, "   오디오 인코딩: ${finalAnswer.audio_encoding}")
+            Log.i(TAG, "============================================================")
         }
 
         isWaitingForClarification = false
@@ -557,28 +798,53 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
-        Log.i(TAG, "✅ 최종 답변: $answer")
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "✅ [모바일] 최종 답변 처리 시작")
+        Log.i(TAG, "   답변: ${answer.take(100)}...")
+        Log.i(TAG, "============================================================")
 
         if (audioContent != null && audioContent.isNotBlank()) {
             lifecycleScope.launch {
                 ttsRepository.playAudio(audioContent, mimeType) {
                     // 재생 완료 콜백
-                    Log.i(TAG, "✅ 최종 답변 TTS 재생 완료")
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "✅ [모바일] 최종 답변 TTS 재생 완료")
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
+                    Log.i(TAG, "   Type: final_answer")
+                    Log.i(TAG, "============================================================")
                     
                     // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
                     if (success) {
-                        Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송 완료")
+                        Log.i(TAG, "============================================================")
+                        Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
+                        Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+                        Log.i(TAG, "============================================================")
                     } else {
-                        Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패")
+                        Log.e(TAG, "============================================================")
+                        Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
+                        Log.e(TAG, "============================================================")
                     }
                 }
             }
         } else {
             // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
+            Log.i(TAG, "============================================================")
+            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작 (오디오 없음)")
+            Log.i(TAG, "   Type: final_answer")
+            Log.i(TAG, "============================================================")
             val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
             if (success) {
-                Log.i(TAG, "📤 모바일 최종 답변 재생 완료 이벤트 전송 완료 (오디오 없음)")
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료 (오디오 없음)")
+                Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+                Log.i(TAG, "============================================================")
+            } else {
+                Log.e(TAG, "============================================================")
+                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패 (오디오 없음)")
+                Log.e(TAG, "============================================================")
             }
         }
     }
@@ -593,6 +859,9 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun handleWakewordDetected() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
+        
+        // Wakeword 감지 시 communication_close 플래그 리셋 (새로운 서비스 시작)
+        hasSentCommunicationClose = false
 
         lifecycleScope.launch {
             try {
@@ -616,40 +885,140 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-    private fun connectSseTaskStream() {
-        lifecycleScope.launch {
-            val accessToken = authRepository.getAccessToken()
-            if (accessToken.isEmpty()) {
-                Log.e(TAG, "❌ 액세스 토큰이 없습니다. 로그인이 필요합니다.")
-                startActivity(Intent(this@WorkingActivity, LoginActivity::class.java))
-                finish()
-                return@launch
+    private fun showModal(statusMessage: String) {
+        if (aiOnDialog?.isVisible == true) return
+        aiOnDialog = AiOnDialog(statusMessage)
+        aiOnDialog?.show(supportFragmentManager, "waiting call")
+    }
+
+    private fun hideModal() {
+        aiOnDialog?.dismiss()
+        aiOnDialog = null
+    }
+
+
+    private fun setCallBack() {
+        socketIoSttClient.setCallbacks(
+            onSttResult = { text, type, confidence ->
+                Log.i(TAG, "🧠 STT 텍스트 수신: $text")
+                sttRepository.receiveFromRaspberryPi(text)
+            },
+            onClarifyResponse = { ragResponse ->
+                handleClarifyResponseFromSocket(ragResponse)
+            },
+            onIntentResult = { intentResult ->
+                handleIntentResult(intentResult)
+            },
+            onClarifyTurn = { clarifyTurn ->
+                handleClarifyTurn(clarifyTurn)
+            },
+            onFinalAnswer = { finalAnswer ->
+                handleFinalAnswerFromSocket(finalAnswer)
+            },
+            onCvDetectionNormal = { cvNormal ->
+                handleCvDetectionNormal(cvNormal)
+            },
+            onCvDetectionFailed = { cv ->
+                handleCvDetectionFailed(cv)
+            },
+            onClarifyQaTurn = { qa ->
+                handleClarifyQaTurn(qa)
+            },
+            onWakewordDetected = {
+                handleWakewordDetected()
+            },
+            onConnect = {
+                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+            },
+            onDisconnect = {
+                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
+            },
+            onConnectError = { error ->
+                Log.e(TAG, "❌ Socket 연결 오류: $error")
             }
+        )
+    }
 
-            sseTaskClient?.disconnect()
-
-            sseTaskClient = SseTaskClient(
-                baseUrl = SPRING_SERVER_URL,
-                accessToken = accessToken,
-                onConnect = {
-                    Log.i(TAG, "✅ SSE 작업 스트림 연결 성공")
-                },
-                onTaskAssign = { event ->
-                    Log.i(TAG, "📋 작업 할당 수신: taskId=${event.assignedTaskId}, userName=${event.assignedUserName}")
-                },
-                onTaskCancel = { event ->
-                    Log.i(TAG, "❌ 작업 취소 수신: taskId=${event.TaskId}")
-                },
-                onTaskEnd = { event ->
-                    Log.i(TAG, "✅ 작업 완료 수신: taskId=${event.TaskId}")
-                },
-                onError = { error ->
-                    Log.e(TAG, "❌ SSE 연결 오류: ${error.message}")
-                    error.printStackTrace()
+    private fun removeCallback() {
+        socketIoSttClient.setCallbacks(
+            onSttResult = null,
+            onClarifyResponse = null,
+            onIntentResult = null,
+            onClarifyTurn = null,
+            onFinalAnswer = null,
+            onStartSseConnection = null,
+            onCvDetectionNormal = null,
+            onCvDetectionFailed = null,
+            onClarifyQaTurn = null,
+            onWakewordDetected = null,
+        )
+    }
+    
+    /**
+     * 비정상 종료 시 wakeword 대기 상태로 복귀하기 위한 통신 종료 이벤트 전송
+     */
+    private fun sendCommunicationCloseForRecovery() {
+        try {
+            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+                val success = socketIoSttClient.sendCommunicationClose()
+                if (success) {
+                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
+                    hasSentCommunicationClose = true
+                } else {
+                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
                 }
-            )
-
-            sseTaskClient?.connect()
+            } else {
+                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 상태 초기화 및 wakeword 대기 상태로 복귀
+     * (onResume에서 호출하여 비정상 종료 후 다시 들어온 경우를 처리)
+     */
+    private fun resetToWakewordWaitingState() {
+        try {
+            Log.i(TAG, "🔄 상태 초기화 시작")
+            
+            // 세션 상태 초기화
+            isWaitingForClarification = false
+            currentSessionId = null
+            currentTurnId = 1
+            sessionManager.resetSession()
+            
+            // UI 초기화
+            runOnUiThread {
+                binding.taskName.text = "대기 중..."
+                hideModal()
+            }
+            
+            // 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)
+            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
+            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+                if (!hasSentCommunicationClose) {
+                    val success = socketIoSttClient.sendCommunicationClose()
+                    if (success) {
+                        Log.i(TAG, "✅ 상태 초기화 및 wakeword 대기 상태로 복귀 완료")
+                        hasSentCommunicationClose = true
+                    } else {
+                        Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+                    }
+                } else {
+                    Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (상태 초기화만 수행)")
+                }
+            } else {
+                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 상태 복귀 이벤트를 전송할 수 없습니다")
+            }
+            
+            // 다음 wakeword 감지를 위해 플래그 리셋
+            hasSentCommunicationClose = false
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 상태 초기화 중 오류: ${e.message}")
+            e.printStackTrace()
         }
     }
 }

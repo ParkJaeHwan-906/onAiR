@@ -41,7 +41,10 @@ public class SseManager {
         // SseEmitter timeout 발생
         emitter.onTimeout(emitter::complete);
         // SseEmitter error 발생
-        emitter.onError(throwable -> emitter.complete());
+        emitter.onError(throwable -> {
+            log.error("UnExpected SSE Disconnect [{}]", user.getUserInfo().getEmail());
+            emitter.complete();
+        });
 
         emitters.put(user.getUserAccountId(), emitter);
         companies.computeIfAbsent(user.getCompanyId(), k -> new ArrayList<>());
@@ -89,6 +92,7 @@ public class SseManager {
                     break;
                 }
             }
+            log.error("[SSE] Failed Send Message : [{}]", request);
             emitter.complete();
             retrySendMessage(disConnectedUserAccountId, request);
             throw new IllegalArgumentException("SSE 전송에 실패했습니다.");
@@ -150,6 +154,19 @@ public class SseManager {
     public void sendRequestWorkerToAdmin(Long companyId, Object data, String eventName) {
         UserInfoDto admin = companies.get(companyId).stream().filter((user) -> user.getRole().equals("관리자"))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("관리자가 부재중입니다."));
+
+        // SSE Emitter 를 지우지 않고, 기록하고 있으므로 Emitter 가 유효한지 확인
+//        SseEmitter adminEmitter = emitters.get(admin.getUserAccountId());
+//        try {
+//            // 더미 데이터 보내기
+//            adminEmitter.send(SseEmitter
+//                    .event()
+//                    .name("checkOnline")
+//                    .data(new Object())
+//                    .comment("flush"));
+//        } catch (Exception e) {
+//            throw new IllegalArgumentException("관리자가 부재중입니다.");
+//        }
 
         log.debug("receiver(admin) info : {}", admin);
 
@@ -220,6 +237,7 @@ public class SseManager {
             log.error("Cannot Found User");
             return;
         }
+        log.info("Message Stored : {}", request);
         pendingMessages.computeIfAbsent(userAccountId, k -> new ArrayList<>()).add(request);
     }
 

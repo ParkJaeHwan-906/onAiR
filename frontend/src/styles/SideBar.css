@@ -87,3 +87,26 @@
   color: var(--color-text-primary);
   font-weight: 700;
 }
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+
+.nav-button.active .nav-icon {
+  stroke-width: 2.7;
+  color: var(--color-text-primary);
+}
+
+/* 텍스트 bold 및 색상 */
+.nav-button:hover .button-text {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+/* 아이콘 스타일도 active처럼 */
+.nav-button:hover .nav-icon {
+  stroke-width: 2.7;
+  color: var(--color-text-primary);
+}

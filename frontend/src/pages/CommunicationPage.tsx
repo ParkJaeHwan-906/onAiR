@@ -47,7 +47,7 @@ export const CommunicationPage = () => {
       <div className="communication-container empty">
         <div className="communication-empty-card">
           <h2 className="communication-empty-title">
-            통화 연결을 준비하고 있어요
+            통신 연결을 준비하고 있어요
           </h2>
           <p className="communication-empty-sub">
             승인이 아직 완료되지 않았을 수 있어요. <br />
@@ -80,6 +80,7 @@ export const CommunicationPage = () => {
         token={token}
         serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
         connect={true}
+        audio={true}
       >
         <VideoFrame
           handleSerialize={handleSerialize}
