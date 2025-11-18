@@ -24,6 +24,7 @@ from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 import httpx
+from app.services.yolo_overlay import get_latest_yolo_result
 
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
@@ -163,6 +164,7 @@ def init_socketio():
     sio.on("register_device")(handle_register_device)
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
+    sio.on("wakeword_waiting_ready")(handle_wakeword_waiting_ready)  # 라즈베리파이에서 Wakeword 대기 준비 완료 이벤트 수신 (YOLO 서버 API 요청 트리거)
     sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("intent_audio_completed")(handle_intent_audio_completed)  # 모바일에서 Intent 음성 파일 재생 완료 이벤트 수신 (AI_SUPPORTER용)
     sio.on("audio_playback_completed")(handle_audio_playback_completed)  # 모바일에서 오디오 재생 완료 이벤트 수신 (CV 탐지 실패, Clarify Q&A 턴 등)
@@ -354,6 +356,38 @@ async def handle_wakeword_detected(sid, data):
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
 
 
+async def handle_wakeword_waiting_ready(sid, data):
+    """
+    라즈베리파이로부터 Wakeword 대기 준비 완료 이벤트 수신
+    YOLO 서버로 API 요청을 보내기 위한 트리거
+    """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] wakeword_waiting_ready 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   Data: {data}")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+    print("=" * 60)
+    
+    sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print("=" * 60)
+        print(f"⚠️ [오류] Wakeword 대기 준비 완료 이벤트는 라즈베리파이에서만 받을 수 있습니다.")
+        print(f"   수신자: {sender_device}")
+        print("=" * 60)
+        return
+    
+    print("=" * 60)
+    print(f"✅ [FastAPI] Wakeword 대기 준비 완료 이벤트 수신 [raspi]")
+    print(f"   💡 YOLO 서버로 API 요청을 보내기 위한 트리거")
+    print("=" * 60)
+    
+    await start_device_detector_task()
+    print("✅ YOLO 서버 시작")
+
 async def handle_wakeword_audio_completed(sid, data):
     """
     모바일로부터 음성 파일 재생 완료 이벤트 수신
@@ -449,7 +483,7 @@ async def handle_intent_audio_completed(sid, data):
 
             cv_raw = await run_anomaly_detection()
             print("CV 결과:", cv_raw)
-
+            
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
             has_anomaly = cv_raw.get("detected", False)
@@ -555,7 +589,7 @@ async def handle_intent_audio_completed(sid, data):
                 # 라즈베리파이로 CV 탐지 정상 알림 (마이크는 OFF 상태 유지)
                 await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
             else:
-                # CV 모델이 오류를 탐지한 경우
+                # CV 모델이 오류(=anomaly)를 탐지한 경우
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
@@ -563,6 +597,17 @@ async def handle_intent_audio_completed(sid, data):
                 device_type = cv_result.get("device_type", "unknown")
                 anomalies = cv_result.get("anomalies", {})
 
+                # ---------------------------
+                # 1) anomaly 존재 여부 확인
+                # ---------------------------
+                has_anomaly = any(
+                    m.get("status") == "anomaly"
+                    for m in anomalies.values()
+                )
+
+                # ---------------------------
+                # 2) RAG용 질의 문장 생성
+                # ---------------------------
                 query_parts = []
 
                 # 장비 유형
@@ -576,11 +621,13 @@ async def handle_intent_audio_completed(sid, data):
                         detected_modules.append(module_name)
 
                 if detected_modules:
-                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+                    # panel, gauge처럼 사실 메시지가 더 좋음 → 확장 가능
+                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다.")
                 else:
-                    query_parts.append("이상이 탐지되었습니다")
+                    query_parts.append("이상이 탐지되었습니다.")
 
                 query = " ".join(query_parts)
+
                 
                 print("=" * 60)
                 print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
@@ -735,21 +782,35 @@ async def handle_audio_playback_completed(sid, data):
     await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
     
     if audio_type == "cv_detection_failed":
-        # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+        # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태 (normal과 동일)
         print("=" * 60)
-        print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
+        print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
+        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+        print("=" * 60)
+        await wait_for_next_step("CV 탐지 실패 음성 파일 재생 완료 처리", "10-1")
+        
+        print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
+        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
         print("=" * 60)
         
-        # 세션 ID 생성 (Clarify 세션용)
-        import uuid
-        session_id = str(uuid.uuid4())
-        
-        await broadcast_to("raspi", "start_streaming_stt", {
-            "session_id": session_id,
-            "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
-        })
-        print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
-        await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        # ========================================
+        # [주석처리] 추후 사용을 위한 Streaming STT 로직
+        # ========================================
+        # # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+        # print("=" * 60)
+        # print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
+        # print("=" * 60)
+        # 
+        # # 세션 ID 생성 (Clarify 세션용)
+        # import uuid
+        # session_id = str(uuid.uuid4())
+        # 
+        # await broadcast_to("raspi", "start_streaming_stt", {
+        #     "session_id": session_id,
+        #     "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
+        # })
+        # print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
+        # await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
         
     elif audio_type == "cv_detection_normal":
         # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
@@ -1661,7 +1722,7 @@ async def handle_video_frame(sid, data):
     #--- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame)
+        await add_frame(frame, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
@@ -1671,7 +1732,7 @@ async def handle_video_frame(sid, data):
     if result["status"] not in ("ok", "init"):
         # print("[DEBUG] 모션 추적에 실패했습니다.")
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        await broadcast_to(['pc', 'mobile'], "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1708,10 +1769,28 @@ async def handle_video_frame(sid, data):
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", {
+    await broadcast_to(['pc', 'mobile'], "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
+    
+    try:
+        yolo_res = await get_latest_yolo_result()
+        if yolo_res:
+            frame_ts = yolo_res.get("frame_ts")
+
+            if frame_ts and abs(frame_ts - timestamp) <= 200:
+                payload = {
+                    "timestamp": frame_ts,
+                    "boxes": yolo_res.get("boxes", []),
+                }
+                await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
+
+    except Exception as e:
+        print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
+
+
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리

@@ -106,37 +106,37 @@ async def handle_video_stream(sid, data):
     print(f"📡 Received 'video_stream:{state}' from {sender_device}")
     await broadcast_to("raspi", "video_stream", {"state": state})
 
-@sio.on("video_frame")
-async def handle_video_frame(sid, data):
-    """라즈베리파이 → JPEG binary 수신 후 모션 추정"""
-    sender_device = device_map.get(sid, "unknown")
-    if not data:
-        return
+# @sio.on("video_frame")
+# async def handle_video_frame(sid, data):
+#     """라즈베리파이 → JPEG binary 수신 후 모션 추정"""
+#     sender_device = device_map.get(sid, "unknown")
+#     if not data:
+#         return
 
-    np_data = np.frombuffer(data, np.uint8)
-    frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-    if frame is None:
-        print("⚠️ Failed to decode frame")
-        return
+#     np_data = np.frombuffer(data, np.uint8)
+#     frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+#     if frame is None:
+#         print("⚠️ Failed to decode frame")
+#         return
 
-    # === 모션 계산 ===
-    result = await motion_core.process_frame(frame, sid=sid)
+#     # === 모션 계산 ===
+#     result = await motion_core.process_frame(frame, sid=sid)
 
-    # === 결과 전송 ===
-    if result["status"] == "ok":
-        x, y, z = result["x"], result["y"], result["z"]
-        print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
-        await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
-    else:
-        print(f"⚠️ Motion estimation status: {result['status']}")
+#     # === 결과 전송 ===
+#     if result["status"] == "ok":
+#         x, y, z = result["x"], result["y"], result["z"]
+#         print(f"📍 Camera position: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+#         await broadcast_to("pc", "ar_marker", {"x": x, "y": y, "z": z})
+#     else:
+#         print(f"⚠️ Motion estimation status: {result['status']}")
 
-    # === 프레임 브로드캐스트 (PC 디스플레이용) ===
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+#     # === 프레임 브로드캐스트 (PC 디스플레이용) ===
+#     _, jpeg_bytes = cv2.imencode(".jpg", frame)
+#     await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
     
 
-# === STT 결과 수신 및 FastAPI 서버로 전달 ===
-print(f"🔔 [DEBUG] stt_result 이벤트 핸들러 등록 시작")
+# # === STT 결과 수신 및 FastAPI 서버로 전달 ===
+# print(f"🔔 [DEBUG] stt_result 이벤트 핸들러 등록 시작")
 
 @sio.on("stt_result")
 async def handle_stt_result(sid, data):
