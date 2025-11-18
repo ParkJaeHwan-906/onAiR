@@ -43,23 +43,19 @@ async def get_device_state() -> dict | None:
     except:
         return None
 
-async def save_yolo_result(ts, label, confidence, box):
-    data = {
-        "frame_ts": ts,
-        "boxes": [
-            {
-                "label": label,
-                "confidence": float(confidence),
-                "x1": int(box["x1"]),
-                "y1": int(box["y1"]),
-                "x2": int(box["x2"]),
-                "y2": int(box["y2"]),
-            }
-        ],
-        "status": "ok",
-        "updated_at": int(time.time() * 1000)
-    }
-    await redis_client.set(YOLO_RESULT_KEY, json.dumps(data))
+async def save_yolo_result(frame_ts: int, boxes: list):
+    try:
+        payload = {
+            "frame_ts": frame_ts,
+            "boxes": boxes,                   # 여러 박스 저장
+            "status": "ok",
+            "updated_at": int(time.time() * 1000),
+        }
+
+        await redis_client.set(YOLO_RESULT_KEY, json.dumps(payload))
+
+    except Exception as e:
+        return None
 
 # ---------------------------
 # Frame Read-only (YOLO용)
@@ -85,3 +81,27 @@ async def get_cv_buffer_frames(n=30):
     return result
 
 
+async def get_latest_yolo_result():
+    """
+    Redis에 저장된 YOLO 결과(JSON)를 그대로 반환한다.
+    frame_ts, boxes, status만 그대로 프론트에 전달한다.
+    """
+
+    data = await redis_client.get(YOLO_RESULT_KEY)
+    if not data:
+        return None
+
+    try:
+        raw = json.loads(data)
+    except Exception:
+        return None
+
+    # --- 여기서 정합성 유지용 필드만 추출 ---
+    result = {
+        "frame_ts": raw.get("frame_ts"),
+        "boxes": raw.get("boxes", []),
+        "status": raw.get("status", "ok"),
+        "updated_at" : raw.get("updated_at", None)
+    }
+
+    return result
