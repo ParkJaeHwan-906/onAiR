@@ -3,6 +3,7 @@ package com.onair.mobile.assistant.data.stt
 import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.core.model.dto.RagResponse
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
@@ -52,6 +53,7 @@ class SocketIoSttClient(
     private var onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
+    private var onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
     private var onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
     private var onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
     private var onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -284,6 +286,27 @@ class SocketIoSttClient(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ CV 탐지 정상 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+
+            // cv_detection_anomaly 이벤트 수신 (CV 모델 이상 탐지 - 1단계: 간단한 알림)
+            socket?.on("cv_detection_anomaly") { args ->
+                Log.i(TAG, "🔔 [이벤트 수신] cv_detection_anomaly 이벤트 도착!")
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.i(TAG, "📩 CV 탐지 이상 수신: $jsonString")
+                        
+                        val cvAnomaly = gson.fromJson(jsonString, CvDetectionAnomalyDto::class.java)
+                        Log.i(TAG, "   → Message: ${cvAnomaly.message}")
+                        onCvDetectionAnomaly?.invoke(cvAnomaly)
+                    } else {
+                        Log.w(TAG, "⚠️ CV 탐지 이상 수신: 데이터가 null입니다")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ CV 탐지 이상 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
             }
@@ -643,6 +666,33 @@ class SocketIoSttClient(
     }
 
     /**
+     * CV 탐지 이상 음성 파일 재생 완료 이벤트 전송
+     *
+     * @return 전송 성공 여부
+     */
+    fun sendCvDetectionAnomalyAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "cv_detection_anomaly")
+                put("timestamp", System.currentTimeMillis())
+            }
+
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
      * Clarify Q&A 턴 TTS 재생 완료 이벤트 전송
      * 
      * @param sessionId Clarify 세션 ID
@@ -749,6 +799,7 @@ class SocketIoSttClient(
         onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
         onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
+        onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
         onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
         onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
@@ -763,6 +814,7 @@ class SocketIoSttClient(
         if (onStartSseConnection != null) this.onStartSseConnection = onStartSseConnection
         if (onCvDetectionNormal != null) this.onCvDetectionNormal = onCvDetectionNormal
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
+        if (onCvDetectionAnomaly != null) this.onCvDetectionAnomaly = onCvDetectionAnomaly
         if (onClarifyQaTurn != null) this.onClarifyQaTurn = onClarifyQaTurn
         if (onWakewordDetected != null) this.onWakewordDetected = onWakewordDetected
         if (onConnect != null) this.onConnect = onConnect

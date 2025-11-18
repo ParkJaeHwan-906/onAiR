@@ -11,6 +11,7 @@ data class FinalAnswerDto(
     val answer: String,
     val audio_content: String? = null,  // Base64 인코딩된 오디오
     val audio_encoding: String? = null,
+    val structured_answer: Map<String, Any>? = null,  // 구조화된 답변 (각 섹션별 TTS 포함)
     val citations: List<Citation>? = null
 )
 
