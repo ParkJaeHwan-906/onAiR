@@ -18,6 +18,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -31,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -43,11 +46,18 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toColorLong
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.utils.viewModelByFactory
+import io.livekit.android.compose.ui.RendererType
+import io.livekit.android.compose.ui.ScaleType
+import io.livekit.android.compose.ui.VideoTrackView
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.collections.emptyList
@@ -93,7 +103,6 @@ class CallActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-
         val socketClient = SocketHolder.socketClient
         Log.i("CallActivity", "📡 CallActivity에서 Socket 연결 상태 확인: isActive=${socketClient.isConnected()}")
         setContent {
@@ -102,21 +111,12 @@ class CallActivity : ComponentActivity() {
             }
         }
     }
-
-    private fun handleCommunicationClose() {
-        lifecycleScope.launch {
-            try {
-                finish()
-            } catch (e: Exception) {
-
-            }
-        }
-    }
 }
 
 @Composable
 fun CallScreen(viewModel: CallViewModel) {
 //    val activity = (LocalContext.current as? Activity)
+    val blueprintTrack by viewModel.blueprintTrack.collectAsState()
 
     Box(
         modifier = Modifier
@@ -126,8 +126,27 @@ fun CallScreen(viewModel: CallViewModel) {
         WhiteboardCanvas(
             viewModel = viewModel,
             modifier = Modifier.fillMaxSize(),
-
         )
+
+        blueprintTrack?.let {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .size(width = 220.dp, height = 160.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.6f))
+            ) {
+                VideoTrackView(
+                    videoTrack = it,
+                    modifier = Modifier.fillMaxSize(),
+                    passedRoom = viewModel.room,
+                    mirror = false,
+                    scaleType = ScaleType.Fill,
+                    rendererType = RendererType.Texture,
+                )
+            }
+        }
     }
 }
 private const val REMOTE_WIDTH = 480f
@@ -136,7 +155,7 @@ private const val REMOTE_HEIGHT = 360f
 @Composable
 fun WhiteboardCanvas(
     viewModel: CallViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ){
     BoxWithConstraints(modifier) {
         val screenWidth = constraints.maxWidth.toFloat()
@@ -317,6 +336,7 @@ private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<
 
     return Triple(scale, offsetX, offsetY)
 }
+
 @Composable
 fun ArMarker(marker: ArMarker, x: Float, y: Float) {
     val transition = rememberInfiniteTransition()
