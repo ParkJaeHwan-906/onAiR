@@ -1865,6 +1865,23 @@ async def accept_communication(sid, data):
     print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
     print("=" * 60)
 
+    # 기본 AR 컴포넌트 추가
+    global ar_markers
+    description = {
+        "type": "description",
+        "idx": -1,      # 마커에만 idx 적용
+        "info": {
+            "x": 0.0,
+            "y": 180.0,
+            "size": 10  # Client 에서 고정해서 사용
+        },
+        "color": None,
+        "pulseScale": None,
+        "pulseOpacity": None,
+        "opacity": None
+    }
+    ar_markers.append(description)
+
 # 웹에서 통신 종료 이벤트 전달
 @sio.on("communication_close")
 async def communication_close(sid, data):
@@ -2006,9 +2023,10 @@ async def handle_ar_marker(sid, data):
     u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
     # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
     size_px = motion_core.compute_marker_size(z_scale)
+    next_idx = sum(1 for m in ar_markers if m.get("type") == "marker") + 1
     marker = {
         "type": "marker",
-        "idx": len(ar_markers) + 1,
+        "idx": next_idx,
         "info": {
             "x": u_new,
             "y": v_new,
@@ -2043,8 +2061,11 @@ async def delete_marker(sid, data):
 
 
     # 삭제 이후 남아있는 모든 마커 idx를 다시 1부터 정렬할 필요가 있다면:
-    for i, marker in enumerate(ar_markers, start=1):
-        marker["idx"] = i
+    idx = 1
+    for marker in ar_markers:
+        if marker.get("type") == "marker":
+            marker["idx"] = idx
+            idx += 1
     
     # 전송을 하긴 하는데, 없어도 될듯?
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
