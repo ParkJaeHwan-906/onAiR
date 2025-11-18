@@ -36,14 +36,6 @@ async def run_anomaly_detection():
         res.raise_for_status()
         return res.json()
 
-async def stop_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/stop")
-
-async def start_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/start")
-
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
     import google.generativeai as genai
@@ -244,7 +236,6 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        await start_device_detector_task()
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
@@ -309,7 +300,6 @@ async def handle_wakeword_detected(sid, data):
     print(f"   연결된 디바이스: {list(set(device_map.values()))}")
     print("=" * 60)
 
-    await stop_device_detector_task()
     print("✅ 기기 탐지 종료")
     sender_device = device_map.get(sid, "unknown")
     print(f"   발신자 디바이스: {sender_device}")
@@ -1926,7 +1916,6 @@ async def communication_close(sid, data):
     print("=" * 60)
     print("📤 [통신 종료] 기기 탐지 작업 시작")
     print("=" * 60)
-    await start_device_detector_task()
     
     print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
 
