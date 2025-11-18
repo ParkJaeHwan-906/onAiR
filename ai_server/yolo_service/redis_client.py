@@ -62,12 +62,19 @@ async def save_yolo_result(frame_ts: int, boxes: list):
 # ---------------------------
 
 async def get_latest_frame():
-    data = await redis_client.get(LATEST_FRAME_KEY)
-    if not data:
-        return None
+    # 최신 프레임 + TS 둘 다 가져옴
+    jpg = await redis_client.get(LATEST_FRAME_KEY)
+    ts  = await redis_client.get(LATEST_TS_KEY)
 
-    jpg = np.frombuffer(data, dtype=np.uint8)
-    return cv2.imdecode(jpg, cv2.IMREAD_COLOR)
+    if jpg is None or ts is None:
+        return None, None
+
+    jpg_np = np.frombuffer(jpg, dtype=np.uint8)
+    frame = cv2.imdecode(jpg_np, cv2.IMREAD_COLOR)
+    timestamp = int(ts)
+
+    return frame, timestamp
+
 
 
 async def get_cv_buffer_frames(n=30):
