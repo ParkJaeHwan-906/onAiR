@@ -47,9 +47,9 @@ class SocketIOClient:
         # SSL 검증은 기본값 사용 (인증서 검증 활성화)
         self.sio = socketio.AsyncClient(
             reconnection=True,  # 자동 재연결 활성화
-            reconnection_attempts=5,  # 최대 5회 재시도
+            reconnection_attempts=0,  # 무한 재시도 (0 = 무제한)
             reconnection_delay=1,  # 1초 후 재시도
-            reconnection_delay_max=5  # 최대 5초 대기
+            reconnection_delay_max=10  # 최대 10초 대기
         )
         self.connected = False
         self.sid = None
@@ -418,6 +418,19 @@ class SocketIOClient:
             
             # 브리지 서버를 통해 Python 3.10으로 서비스 완료 신호 전달
             if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                # 브리지 서버 연결 상태 확인 및 재연결 시도
+                if not self.manager.bridge_client.is_connected():
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 재연결 시도...")
+                    logger.warning("=" * 60)
+                    connected = self.manager.bridge_client.ensure_connected(timeout=2.0)
+                    if not connected:
+                        logger.error("=" * 60)
+                        logger.error("❌ 브리지 서버 재연결 실패 - 서비스 완료 신호 전송 불가")
+                        logger.error("   메인 루프에서 타임아웃으로 처리됩니다.")
+                        logger.error("=" * 60)
+                        return
+                
                 if self.manager.bridge_client.is_connected():
                     try:
                         logger.info("=" * 60)
@@ -433,15 +446,18 @@ class SocketIOClient:
                     except Exception as e:
                         logger.error("=" * 60)
                         logger.error(f"❌ [서비스 완료 실패] 브리지 서버로 서비스 완료 신호 전송 실패: {e}")
+                        logger.error("   메인 루프에서 타임아웃으로 처리됩니다.")
                         logger.error("=" * 60)
                 else:
-                    logger.warning("=" * 60)
-                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 서비스 완료 신호를 전송할 수 없습니다.")
-                    logger.warning("=" * 60)
+                    logger.error("=" * 60)
+                    logger.error("❌ 브리지 서버에 연결되어 있지 않습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                    logger.error("   메인 루프에서 타임아웃으로 처리됩니다.")
+                    logger.error("=" * 60)
             else:
-                logger.warning("=" * 60)
-                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 서비스 완료 신호를 전송할 수 없습니다.")
-                logger.warning("=" * 60)
+                logger.error("=" * 60)
+                logger.error("❌ 브리지 클라이언트가 등록되지 않았습니다. 서비스 완료 신호를 전송할 수 없습니다.")
+                logger.error("   메인 루프에서 타임아웃으로 처리됩니다.")
+                logger.error("=" * 60)
         
         @self.sio.on("wakeword_audio_completed")
         async def handle_wakeword_audio_completed(data):
@@ -452,6 +468,20 @@ class SocketIOClient:
             
             # 브리지 서버를 통해 Python 3.10으로 모바일 음성 파일 재생 완료 신호 전달
             if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
+                # 브리지 서버 연결 상태 확인 및 재연결 시도
+                if not self.manager.bridge_client.is_connected():
+                    logger.warning("=" * 60)
+                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 재연결 시도...")
+                    logger.warning("=" * 60)
+                    connected = self.manager.bridge_client.ensure_connected(timeout=2.0)
+                    if not connected:
+                        error_msg = "브리지 서버 재연결 실패"
+                        logger.error("=" * 60)
+                        logger.error(f"❌ {error_msg}")
+                        logger.error("=" * 60)
+                        # 타임아웃으로 처리되도록 예외 발생 (메인 루프에서 타임아웃으로 처리됨)
+                        return
+                
                 if self.manager.bridge_client.is_connected():
                     try:
                         logger.info("=" * 60)
@@ -465,14 +495,22 @@ class SocketIOClient:
                         logger.error("=" * 60)
                         logger.error(f"❌ [모바일 음성 재생 완료 실패] 브리지 서버로 모바일 음성 파일 재생 완료 신호 전송 실패: {e}")
                         logger.error("=" * 60)
+                        # 타임아웃으로 처리되도록 예외 발생하지 않고 return (메인 루프에서 타임아웃으로 처리됨)
+                        return
                 else:
-                    logger.warning("=" * 60)
-                    logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
-                    logger.warning("=" * 60)
+                    error_msg = "브리지 서버에 연결되어 있지 않습니다"
+                    logger.error("=" * 60)
+                    logger.error(f"❌ {error_msg}")
+                    logger.error("=" * 60)
+                    # 타임아웃으로 처리되도록 return (메인 루프에서 타임아웃으로 처리됨)
+                    return
             else:
-                logger.warning("=" * 60)
-                logger.warning("⚠️ 브리지 클라이언트가 등록되지 않았습니다. 모바일 음성 파일 재생 완료 신호를 전송할 수 없습니다.")
-                logger.warning("=" * 60)
+                error_msg = "브리지 클라이언트가 등록되지 않았습니다"
+                logger.error("=" * 60)
+                logger.error(f"❌ {error_msg}")
+                logger.error("=" * 60)
+                # 타임아웃으로 처리되도록 return (메인 루프에서 타임아웃으로 처리됨)
+                return
     
     def _check_server_certificate(self):
         """
