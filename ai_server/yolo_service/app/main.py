@@ -2,7 +2,7 @@
 import asyncio
 from fastapi import FastAPI
 from loguru import logger
-
+from fastapi import APIRouter
 from ai_server.yolo_service.device_detector import start_device_detector
 from ai_server.yolo_service.redis_client import get_device_state
 from ai_server.yolo_service.anomaly import run_anomaly_detection
@@ -11,7 +11,6 @@ app = FastAPI(title="YOLO Worker Service", version="1.0")
 
 device_detector_task: asyncio.Task | None = None
 detector_lock = asyncio.Lock()
-
 
 # --------------------------------------------------------
 # 건강 체크
