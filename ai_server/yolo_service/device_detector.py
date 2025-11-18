@@ -55,7 +55,7 @@ async def device_detector_loop():
             logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
 
             # --- 2) YOLO 추론 ---
-            detections = yolo_infer(_device_model, frame, return_boxes=False)
+            detections = yolo_infer(_device_model, frame, return_boxes=True)
 
             # --- 3) 모든 박스 Redis 저장 ---
             all_boxes = []
