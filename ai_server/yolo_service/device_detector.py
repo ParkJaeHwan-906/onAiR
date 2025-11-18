@@ -20,7 +20,6 @@ _device_model = None
 async def device_detector_loop():
     global _device_model
     _device_model = load_yolo_model(ALL_MODEL_PATH)
-    
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
     # 2) Redis 상태 초기화
@@ -136,9 +135,6 @@ async def device_detector_loop():
 # 2) start_device_detector — Task 생성하지 말고 loop만 실행
 # ----------------------------------------------------------
 async def start_device_detector():
-    """main.py에서 Task로 실행할 엔트리 포인트.
-    Task는 main.py가 관리.
-    """
     try:
         await device_detector_loop()
     except asyncio.CancelledError:
