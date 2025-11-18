@@ -1,176 +1,143 @@
 import { useSocket } from "../utils/socketContext";
-import { useEffect, useRef, useState } from "react";
-import { VideoBuffer } from "../utils/VideoBuffer";
-import { PlaybackClock } from "../utils/PlaybackClock";
+import { useEffect, useRef } from "react";
 import "../styles/Communication/VideoFrame.css";
 
 function BackdoorPage() {
-  const socket = useSocket(); // 연결되어있는 소켓 객체를 가져옴
+  const socket = useSocket();
 
-  // 1. useState 제거 -> useRef로 변경
-  const imgRef = useRef<HTMLImageElement>(null);
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // 🎬 비디오 버퍼 관리
-  const videoBufferRef = useRef<VideoBuffer | null>(null);
+  const ORI_W = 360;
+  const ORI_H = 480;
 
-  // 비디오/오디오 동기화를 위한 clock
-  const clockRef = useRef<PlaybackClock | null>(null);
+  const getClassColor = (label: string) => {
+    if (["AHU", "Boiler", "Chiler"].includes(label)) return "#2563eb";
+    if (
+      [
+        "belt",
+        "control_panel",
+        "pressure_gauge",
+        "thermometer",
+        "temperature_FND",
+        "AHU_pannel",
+      ].includes(label)
+    )
+      return "#16a34a";
+    if (
+      [
+        "run_light",
+        "power_light",
+        "overheat_light",
+        "button_on",
+        "button_off",
+        "temperature_FND",
+      ].includes(label)
+    )
+      return "#eab308";
 
-  // 연결 상태만 최소한으로 관리 (UI 표시용)
-  const [isConnected, setIsConnected] = useState(false);
+    return "#9333ea";
+  };
 
-  // 페이지 이탈/창 닫기 감지 및 통신 종료 이벤트 전송
+  /* -----------------------------------------------------
+   * 1) 영상 그대로 그리기 (cover 제거)
+   * -----------------------------------------------------*/
+  const drawVideo = (img: HTMLImageElement, canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, ORI_W, ORI_H);
+    ctx.drawImage(img, 0, 0, ORI_W, ORI_H);
+  };
+
+  /* -----------------------------------------------------
+   * 2) Overlay 그대로 원본 좌표로 렌더링
+   * -----------------------------------------------------*/
+  const drawOverlay = (overlay: any) => {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, ORI_W, ORI_H);
+
+    ctx.lineWidth = 1.6;
+    ctx.font = "12px Arial";
+
+    overlay.boxes?.forEach((b: any) => {
+      if (b.confidence < 0.4) return;
+
+      const color = getClassColor(b.label);
+
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+
+      ctx.strokeRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+      ctx.fillText(
+        `${b.label} ${(b.confidence * 100).toFixed(1)}%`,
+        b.x1,
+        b.y1 - 4
+      );
+    });
+  };
+
+  /* -----------------------------------------------------
+   * 3) 영상 수신
+   * -----------------------------------------------------*/
   useEffect(() => {
     if (!socket) return;
 
-    // 브라우저 창/탭 닫기, 새로고침 감지
-    const handleBeforeUnload = () => {
-      socket.emit("communication_close", null);
+    const handleFrame = (data: { frame: ArrayBuffer }) => {
+      const canvas = videoCanvasRef.current;
+      if (!canvas) return;
+
+      const img = new Image();
+      img.onload = () => {
+        drawVideo(img, canvas);
+      };
+
+      img.src = URL.createObjectURL(new Blob([data.frame]));
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // 컴포넌트 언마운트 시 (다른 페이지로 이동)
+    socket.on("video_frame", handleFrame);
     return () => {
-      // socket.emit("communication_close", null);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      socket.off("video_frame", handleFrame);
     };
   }, [socket]);
 
-  // 오디오 재생용 useEffect
-  useEffect(() => {
-    if (!socket) return;
-    let workletNode: AudioWorkletNode;
-
-    // 1️⃣ AudioContext 생성 (오디오 처리를 담당하는 컨텍스트)
-    const audioContext = new AudioContext({
-      latencyHint: 'interactive', 
-      sampleRate: 48000 // 브라우저 기준
-    });
-
-    // AudioWorklet 모듈 등록
-    audioContext.audioWorklet.addModule("/audio-processor.js").then(() => {
-      workletNode = new AudioWorkletNode(audioContext, "audio-processor");
-      workletNode.connect(audioContext.destination);
-
-      // 소켓 이벤트 수신
-      const handleAudioFrame = (data: { 
-        timestamp: number; 
-        frame: ArrayBuffer 
-      }) => {
-        console.log("[DEBUG] 오디오 프레임 수신: " + data.timestamp)
-        const floatData = new Float32Array(data.frame);
-        // AudioWorklet으로 전달
-        workletNode.port.postMessage({
-          type: "audio_frame", 
-          frame: floatData,
-          timestamp: data.timestamp
-        });
-      };
-
-      socket.on("audio_frame", handleAudioFrame); // 이벤트 리스너 등록
-
-      // 6️⃣ cleanup: 컴포넌트 언마운트 시 연결 해제 및 메모리 정리
-      return () => {
-        if (workletNode) workletNode.disconnect();
-        audioContext.close();
-        socket.off("audio_frame", handleAudioFrame);
-      };
-    });
-  }, [socket]);
-
-
-  // 비디오 재생용 useEffect (버퍼링 적용)
+  /* -----------------------------------------------------
+   * 4) Overlay 수신
+   * -----------------------------------------------------*/
   useEffect(() => {
     if (!socket) return;
 
-    // 🎬 VideoBuffer 초기화
-    const videoBuffer = new VideoBuffer({
-      maxBufferSize: 10,     // 최대 10프레임
-      // 프레임 준비 완료 시 콜백
-      onFrameReady: (blobUrl: string) => {
-        if (imgRef.current) {
-          // 이전 Blob URL 정리
-          if (imgRef.current.src.startsWith("blob:")) {
-            URL.revokeObjectURL(imgRef.current.src);
-          }
-          imgRef.current.src = blobUrl;
-        }
-      },
-    });
-    
-    videoBufferRef.current = videoBuffer;
-
-    // 비디오 프레임 수신 핸들러
-    const handleVideoFrame = (data: { timestamp: number; frame: ArrayBuffer }) => {
-      // 🎬 버퍼에 프레임 추가 (버퍼가 알아서 재생 관리)
-      videoBuffer.enqueue(data.timestamp, data.frame);
-
-      // 첫 프레임 수신 시 연결 상태 업데이트
-      if (!isConnected) {
-        setIsConnected(true);
-      }
+    const handleOverlay = (data: any) => {
+      drawOverlay(data);
     };
 
-    // 서버로부터 video_frame 이벤트 수신
-    socket.on("video_frame", handleVideoFrame);
-
-    // cleanup 시점에 사용할 ref 값 저장
-    const currentImgRef = imgRef.current;
-
+    socket.on("video_overlay", handleOverlay);
     return () => {
-      socket.off("video_frame", handleVideoFrame);
-      
-      // 🎬 비디오 버퍼 정리
-      videoBuffer.clear();
-
-      // Blob URL 정리 (메모리 누수 방지)
-      if (currentImgRef && currentImgRef.src.startsWith("blob:")) {
-        URL.revokeObjectURL(currentImgRef.src);
-      }
+      socket.off("video_overlay", handleOverlay);
     };
-  }, [socket, isConnected]);
-
-
-  // 비디오/오디오 동기화용 useEffect
-  useEffect(() => {
-    // clock 생성
-    const clock = new PlaybackClock();
-    clock.start();
-    clockRef.current = clock;
-  
-    // 타이머 루프 생성 (60fps)
-    const interval = setInterval(() => {
-      const now = clock.now();
-  
-      // ⏱ video worker로 clock 전달
-      if (videoBufferRef.current) {
-        videoBufferRef.current.updateClock(now);
-      }
-    }, 16); // 약 60fps
-  
-    return () => clearInterval(interval);
-  }, []);
-
+  }, [socket]);
 
   return (
-    <div className="video-canvas">
-      <div className="video-canvas-inner">
-        {/* <VideoTrack /> */}
-        {/* <p style={{ color: "white" }}>(Video)</p> */}
-
-        {/* 3. ref 연결 및 초기 상태 제어 */}
-        <img
-          ref={imgRef}
-          alt="Video Stream"
-          className="video-canvas-image"
-          style={{
-            display: "block"
-          }}
-        />
-      </div>
+    <div className="backdoor-canvas">
+      <canvas
+        ref={videoCanvasRef}
+        className="backdoor-canvas-image"
+        width={360}
+        height={480}
+      />
+      <canvas
+        ref={overlayCanvasRef}
+        className="backdoor-canvas-overlay"
+        width={360}
+        height={480}
+      />
     </div>
   );
-};
+}
 
 export default BackdoorPage;
