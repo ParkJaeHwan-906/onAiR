@@ -139,9 +139,11 @@ def run_stt_loop():
             if mode == "buffered":
                 # 버퍼링 방식: 3~5초 수집 후 일괄 처리 (분기처리 이전)
                 # 마이크는 이미 켜져있음
+                logger.info("🎙️ 버퍼링 STT 세션 시작")
                 buffered_stt_running["running"] = True
                 try:
                     await buffered_stt.run(mic, broadcast)
+                    logger.info("✅ 버퍼링 STT 세션 완료")
                 except Exception as e:
                     logger.error(f"❌ 버퍼링 STT 실행 중 오류: {e}")
                     import traceback
@@ -233,18 +235,30 @@ def run_stt_loop():
     
     # Wakeword 감지 대기 시작 콜백 등록
     def handle_wakeword_start_waiting():
-        """Wakeword 감지 대기 시작 처리"""
+        """Wakeword 감지 대기 시작 처리 (CV 탐지 성공 시 FastAPI에서 wakeword_start_waiting 이벤트로 호출)"""
+        # 마이크 상태 확인 및 활성화
+        if not mic.is_active():
+            mic.resume()
+        
+        # Wakeword 감지기 재개
         if wakeword_detector and wakeword_detector.interpreter is not None:
             wakeword_detector.resume()
             mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-            
-            # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송 (YOLO 서버 API 요청 트리거용)
-            try:
-                send_wakeword_waiting_ready()
-                # 로그 최소화: 정상 전송 시 로그 제거
-            except Exception as e:
-                # 로그 최소화: 무시 가능한 오류는 로그 제거
-                pass
+        
+        # 버퍼링 STT 실행 상태 리셋
+        buffered_stt_running["running"] = False
+        
+        # CV 탐지 성공 시 wakeword_start_waiting 이벤트로 서비스 완료 처리
+        # (메인 루프가 service_completed 이벤트를 기다리는 동안 이 이벤트가 오는 경우)
+        service_completed_flag_global["completed"] = True
+        
+        # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송 (YOLO 서버 API 요청 트리거용)
+        try:
+            send_wakeword_waiting_ready()
+            # 로그 최소화: 정상 전송 시 로그 제거
+        except Exception as e:
+            # 로그 최소화: 무시 가능한 오류는 로그 제거
+            pass
     
     set_wakeword_start_waiting_callback(handle_wakeword_start_waiting)
     
@@ -278,6 +292,9 @@ def run_stt_loop():
     
     set_mic_release_callback(handle_mic_release)
     
+    # 서비스 완료 플래그 (전역 변수로 관리하여 handle_mic_acquire에서 접근 가능하도록)
+    service_completed_flag_global = {"completed": False}
+    
     # 마이크 장치 재점유 콜백 등록 (WebRTC 프로세스가 마이크를 해제한 후)
     def handle_mic_acquire():
         """마이크 장치 재점유 처리 (WebRTC 프로세스가 마이크를 해제한 후)"""
@@ -295,6 +312,10 @@ def run_stt_loop():
         
         # 버퍼링 STT 실행 상태 리셋 (혹시 실행 중이었다면)
         buffered_stt_running["running"] = False
+        
+        # Operator 분기에서 통신 종료 시 service_completed 플래그를 True로 설정
+        # (메인 루프가 service_completed 이벤트를 기다리는 동안 통신이 종료된 경우)
+        service_completed_flag_global["completed"] = True
         
         # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송 (YOLO 서버 API 요청 트리거용)
         try:
@@ -315,9 +336,8 @@ def run_stt_loop():
         Args:
             reason: 복귀 이유
         """
-        # 로그 최소화: 중요한 오류만 로깅
-        if "소켓" in reason or "연결" in reason or "STT 결과" in reason or "음성 인식" in reason:
-            logger.warning(f"⚠️ Wakeword 대기 상태로 복귀: {reason}")
+        # Wakeword 감지 대기 상태로 복귀 로그 (항상 출력)
+        logger.info(f"🔄 Wakeword 감지 대기 중 상태로 복귀: {reason}")
         
         try:
             # 마이크 상태 확인 및 활성화
@@ -351,23 +371,31 @@ def run_stt_loop():
                         wakeword_detector.resume()
                         mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
                 
-                # ② Wakeword 감지 대기
+                # ② Wakeword 감지 대기 (타임아웃을 설정하여 주기적으로 상태 확인)
                 try:
-                    wakeword_detected = wait_for_wakeword()
-                    if not wakeword_detected:
-                        # Wakeword 감지 실패 (타임아웃 등) - 로그 최소화
-                        reset_to_wakeword_waiting("Wakeword 감지 실패")
-                        continue
+                    # 1초 타임아웃으로 반복 호출하여 wakeword_start_waiting 이벤트에 반응 가능하도록 함
+                    wakeword_detected = False
+                    while not wakeword_detected:
+                        wakeword_detected = wait_for_wakeword(timeout=1.0)
+                        if not wakeword_detected:
+                            # 타임아웃 발생 (1초마다 반복)
+                            # wakeword 감지기가 활성화되어 있는지 확인
+                            if wakeword_detector and wakeword_detector.interpreter is not None:
+                                if wakeword_detector.is_paused:
+                                    # 감지기가 일시 중지된 경우 재개
+                                    wakeword_detector.resume()
+                                    mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
+                            # 계속 대기
+                            continue
                     
-                    # 로그 최소화: 정상 감지 시 로그 제거
+                    # Wakeword 감지 로그
+                    logger.info("🎤 Wakeword 감지됨")
                     
                     # Wakeword 감지 후 즉시 wakeword 콜백 비활성화 (STT 세션 중 wakeword 감지 중지)
                     mic.disable_wakeword_callback()
                     if wakeword_detector:
                         wakeword_detector.pause()
                 except Exception as e:
-                    # 로그 최소화: 오류만 기록
-                    logger.error(f"❌ Wakeword 감지 오류: {e}")
                     reset_to_wakeword_waiting(f"Wakeword 감지 오류: {e}")
                     continue
                 
@@ -389,21 +417,16 @@ def run_stt_loop():
                                 # 브리지 클라이언트가 연결되지 않음
                                 if attempt < max_retry_attempts - 1:
                                     time.sleep(retry_delay)
-                                else:
-                                    logger.error("❌ 브리지 클라이언트 연결 실패 (최대 재시도 횟수 초과)")
                         except Exception as e:
                             if attempt < max_retry_attempts - 1:
                                 time.sleep(retry_delay)
-                            else:
-                                logger.error(f"❌ Wakeword 이벤트 전송 실패: {e}")
                 except Exception as e:
-                    logger.error(f"❌ Wakeword 이벤트 전송 오류: {e}")
                     reset_to_wakeword_waiting(f"Wakeword 이벤트 전송 오류: {e}")
                     continue
                 
                 # FastAPI 연결 실패 시 wakeword 대기 상태로 복귀 (소켓 연결 오류)
                 if not wakeword_sent_successfully:
-                    reset_to_wakeword_waiting("소켓 연결 실패")
+                    reset_to_wakeword_waiting("Wakeword 이벤트 전송 실패")
                     continue
                 
                 # 모바일에서 음성 파일 재생 완료 대기
@@ -423,35 +446,35 @@ def run_stt_loop():
                     time.sleep(0.5)  # 0.5초마다 확인
                 
                 if not wakeword_audio_completed_flag["completed"]:
-                    reset_to_wakeword_waiting("모바일 음성 파일 재생 완료 신호 미수신")
+                    reset_to_wakeword_waiting("모바일 음성 파일 재생 완료 신호 미수신 (타임아웃)")
                     continue
                 
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
                 try:
                     loop.run_until_complete(stt_session())
                 except ValueError as e:
-                    # 버퍼링 STT에서 음성이 감지되지 않은 경우 (None 또는 빈 텍스트)
+                    # 버퍼링 STT에서 음성이 감지되지 않은 경우 (None, 빈 텍스트, 타임아웃)
                     error_msg = str(e)
-                    if "STT 결과가 None" in error_msg or "음성이 인식되지 않았습니다" in error_msg:
-                        logger.warning(f"⚠️ 음성 인식 실패: {error_msg}")
+                    if "STT 결과가 None" in error_msg or "음성이 인식되지 않았습니다" in error_msg or "음성 입력 타임아웃" in error_msg:
                         reset_to_wakeword_waiting(f"음성 인식 실패: {error_msg}")
                     else:
-                        logger.error(f"❌ STT 세션 실행 중 오류: {e}")
                         reset_to_wakeword_waiting(f"STT 세션 실행 오류: {e}")
                     continue
                 except Exception as e:
                     # 소켓 연결 오류 등 기타 예외
                     error_msg = str(e)
                     if "연결" in error_msg or "connection" in error_msg.lower() or "socket" in error_msg.lower():
-                        logger.warning(f"⚠️ 소켓 연결 오류: {error_msg}")
                         reset_to_wakeword_waiting(f"소켓 연결 오류: {error_msg}")
                     else:
-                        logger.error(f"❌ STT 세션 실행 중 오류: {e}")
                         reset_to_wakeword_waiting(f"STT 세션 실행 오류: {e}")
                     continue
                 
-                # 서비스 완료 대기 (FastAPI 서버에서 GPT-4o 답변 생성 및 TTS 완료 후 service_completed 이벤트 수신)
-                service_completed_flag = {"completed": False}
+                # 서비스 완료 대기
+                # - Operator 분기: 통신 종료 시 handle_mic_acquire()에서 플래그 설정
+                # - CV 탐지 실패/정상: 통신 종료 시 handle_mic_acquire()에서 플래그 설정
+                # - CV 탐지 성공: wakeword_start_waiting 이벤트로 handle_wakeword_start_waiting()에서 플래그 설정
+                service_completed_flag_global["completed"] = False  # 플래그 리셋
+                service_completed_flag = service_completed_flag_global  # 전역 플래그 사용
                 
                 def on_service_completed():
                     """서비스 완료 콜백 (브리지 서버를 통해 호출됨)"""
@@ -460,14 +483,22 @@ def run_stt_loop():
                 # 서비스 완료 콜백 등록
                 set_service_completed_callback(on_service_completed)
                 
-                max_wait_time = 300  # 최대 5분 대기
+                # 첫 이벤트 타임아웃: 7초 (Intent 분류 후 첫 이벤트가 오지 않으면 타임아웃)
+                first_event_timeout = 7  # 7초
                 wait_start = time.time()
                 
-                while not service_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
+                while not service_completed_flag["completed"]:
+                    elapsed = time.time() - wait_start
+                    
+                    # 첫 이벤트 타임아웃 확인 (7초 내에 첫 이벤트가 오지 않으면 타임아웃)
+                    if elapsed >= first_event_timeout and not service_completed_flag["completed"]:
+                        reset_to_wakeword_waiting(f"첫 이벤트 미수신 (타임아웃: {first_event_timeout}초)")
+                        break  # while 루프 종료하여 continue로 이동
+                    
                     time.sleep(0.5)  # 0.5초마다 확인
                 
+                # 첫 이벤트 타임아웃이 발생한 경우 메인 루프의 다음 반복으로 이동
                 if not service_completed_flag["completed"]:
-                    reset_to_wakeword_waiting("서비스 완료 신호 미수신 (타임아웃)")
                     continue
                 
                 # 서비스 완료 후 wakeword 감지 대기 상태로 복귀 (항상 실행)
@@ -476,9 +507,6 @@ def run_stt_loop():
                 
                 time.sleep(0.5)  # 0.5초 대기 (다음 루프 전)
             except Exception as e:
-                logger.error(f"❌ 메인 루프 실행 중 예외 발생: {e}")
-                import traceback
-                traceback.print_exc()
                 reset_to_wakeword_waiting(f"메인 루프 실행 오류: {e}")
                 time.sleep(1)  # 오류 후 잠시 대기
                 # 예외 발생 후 다시 루프로 복귀
@@ -487,9 +515,6 @@ def run_stt_loop():
                 # KeyboardInterrupt 등 시스템 예외도 처리
                 if isinstance(e, KeyboardInterrupt):
                     raise  # KeyboardInterrupt는 상위로 전파
-                logger.error(f"❌ 메인 루프 실행 중 시스템 예외 발생: {e}")
-                import traceback
-                traceback.print_exc()
                 reset_to_wakeword_waiting(f"메인 루프 시스템 오류: {e}")
                 time.sleep(1)  # 오류 후 잠시 대기
                 continue

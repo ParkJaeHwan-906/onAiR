@@ -109,20 +109,54 @@ class GcpBufferedStt:
                 except:
                     break
         
-        # 3~5초 동안 음성 수집
+        # 3~5초 동안 음성 수집 (타임아웃 처리 포함)
         buffer = []
         start_time = time.time()
         target_duration = self.buffer_duration
+        
+        # 음성 입력 타임아웃: 3초 동안 실제 음성이 들어오지 않으면 타임아웃
+        SPEECH_TIMEOUT_SEC = 3.0
+        last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
+        MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
         
         chunk_count = 0
         while time.time() - start_time < target_duration:
             chunk = mic.read()
             if chunk is None:
                 break
+            
+            # 실제 음성인지 확인 (RMS 값으로)
+            has_speech = False
             if isinstance(chunk, np.ndarray):
+                # RMS 계산
+                audio_array = chunk.astype(np.int16) if chunk.dtype != np.int16 else chunk
+                rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
+                if rms >= MIN_RMS_THRESHOLD:
+                    has_speech = True
+                    last_speech_time = time.time()
                 buffer.append(chunk.tobytes())
             else:
+                # bytes인 경우 numpy로 변환하여 확인
+                try:
+                    audio_array = np.frombuffer(chunk, dtype=np.int16)
+                    rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
+                    if rms >= MIN_RMS_THRESHOLD:
+                        has_speech = True
+                        last_speech_time = time.time()
+                except:
+                    pass
                 buffer.append(chunk)
+            
+            # 타임아웃 확인: 3초 동안 실제 음성이 없으면 타임아웃
+            current_time = time.time()
+            if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
+                # 타임아웃 발생
+                error_msg = "음성 입력 타임아웃 (3초 동안 음성이 감지되지 않음)"
+                await broadcaster({
+                    "type": "error",
+                    "text": error_msg
+                })
+                raise ValueError(error_msg)
         
         if not buffer:
             await broadcaster({
