@@ -114,6 +114,7 @@ dependencies {
     androidTestUtil "androidx.test:orchestrator:1.4.2"
 
     implementation libs.livekit.android.compose.components
+    implementation libs.livekit.android
     implementation libs.androidx.activity.compose
 //    implementation libs.androidx.hilt.navigation.fragment
 //    implementation(libs.hilt.android)
