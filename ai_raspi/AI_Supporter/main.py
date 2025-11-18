@@ -106,8 +106,20 @@ def run_socketio_client():
         
         try:
             # 무한 대기 (Ctrl+C로 종료)
+            # 주기적으로 브리지 서버 연결 상태 확인 및 재연결 시도 (더 자주 확인)
+            check_interval = 5  # 5초마다 확인 (더 빠른 재연결)
+            last_check = 0
+            
             while True:
                 await asyncio.sleep(1)
+                
+                # 주기적으로 브리지 서버 연결 상태 확인 및 즉시 재연결 시도
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_check >= check_interval:
+                    last_check = current_time
+                    if bridge_client and not bridge_client.is_connected():
+                        # 즉시 재연결 시도 (더 빠른 복구)
+                        bridge_client.ensure_connected(timeout=3.0)
         except KeyboardInterrupt:
             logger.info("🛑 종료 중...")
             await socketio_client.disconnect()

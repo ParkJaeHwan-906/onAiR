@@ -35,7 +35,7 @@ function WorkDetail({ work }: WorkDetailProps) {
       if (!isConnected) connect();
 
       // 작업자가 요청할 때는 receiverAccountId를 -1로 전송
-      const res = await sendConnectionRequest(-1);
+      const res = await sendConnectionRequest(-1, _description);
 
       if (!res.success) {
         alert(res.message || "연결 요청 중 오류가 발생했습니다.");
