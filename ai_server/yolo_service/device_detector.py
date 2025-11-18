@@ -10,8 +10,8 @@ import time
 DETECTION_INTERVAL = 2.0
 
 # 안정성 파라미터
-CONF_THRESHOLD = 0.7
-STABLE_COUNT_REQUIRED = 3
+CONF_THRESHOLD = 0.75
+STABLE_COUNT_REQUIRED = 5
 
 _device_model = None
 # ----------------------------------------------------------
@@ -19,6 +19,8 @@ _device_model = None
 # ----------------------------------------------------------
 async def device_detector_loop():
     global _device_model
+    _device_model = load_yolo_model(ALL_MODEL_PATH)
+    
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
     # 2) Redis 상태 초기화
