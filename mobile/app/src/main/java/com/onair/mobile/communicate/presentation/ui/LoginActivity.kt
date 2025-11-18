@@ -2,6 +2,7 @@ package com.onair.mobile.communicate.presentation.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -37,12 +38,10 @@ class LoginActivity : AppCompatActivity() {
                 if (state) {
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                     finish()
+                } else {
+                    Toast.makeText(this@LoginActivity, viewModel.errorMassage.value, Toast.LENGTH_SHORT)
                 }
             }
         }
-
-
-
-
     }
 }

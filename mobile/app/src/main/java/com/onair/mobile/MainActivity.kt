@@ -13,7 +13,7 @@ import com.onair.mobile.communicate.data.AuthRepository
 import com.onair.mobile.communicate.data.SSERepository
 import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.ApiService
-import com.onair.mobile.communicate.data.sse.SseClient
+import com.onair.mobile.communicate.data.source.remote.SseClient
 import com.onair.mobile.communicate.presentation.ui.CommunicationViewModel
 import com.onair.mobile.communicate.presentation.ui.LoginActivity
 import com.onair.mobile.communicate.presentation.ui.MainViewModel
