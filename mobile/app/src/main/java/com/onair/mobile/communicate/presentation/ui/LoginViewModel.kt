@@ -12,6 +12,8 @@ class LoginViewModel(
 ) : ViewModel() {
     private val _loginState = MutableStateFlow<Boolean>(false)
     val loginState = _loginState.asStateFlow()
+    private val _errorMassage = MutableStateFlow<String>("")
+    val errorMassage = _errorMassage.asStateFlow()
 
     fun login(email: String, pw: String) {
         authRepository.login(email, pw) { result ->
@@ -19,6 +21,7 @@ class LoginViewModel(
                 _loginState.value = true
             }.onFailure { e ->
                 _loginState.value = false
+                _errorMassage.value = e.message.toString()
             }
         }
     }

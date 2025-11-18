@@ -24,6 +24,7 @@ from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 import httpx
+from app.services.yolo_overlay import get_latest_yolo_result
 
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
@@ -34,14 +35,6 @@ async def run_anomaly_detection():
         res = await client.post(url, json={"trigger": "run"})
         res.raise_for_status()
         return res.json()
-
-async def stop_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/stop")
-
-async def start_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/start")
 
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
@@ -243,7 +236,6 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        await start_device_detector_task()
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
@@ -308,7 +300,6 @@ async def handle_wakeword_detected(sid, data):
     print(f"   연결된 디바이스: {list(set(device_map.values()))}")
     print("=" * 60)
 
-    await stop_device_detector_task()
     print("✅ 기기 탐지 종료")
     sender_device = device_map.get(sid, "unknown")
     print(f"   발신자 디바이스: {sender_device}")
@@ -381,11 +372,6 @@ async def handle_wakeword_waiting_ready(sid, data):
     
     print("=" * 60)
     print(f"✅ [FastAPI] Wakeword 대기 준비 완료 이벤트 수신 [raspi]")
-    print(f"   💡 YOLO 서버로 API 요청을 보내기 위한 트리거")
-    print("=" * 60)
-    
-    await start_device_detector_task()
-    print("✅ YOLO 서버 시작")
 
 async def handle_wakeword_audio_completed(sid, data):
     """
@@ -482,7 +468,7 @@ async def handle_intent_audio_completed(sid, data):
 
             cv_raw = await run_anomaly_detection()
             print("CV 결과:", cv_raw)
-
+            
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
             has_anomaly = cv_raw.get("detected", False)
@@ -536,9 +522,12 @@ async def handle_intent_audio_completed(sid, data):
             
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
-            detected_value = cv_result.get("detected", False)
+            detected = cv_result["detected"]
+            has_anomaly = cv_result["has_anomaly"]
+            device_type = cv_result.get("device_type", "unknown")
+            anomalies = cv_result.get("anomalies", {})
             
-            if not detected_value:
+            if not detected:
                 # CV 모델이 오류를 탐지하지 못한 경우
                 print("=" * 60)
                 print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
@@ -567,7 +556,7 @@ async def handle_intent_audio_completed(sid, data):
                 
                 # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
                 # (라즈베리파이에서 이 이벤트를 받아서 처리)
-            elif detected_value == "Normal":
+            elif detected and not has_anomaly:
                 # CV 모델이 정상 상태를 탐지한 경우
                 print("=" * 60)
                 print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
@@ -588,14 +577,14 @@ async def handle_intent_audio_completed(sid, data):
                 # 라즈베리파이로 CV 탐지 정상 알림 (마이크는 OFF 상태 유지)
                 await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
             else:
-                # CV 모델이 오류를 탐지한 경우
+                # CV 모델이 오류(=anomaly)를 탐지한 경우
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
 
-                device_type = cv_result.get("device_type", "unknown")
-                anomalies = cv_result.get("anomalies", {})
-
+                # ---------------------------
+                # RAG용 질의 문장 생성
+                # ---------------------------
                 query_parts = []
 
                 # 장비 유형
@@ -609,11 +598,14 @@ async def handle_intent_audio_completed(sid, data):
                         detected_modules.append(module_name)
 
                 if detected_modules:
-                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+                    # panel, gauge처럼 사실 메시지가 더 좋음 → 확장 가능
+                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다.")
                 else:
-                    query_parts.append("이상이 탐지되었습니다")
+                    query_parts.append("이상이 탐지되었지만 세부 모듈 정보는 감지되지 않았습니다.")
+
 
                 query = " ".join(query_parts)
+
                 
                 print("=" * 60)
                 print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
@@ -765,15 +757,14 @@ async def handle_audio_playback_completed(sid, data):
     print(f"📝 FastAPI 서버: 모바일 오디오 재생 완료 이벤트 수신 [mobile]")
     print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
     print("=" * 60)
-    await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
     
+    # CV 탐지 실패/정상은 OPERATOR와 동일하게 즉시 처리 (wait_for_next_step 제거)
     if audio_type == "cv_detection_failed":
         # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태 (normal과 동일)
         print("=" * 60)
         print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
         print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
         print("=" * 60)
-        await wait_for_next_step("CV 탐지 실패 음성 파일 재생 완료 처리", "10-1")
         
         print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
         print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
@@ -804,7 +795,6 @@ async def handle_audio_playback_completed(sid, data):
         print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
         print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
         print("=" * 60)
-        await wait_for_next_step("CV 탐지 정상 음성 파일 재생 완료 처리", "10-1")
         
         print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
         print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
@@ -1708,7 +1698,7 @@ async def handle_video_frame(sid, data):
     #--- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame)
+        await add_frame(frame, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
@@ -1759,6 +1749,24 @@ async def handle_video_frame(sid, data):
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
+    
+    try:
+        yolo_res = await get_latest_yolo_result()
+        if yolo_res:
+            frame_ts = yolo_res.get("frame_ts")
+
+            if frame_ts and abs(frame_ts - timestamp) <= 200:
+                payload = {
+                    "timestamp": frame_ts,
+                    "boxes": yolo_res.get("boxes", []),
+                }
+                await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
+
+    except Exception as e:
+        print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
+
+
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
@@ -1857,6 +1865,23 @@ async def accept_communication(sid, data):
     print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
     print("=" * 60)
 
+    # 기본 AR 컴포넌트 추가
+    global ar_markers
+    description = {
+        "type": "description",
+        "idx": -1,      # 마커에만 idx 적용
+        "info": {
+            "x": 0.0,
+            "y": 180.0,
+            "size": 10  # Client 에서 고정해서 사용
+        },
+        "color": None,
+        "pulseScale": None,
+        "pulseOpacity": None,
+        "opacity": None
+    }
+    ar_markers.append(description)
+
 # 웹에서 통신 종료 이벤트 전달
 @sio.on("communication_close")
 async def communication_close(sid, data):
@@ -1908,7 +1933,6 @@ async def communication_close(sid, data):
     print("=" * 60)
     print("📤 [통신 종료] 기기 탐지 작업 시작")
     print("=" * 60)
-    await start_device_detector_task()
     
     print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
 
@@ -1999,9 +2023,10 @@ async def handle_ar_marker(sid, data):
     u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
     # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
     size_px = motion_core.compute_marker_size(z_scale)
+    next_idx = sum(1 for m in ar_markers if m.get("type") == "marker") + 1
     marker = {
         "type": "marker",
-        "idx": len(ar_markers) + 1,
+        "idx": next_idx,
         "info": {
             "x": u_new,
             "y": v_new,
@@ -2036,8 +2061,11 @@ async def delete_marker(sid, data):
 
 
     # 삭제 이후 남아있는 모든 마커 idx를 다시 1부터 정렬할 필요가 있다면:
-    for i, marker in enumerate(ar_markers, start=1):
-        marker["idx"] = i
+    idx = 1
+    for marker in ar_markers:
+        if marker.get("type") == "marker":
+            marker["idx"] = idx
+            idx += 1
     
     # 전송을 하긴 하는데, 없어도 될듯?
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})

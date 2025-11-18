@@ -15,16 +15,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +44,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.toColorLong
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -55,7 +52,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.onair.mobile.R
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import io.livekit.android.compose.ui.RendererType
@@ -66,6 +62,9 @@ import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.collections.emptyList
 import androidx.core.graphics.toColorInt
+import androidx.lifecycle.lifecycleScope
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import kotlinx.coroutines.launch
 
 data class TimedPath(
     val path: Path,
@@ -104,7 +103,6 @@ class CallActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-        Log.d("CALL", "Call Activity 호출")
         val socketClient = SocketHolder.socketClient
         Log.i("CallActivity", "📡 CallActivity에서 Socket 연결 상태 확인: isActive=${socketClient.isConnected()}")
         setContent {
@@ -151,8 +149,8 @@ fun CallScreen(viewModel: CallViewModel) {
         }
     }
 }
-private const val REMOTE_WIDTH = 640f
-private const val REMOTE_HEIGHT = 480f
+private const val REMOTE_WIDTH = 480f
+private const val REMOTE_HEIGHT = 360f
 
 @Composable
 fun WhiteboardCanvas(
@@ -182,27 +180,29 @@ fun WhiteboardCanvas(
 
     //    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
         val markers by viewModel.arMarkers.collectAsState(initial = emptyList<ArMarker>())
-//        LaunchedEffect(Unit) {
-//            viewModel.arMarkers.collect {
-//                Log.i("CallActivity", "🎨 Activity에서 AR 마커 UI 업데이트: ${it.size}")
-//            }
-//        }
-        val context = LocalContext.current
+        var pulseMarkers: List<ArMarker>? = null
 
-    //    LaunchedEffect(Unit) {
-    //        while (true) {
-    //            delay(100)
-    //            markers = markers.map { marker ->
-    //                val newScale = marker.pulseScale + 0.03f
-    //                val newOpacity = marker.pulseOpacity - 0.2f
-    //                if (newScale > 1.6f) {
-    //                    marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
-    //                } else {
-    //                    marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
-    //                }
-    //            }
-    //        }
-    //    }
+        val context = LocalContext.current
+        LaunchedEffect(viewModel) {
+            viewModel.finishEvent.collect {
+                (context as? Activity)?.finish()
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(100)
+                pulseMarkers = markers.map { marker ->
+                    val newScale = marker.pulseScale + 0.03f
+                    val newOpacity = marker.pulseOpacity - 0.2f
+                    if (newScale > 1.6f) {
+                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+                    } else {
+                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+                    }
+                }
+            }
+        }
 
         LaunchedEffect(viewModel) {
             viewModel.dataReceived.collect { jsonString ->
@@ -214,12 +214,7 @@ fun WhiteboardCanvas(
                     val tool = json.optString("tool", "pen")
 
                     val colorString = json.optString("color", "white")
-                    currentColor =  when (colorString) {
-                        "red" -> Color.Red
-                        "blue" -> Color.Blue
-                        "yellow" -> Color.Yellow
-                        else -> Color.White
-                    }
+                    currentColor =  Color(colorString.toColorInt())
                     if (tool == "pen") {
                         when (eventType) {
                             "draw-start" -> {
@@ -278,6 +273,8 @@ fun WhiteboardCanvas(
                 var currentColor: Color? = null
                 val shadowRadius = 15f
 
+                drawRect(Color.Black)
+
                 val trigger = pathTrigger
                 val now = System.currentTimeMillis()
                 val fadeDurationMillis = 1000L
@@ -291,7 +288,7 @@ fun WhiteboardCanvas(
                         frameworkPaint.setShadowLayer(
                             shadowRadius,
                             0f, 0f,
-                            timedPath.color.copy(alpha = alpha).toArgb()
+                            Color(timedPath.color.toColorLong()).copy(alpha = alpha).toArgb()
                         )
                         canvas.drawPath(timedPath.path, linePaint)
                     }
@@ -345,8 +342,8 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
     val transition = rememberInfiniteTransition()
 
     val scale by transition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.5f,
+        initialValue = marker.info.size,
+        targetValue = marker.info.size*2.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -370,17 +367,9 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
 
         drawCircle(
             color = Color(marker.color.toColorInt()).copy(alpha = pulseAlpha),
-            radius = marker.pulseScale,
+            radius = scale,
             center = Offset(x, y),
             style = Stroke(width = 4f)
         )
     }
 }
-//private fun parseColor(colorString: String?): Color {
-//    return when (colorString?.lowercase()) {
-//        "red" -> Color.Red
-//        "blue" -> Color.Blue
-//        "yellow" -> Color.Yellow
-//        else -> Color.White
-//    }
-//}
