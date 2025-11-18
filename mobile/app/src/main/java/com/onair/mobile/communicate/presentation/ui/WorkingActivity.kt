@@ -135,7 +135,6 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onResume() {
         super.onResume()
         if (::socketIoSttClient.isInitialized) {
@@ -197,35 +196,31 @@ class WorkingActivity : AppCompatActivity() {
             workingViewModel.endTask(taskId, "")
         }
     }
-
     private fun observeViewModel() {
         lifecycleScope.launch {
-//            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    sseViewModel.eventFlow.collectLatest { event ->
-                        Log.d("SSE_working", event.toString())
-                        when (event) {
-                            is SseEvent.CallRequest -> showCallRequestCard(event.data)
-                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
-                            else -> Unit
-                        }
+            launch {
+                sseViewModel.eventFlow.collectLatest { event ->
+                    Log.d("SSE_working", event.toString())
+                    when (event) {
+                        is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                        is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
+                        else -> Unit
                     }
                 }
-                launch {
-                    workingViewModel.endStatus.collect { success ->
-                        if (success) {
-                            setResult(RESULT_OK)
-                            finish()
-                        } else {
-                            Toast.makeText(
-                                this@WorkingActivity,
-                                "작업 완료 처리 실패",
-                                Toast.LENGTH_SHORT).show()
-                        }
+            }
+            launch {
+                workingViewModel.endStatus.collect { success ->
+                    if (success) {
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        Toast.makeText(
+                            this@WorkingActivity,
+                            "작업 완료 처리 실패",
+                            Toast.LENGTH_SHORT).show()
                     }
                 }
-
-
+            }
         }
     }
     private fun showCallRequestCard(data: JSONObject) {
@@ -252,7 +247,7 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
-                if (!token.isNullOrBlank()) {
+                if (token.isNotBlank()) {
                     val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
@@ -387,14 +382,15 @@ class WorkingActivity : AppCompatActivity() {
 
                         // UI 업데이트: "AI Supporter on" (1초간)
                         runOnUiThread {
-                            binding.taskName.text = "AI Supporter on"
+//                            binding.taskName.text = "AI Supporter on"
                         }
 
                         // 1초 후 "오류 탐지 중..." 표시
                         lifecycleScope.launch {
                             kotlinx.coroutines.delay(1000)
                             runOnUiThread {
-                                binding.taskName.text = "오류 탐지 중..."
+//                                binding.taskName.text = "오류 탐지 중..."
+                                showModal("오류 탐지 중...")
                             }
                         }
 
@@ -426,9 +422,9 @@ class WorkingActivity : AppCompatActivity() {
                         Log.i(TAG, "✅ OPERATOR 분기 처리 시작")
 
                         // UI 업데이트: "통신 중..." 표시
-                        runOnUiThread {
-                            binding.taskName.text = "통신 중..."
-                        }
+//                        runOnUiThread {
+//                            binding.taskName.text = "통신 중..."
+//                        }
 
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
@@ -506,7 +502,7 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
                 // 모달 표시
                 runOnUiThread {
-                    showModal("오류 탐지에 실패하였습니다.\nAI 서포터와의 대화를 통해 문제 상황을 해결해드리겠습니다.")
+                    showModal("오류 탐지 실패")
                 }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
@@ -536,16 +532,16 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 // UI 업데이트: "통신 중..." 표시
-                runOnUiThread {
-                    binding.taskName.text = "통신 중..."
-                }
+//                runOnUiThread {
+//                    binding.taskName.text = "통신 중..."
+//                }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
                 // 모달 표시
                 runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                    showModal("관리자와 통신 연결 중...")
                 }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
                     // 재생 완료 콜백
