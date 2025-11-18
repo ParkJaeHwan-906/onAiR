@@ -29,7 +29,6 @@ class CvRagResponse(BaseModel):
 @router.post("/cv/rag")
 def process_cv_detection_rag(
     request: CvDetectionRequest = Body(...),
-    include_tts: bool = Query(False, description="TTS 변환 포함 여부 (기본값: False)"),
     include_debug: bool = Query(True, description="RAG 디버그 정보 포함 여부 (기본값: True)")
 ) -> CvRagResponse:
     """
@@ -39,7 +38,6 @@ def process_cv_detection_rag(
     
     Args:
         request: CV 탐지 결과
-        include_tts: True면 TTS 변환 포함, False면 텍스트만 반환 (기본값: False)
     """
     try:
         # 1. CV 결과에서 쿼리 생성 (socket_handler.py 564-583줄 로직)
@@ -52,11 +50,16 @@ def process_cv_detection_rag(
         if device_type and device_type != "unknown":
             query_parts.append(f"{device_type}에서")
         
-        # 모듈별 이상 탐지
+        # 모듈별 이상 탐지 (detail 필드 포함)
         detected_modules = []
         for module_name, module_res in anomalies.items():
             if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
-                detected_modules.append(module_name)
+                # detail 필드가 있으면 module_name.detail 형식으로 사용
+                detail = module_res.get("detail")
+                if detail:
+                    detected_modules.append(f"{module_name}.{detail}")
+                else:
+                    detected_modules.append(module_name)
         
         if detected_modules:
             query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
@@ -113,21 +116,33 @@ def process_cv_detection_rag(
         else:
             # 3. GPT-4o로 최종 답변 생성 - socket_handler.py 625줄 로직
             snippets = [h["source"]["content"] for h in used_hits]
-            answer_result = llm_generate_answer(query, snippets, used_hits)
+            
+            # error_code 추출 (첫 번째 이상 탐지된 모듈의 detail 사용)
+            error_code = None
+            for module_name, module_res in anomalies.items():
+                if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+                    detail = module_res.get("detail")
+                    if detail:
+                        error_code = f"{module_name}.{detail}"
+                    else:
+                        error_code = module_name
+                    break  # 첫 번째 이상만 사용
+            
+            answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
             answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
             structured_answer = answer_result
         
-        # 4. TTS 변환 (선택적) - include_tts 파라미터로 제어
+        # 4. TTS 변환 (무조건 수행)
         audio_content = None
         audio_encoding = None
-        if include_tts:
-            try:
-                tts_result = text_to_speech(answer_text)
-                audio_content = tts_result.get("audio_content")
-                audio_encoding = tts_result.get("mime_type")
-            except Exception as e:
-                # TTS 실패해도 답변은 반환
-                pass
+        try:
+            tts_result = text_to_speech(answer_text)
+            audio_content = tts_result.get("audio_content")
+            audio_encoding = tts_result.get("mime_type")
+        except Exception as e:
+            # TTS 실패해도 답변은 반환
+            print(f"⚠️ TTS 변환 실패: {e}")
+            pass
         
         # 5. 응답 구성
         return CvRagResponse(
