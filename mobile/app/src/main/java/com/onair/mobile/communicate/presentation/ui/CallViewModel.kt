@@ -19,6 +19,8 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.datastream.incoming.TextStreamReceiver
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.LocalScreencastVideoTrack
+import io.livekit.android.room.track.RemoteVideoTrack
+import io.livekit.android.room.track.TrackPublication
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import io.livekit.android.room.track.Track
+
 
 class CallViewModel(
     val url : String,
@@ -88,6 +92,10 @@ class CallViewModel(
 
     val arMarkers = SocketHolder.socketClient.arMarkers
 
+    // blueprint-canvas 영상 트랙
+    private val _blueprintTrack = MutableStateFlow<RemoteVideoTrack?>(null)
+    val blueprintTrack: StateFlow<RemoteVideoTrack?> = _blueprintTrack.asStateFlow()
+
     init {
 //        room.registerTextStreamHandler(
 //            topic = "1k.chat",
@@ -99,18 +107,26 @@ class CallViewModel(
 //            }
 //        )
         viewModelScope.launch {
-            room.events.collect {
-                when (it) {
+            room.events.collect { event ->
+                when (event) {
                     is RoomEvent.DataReceived -> {
-                        val jsonString = it.data.toString(Charsets.UTF_8)
+                        val jsonString = event.data.toString(Charsets.UTF_8)
                         Log.d("data receive", jsonString)
                         _dataReceived.emit(jsonString)
                     }
                     is RoomEvent.FailedToConnect -> {
-                        Log.e("data receive", it.error.toString())
+                        Log.e("data receive", event.error.toString())
+                    }
+
+                    // blueprint-canvas 받아오기
+                    is RoomEvent.TrackSubscribed -> {
+                        handleBlueprintTrackSubscribed(event.track, event.publication)
+                    }
+                    is RoomEvent.TrackUnsubscribed -> {
+                        handleBlueprintTrackUnsubscribed(event.publications)
                     }
                     else -> {
-                        Log.d("room event", "$it")
+                        Log.d("room event", "$event")
                     }
                 }
             }
@@ -145,6 +161,27 @@ class CallViewModel(
         super.onCleared()
         room.disconnect()
         room.release()
+    }
+
+    private fun handleBlueprintTrackSubscribed(track: io.livekit.android.room.track.Track?, publication: TrackPublication) {
+        if (publication.name != BLUEPRINT_TRACK_NAME || publication.source != Track.Source.SCREEN_SHARE) {
+            return
+        }
+        val remoteVideoTrack = track as? RemoteVideoTrack ?: return
+        _blueprintTrack.value = remoteVideoTrack
+        Log.i("CallViewModel", "📺 blueprint-canvas track subscribed sid=${remoteVideoTrack.sid}")
+    }
+
+    private fun handleBlueprintTrackUnsubscribed(publication: TrackPublication) {
+        if (publication.name != BLUEPRINT_TRACK_NAME || publication.source != Track.Source.SCREEN_SHARE) {
+            return
+        }
+        _blueprintTrack.value = null
+        Log.i("CallViewModel", "🗑 blueprint-canvas track removed")
+    }
+
+    companion object {
+        private const val BLUEPRINT_TRACK_NAME = "blueprint-canvas"
     }
 
 }
