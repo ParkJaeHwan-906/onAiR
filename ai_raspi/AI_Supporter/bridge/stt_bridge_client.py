@@ -43,24 +43,48 @@ class SttBridgeClient:
         @self.sio.on('stt_result')
         def on_stt_result(data):
             """STT 결과를 FastAPI 서버로 전송"""
-            if self.socketio_fastapi_client and self.socketio_fastapi_client.is_connected():
-                try:
-                    def send_async():
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        try:
-                            new_loop.run_until_complete(self.socketio_fastapi_client.emit_stt_result(data))
-                            # 로그 최소화: 정상 전송 시 로그 제거
-                        finally:
-                            new_loop.close()
-                    
-                    import threading
-                    thread = threading.Thread(target=send_async, daemon=True)
-                    thread.start()
-                except Exception as e:
-                    logger.error(f"❌ STT 결과 전송 실패: {e}")
-            else:
-                logger.warning("⚠️ FastAPI 클라이언트 미연결")
+            # FastAPI 클라이언트 연결 상태 확인 및 재연결 시도
+            if not (self.socketio_fastapi_client and self.socketio_fastapi_client.is_connected()):
+                logger.error(f"❌ FastAPI 클라이언트 미연결 - STT 결과 전송 불가")
+                logger.error("   메인 루프에서 ConnectionError로 처리되어 wakeword 대기 상태로 복귀합니다.")
+                # broadcast() 함수에서 ConnectionError를 발생시켜 메인 루프에서 처리
+                # 여기서는 예외를 발생시키지 않고 로그만 출력 (이벤트 핸들러 내부이므로)
+                return
+            
+            try:
+                send_success = [False]
+                send_error = [None]
+                
+                def send_async():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result = new_loop.run_until_complete(self.socketio_fastapi_client.emit_stt_result(data))
+                        send_success[0] = result
+                        if not result:
+                            send_error[0] = "STT 결과 전송 실패"
+                    except Exception as e:
+                        send_error[0] = str(e)
+                        send_success[0] = False
+                    finally:
+                        new_loop.close()
+                
+                import threading
+                thread = threading.Thread(target=send_async, daemon=False)
+                thread.start()
+                thread.join(timeout=5)
+                
+                if not send_success[0]:
+                    error_msg = send_error[0] or "STT 결과 전송 실패"
+                    logger.error(f"❌ FastAPI 클라이언트 연결 실패 - {error_msg}")
+                    logger.error("   메인 루프에서 ConnectionError로 처리되어 wakeword 대기 상태로 복귀합니다.")
+                    # broadcast() 함수에서 ConnectionError를 발생시켜 메인 루프에서 처리
+                    # 여기서는 예외를 발생시키지 않고 로그만 출력 (이벤트 핸들러 내부이므로)
+            except Exception as e:
+                logger.error(f"❌ STT 결과 전송 실패: {e}")
+                logger.error("   메인 루프에서 ConnectionError로 처리되어 wakeword 대기 상태로 복귀합니다.")
+                # broadcast() 함수에서 ConnectionError를 발생시켜 메인 루프에서 처리
+                # 여기서는 예외를 발생시키지 않고 로그만 출력 (이벤트 핸들러 내부이므로)
         
         # Wakeword 감지 이벤트 수신 (Python 3.10 → Python 3.13 → FastAPI)
         @self.sio.on('wakeword_detected')
@@ -334,11 +358,8 @@ class SttBridgeClient:
             except:
                 pass
         
-        # 초기 연결 실패 시 빠른 재시도 (최대 20회, 1초 간격)
-        max_retries = 20
-        retry_count = 0
-        
-        while retry_count < max_retries:
+        # 초기 연결 실패 시 연결될 때까지 무한 재시도 (1초 간격)
+        while True:
             try:
                 self.sio.connect(self.bridge_url, wait_timeout=3)
                 if self.sio.connected:
@@ -348,18 +369,7 @@ class SttBridgeClient:
             except:
                 pass
             
-            retry_count += 1
-            time.sleep(1)  # 1초 간격으로 빠르게 재시도
-        
-        # 최종 실패 시 재연결 스레드 시작 (백그라운드에서 계속 재시도)
-        self.connected = False
-        self._start_reconnect_thread()
-        
-        # 재연결을 위해 계속 시도 (재연결 옵션이 활성화되어 있음)
-        try:
-            self.sio.wait()  # 재연결 대기
-        except:
-            pass
+            time.sleep(1)  # 1초 간격으로 재시도
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
