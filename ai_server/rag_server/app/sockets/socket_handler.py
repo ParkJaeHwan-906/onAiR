@@ -532,9 +532,12 @@ async def handle_intent_audio_completed(sid, data):
             
             await wait_for_next_step("CV 모델 실행 완료", "9")
             
-            detected_value = cv_result.get("detected", False)
+            detected = cv_result["detected"]
+            has_anomaly = cv_result["has_anomaly"]
+            device_type = cv_result.get("device_type", "unknown")
+            anomalies = cv_result.get("anomalies", {})
             
-            if not detected_value:
+            if not detected:
                 # CV 모델이 오류를 탐지하지 못한 경우
                 print("=" * 60)
                 print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
@@ -563,7 +566,7 @@ async def handle_intent_audio_completed(sid, data):
                 
                 # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
                 # (라즈베리파이에서 이 이벤트를 받아서 처리)
-            elif detected_value == "Normal":
+            elif detected and not has_anomaly:
                 # CV 모델이 정상 상태를 탐지한 경우
                 print("=" * 60)
                 print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
@@ -589,19 +592,8 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
 
-                device_type = cv_result.get("device_type", "unknown")
-                anomalies = cv_result.get("anomalies", {})
-
                 # ---------------------------
-                # 1) anomaly 존재 여부 확인
-                # ---------------------------
-                has_anomaly = any(
-                    m.get("status") == "anomaly"
-                    for m in anomalies.values()
-                )
-
-                # ---------------------------
-                # 2) RAG용 질의 문장 생성
+                # RAG용 질의 문장 생성
                 # ---------------------------
                 query_parts = []
 
@@ -619,7 +611,8 @@ async def handle_intent_audio_completed(sid, data):
                     # panel, gauge처럼 사실 메시지가 더 좋음 → 확장 가능
                     query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다.")
                 else:
-                    query_parts.append("이상이 탐지되었습니다.")
+                    query_parts.append("이상이 탐지되었지만 세부 모듈 정보는 감지되지 않았습니다.")
+
 
                 query = " ".join(query_parts)
 
