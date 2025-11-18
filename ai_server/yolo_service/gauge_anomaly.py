@@ -2,9 +2,6 @@ import cv2
 import numpy as np
 from loguru import logger
 
-# sharpness threshold
-MIN_SHARPNESS = 70.0
-
 # gauge config
 THERMO_CONFIG = {
     "min_angle": 240,
@@ -20,11 +17,20 @@ PRESS_CONFIG = {
     "max_val": 2.0
 }
 
-
-def calc_sharpness(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    return cv2.Laplacian(gray, cv2.CV_64F).var()
-
+# -----------------------------
+# RAG-friendly 메시지 매핑
+# -----------------------------
+GAUGE_RAG_MESSAGE = {
+    "normal": "게이지는 정상 범위입니다.",
+    "thermo_high": "온도계의 온도가 비정상적으로 높습니다.",
+    "thermo_low": "온도계의 온도가 비정상적으로 낮습니다.",
+    "pressure_high": "압력계의 압력이 허용 범위를 초과했습니다.",
+    "pressure_low": "압력계의 압력이 허용 범위보다 낮습니다.",
+    "no_frame": "프레임을 가져오지 못해 게이지 상태를 분석할 수 없습니다.",
+    "not_found": "게이지가 탐지되지 않았습니다.",
+    "exception": "게이지 분석 중 오류가 발생했습니다.",
+    "unknown": "게이지 종류를 판단할 수 없습니다."
+}
 
 # -------------------------------------
 # FAST GAUGE ANGLE + VALUE
@@ -34,7 +40,6 @@ def detect_gauge_angle_fast(roi, cfg):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # --- circle detection ---
     circles = cv2.HoughCircles(
         blur,
         cv2.HOUGH_GRADIENT,
@@ -46,11 +51,9 @@ def detect_gauge_angle_fast(roi, cfg):
         maxRadius=0,
     )
 
-    # ROI 중심 / 반경 robust 계산
     img_center = np.array([w / 2, h / 2])
 
     if circles is None:
-        # fallback radius: 절대 음수 금지
         R = max(min(h, w) * 0.45, 20)
         x0, y0 = w // 2, h // 2
     else:
@@ -59,10 +62,8 @@ def detect_gauge_angle_fast(roi, cfg):
             circles,
             key=lambda c: (c[2] * 0.7) - np.linalg.norm(np.array([c[0], c[1]]) - img_center)
         )
-        # clamp radius
         R = max(min(R, min(h, w) * 0.45), 20)
 
-    # --- edges ---
     edges = cv2.Canny(blur, 50, 150)
     yy, xx = np.indices(edges.shape)
     rr = np.sqrt((xx - x0) ** 2 + (yy - y0) ** 2)
@@ -73,17 +74,14 @@ def detect_gauge_angle_fast(roi, cfg):
     edges[~mask_annulus] = 0
     edges[mask_textband] = 0
 
-    # --- voting angles ---
     thetas = np.deg2rad(np.arange(0, 360, 2.0))
     scores = []
 
     for th in thetas:
         xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
         ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-
         xs = np.clip(xs, 0, w - 1)
         ys = np.clip(ys, 0, h - 1)
-
         scores.append(edges[ys, xs].sum())
 
     if len(scores) == 0:
@@ -92,10 +90,9 @@ def detect_gauge_angle_fast(roi, cfg):
     best_idx = int(np.argmax(scores))
     angle = (np.rad2deg(thetas[best_idx]) + 360) % 360
 
-    # --- reverse check FIX ---
     def safe_sample(th):
-        xs = (x0 + np.cos(np.deg2rad(th)) * np.linspace(R*0.3, R*0.9, 30)).astype(int)
-        ys = (y0 - np.sin(np.deg2rad(th)) * np.linspace(R*0.3, R*0.9, 30)).astype(int)
+        xs = (x0 + np.cos(np.deg2rad(th)) * np.linspace(R * 0.3, R * 0.9, 30)).astype(int)
+        ys = (y0 - np.sin(np.deg2rad(th)) * np.linspace(R * 0.3, R * 0.9, 30)).astype(int)
         xs = np.clip(xs, 0, w - 1)
         ys = np.clip(ys, 0, h - 1)
         return edges[ys, xs].sum()
@@ -106,7 +103,6 @@ def detect_gauge_angle_fast(roi, cfg):
     if score2 > score1 * 1.15:
         angle = (angle + 180) % 360
 
-    # --- convert to value ---
     def cw_delta(a, b): return (a - b) % 360
 
     sweep_cw = cw_delta(cfg["min_angle"], cfg["max_angle"])
@@ -120,14 +116,13 @@ def detect_gauge_angle_fast(roi, cfg):
     return angle, value
 
 
-
 # -------------------------------------
-# JUDGE ABNORMAL
+# ABNORMAL JUDGE
 # -------------------------------------
 def judge_abnormal(gauge_type, value):
     gauge_type = gauge_type.lower()
 
-    if "thermometer" in gauge_type:
+    if "thermometer" in gauge_type or "thermo" in gauge_type:
         if value > 80:
             return "온도 과열", "thermo_high"
         if value < 5:
@@ -141,28 +136,30 @@ def judge_abnormal(gauge_type, value):
             return "압력 부족", "pressure_low"
         return "정상", "normal"
 
-    return "Unknown type", "unknown"
+    return "Unknown", "unknown"
 
 
 # -------------------------------------
-# MAIN ENTRY
+# MAIN ENTRY (NEW STRUCTURE)
 # -------------------------------------
-async def analyze_gauge(sharpest_frame, best_score, module_boxes):
+async def analyze_gauge(frame, gauge_boxes):
     try:
-        # 후보 gauge 필터링
-        gauge_boxes = [
-            b for b in module_boxes
-            if any(k in b["label"].lower() for k in ["gauge", "thermo", "pressure"])
-        ]
+        if frame is None:
+            return {
+                "type": "gauge",
+                "status": "error",
+                "detail": "no_frame",
+                "message": "프레임 없음",
+                "results": {}
+            }
 
         if not gauge_boxes:
             return {
                 "type": "gauge",
                 "status": "not_found",
                 "detail": None,
-                "sharpness": best_score,
-                "results": {},
-                "message": "게이지 미검출"
+                "message": "게이지 미검출",
+                "results": {}
             }
 
         results = {}
@@ -171,15 +168,16 @@ async def analyze_gauge(sharpest_frame, best_score, module_boxes):
         final_message = "정상"
 
         for box in gauge_boxes:
-            x1, y1, x2, y2 = box["xyxy"]
-            roi = sharpest_frame[y1:y2, x1:x2]
-            if roi.size == 0:
+            x1, y1, x2, y2 = box["x1"], box["y1"], box["x2"], box["y2"]
+            roi = frame[y1:y2, x1:x2]
+
+            if roi is None or roi.size == 0:
                 continue
 
             label = box["label"].lower()
 
             # config 결정
-            if "thermo" in label:
+            if "thermo" in label or "temperature" in label:
                 cfg = THERMO_CONFIG
             elif "pressure" in label:
                 cfg = PRESS_CONFIG
@@ -203,23 +201,22 @@ async def analyze_gauge(sharpest_frame, best_score, module_boxes):
             if detail_code != "normal":
                 found_anomaly = True
                 final_detail = detail_code
-                # RAG-friendly 자연 문장
                 final_message = f"{msg}. 현재 측정값: {value:.2f}"
 
         return {
             "type": "gauge",
             "status": "anomaly" if found_anomaly else "normal",
             "detail": final_detail,
-            "sharpness": best_score,
             "results": results,
             "message": final_message
         }
 
     except Exception as e:
-        logger.exception(f"[gauge] 오류: {e}")
+        logger.exception(f"[gauge] error: {e}")
         return {
             "type": "gauge",
             "status": "error",
             "detail": "exception",
-            "message": str(e)
+            "message": str(e),
+            "results": {}
         }

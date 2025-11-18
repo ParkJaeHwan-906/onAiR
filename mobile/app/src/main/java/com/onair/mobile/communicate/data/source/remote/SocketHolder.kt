@@ -1,3 +1,5 @@
+package com.onair.mobile.communicate.data.source.remote
+
 import com.onair.mobile.assistant.data.stt.SocketIoSttClient
 
 object SocketHolder {
