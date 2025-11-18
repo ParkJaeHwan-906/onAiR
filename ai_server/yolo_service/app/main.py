@@ -3,7 +3,6 @@ import asyncio
 from fastapi import FastAPI
 from loguru import logger
 from fastapi import APIRouter
-from ai_server.yolo_service.device_detector import start_device_detector
 from ai_server.yolo_service.redis_client import get_device_state
 from ai_server.yolo_service.anomaly import run_anomaly_detection
 
