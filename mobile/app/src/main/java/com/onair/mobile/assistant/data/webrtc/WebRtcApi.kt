@@ -16,7 +16,7 @@ interface WebRtcApi {
      * @param authorization Bearer 토큰
      * @param request WebRTC 요청 DTO
      */
-    @POST("/webrtc/request")
+    @POST("webrtc/request")  // 상대 경로 (앞의 / 제거하여 baseUrl과 결합되도록)
     suspend fun requestConnection(
         @Header("Authorization") authorization: String,
         @Body request: WebRtcRequestDto

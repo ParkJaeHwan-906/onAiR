@@ -152,4 +152,7 @@ public interface TasksRepository {
             WHERE t.id = #{taskId}
             """)
     TaskListDto getTaskDetail(Long taskId);
+
+    @Update("UPDATE tasks SET `created_at`=NOW(), `updated_at`=NOW()")
+    Integer updateTodayTasks();
 }

@@ -17,7 +17,7 @@ DURATION = 1.0
 N_FFT = 400
 HOP_LENGTH = 160
 N_MELS = 40
-WAKEWORD_THRESHOLD = 0.95
+WAKEWORD_THRESHOLD = 0.90
 LABELS = ["onair", "negative"]
 
 # -----------------------------
@@ -58,6 +58,9 @@ class WakewordDetector:
         self.is_running = False
         self.is_paused = False  # Wakeword 감지 일시 중지 플래그
         self.thread = None
+        # 초기화 시 버퍼와 시간 추적 변수 초기화 (첫 번째 wakeword 감지를 위해 필수)
+        self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
+        self.last_detection_time = 0
         self._load_model()
 
     def _load_model(self):
@@ -127,25 +130,25 @@ class WakewordDetector:
         if rms < MIN_RMS_THRESHOLD:
             return  # 조용한 환경, 실제 음성 없음
         
-        # 버퍼에 추가
-        if not hasattr(self, 'audio_buffer'):
-            self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
-        
-        # 중복 방지: 최근 감지 시간 확인
-        if not hasattr(self, 'last_detection_time'):
-            self.last_detection_time = 0
-        
         # 오디오 데이터를 버퍼에 추가 (1차원 배열로 변환)
+        # 주의: audio_buffer와 last_detection_time은 __init__에서 초기화됨
         if isinstance(audio_chunk, np.ndarray):
             if len(audio_chunk.shape) > 1:
                 audio_chunk = audio_chunk.flatten()
             self.audio_buffer.extend(audio_chunk)
         
-        # 버퍼가 충분히 쌓이면 (1초 이상) Wakeword 감지
+        # 버퍼가 충분히 쌓이면 Wakeword 감지
         # 중복 방지: 최근 3초 이내에 감지했으면 스킵 (기존 1초 → 3초로 연장하여 오탐지 방지)
         current_time = time.time()
         DETECTION_COOLDOWN_SEC = 3.0  # 중복 감지 방지 시간 (초)
-        if len(self.audio_buffer) >= SAMPLE_RATE and (current_time - self.last_detection_time) > DETECTION_COOLDOWN_SEC:
+        buffer_length = len(self.audio_buffer)
+        
+        # 버퍼가 최소 길이(0.5초) 이상이고 cooldown이 지났으면 감지 시도
+        # 이렇게 하면 짧은 wakeword도 감지 가능 (첫 번째 wakeword 누락 방지)
+        # 기존: 1초(16000 샘플) 이상만 감지 → 짧은 wakeword 누락 가능
+        # 개선: 0.5초(8000 샘플) 이상이면 감지 → 짧은 wakeword도 감지 가능
+        MIN_BUFFER_LENGTH = int(SAMPLE_RATE * 0.5)  # 최소 0.5초 (8000 샘플)
+        if buffer_length >= MIN_BUFFER_LENGTH and (current_time - self.last_detection_time) > DETECTION_COOLDOWN_SEC:
             audio = np.array(list(self.audio_buffer))
             
             # 실제 음성 입력 검증: RMS 값으로 볼륨 확인
@@ -205,15 +208,27 @@ class WakewordDetector:
     def pause(self):
         """Wakeword 감지 일시 중지"""
         self.is_paused = True
+        # pause 시 버퍼와 시간 추적 변수 초기화 (다음 resume 후 즉시 감지 가능하도록)
         if hasattr(self, 'audio_buffer'):
             self.audio_buffer.clear()
+        self.last_detection_time = 0
         print("🔇 Wakeword 감지기 일시 중지")
     
     def resume(self):
         """Wakeword 감지 재개"""
         self.is_paused = False
-        if hasattr(self, 'last_detection_time'):
-            self.last_detection_time = 0  # 재개 시 중복 방지 타이머 리셋
+        # 재개 시 버퍼와 시간 추적 변수 초기화 (즉시 감지 가능하도록)
+        if hasattr(self, 'audio_buffer'):
+            self.audio_buffer.clear()
+        self.last_detection_time = 0  # 재개 시 중복 방지 타이머 리셋
+        
+        # 큐에 남아있는 값 제거 (이전 감지 신호가 남아있으면 즉시 반환되는 것을 방지)
+        while not self.detection_queue.empty():
+            try:
+                self.detection_queue.get_nowait()
+            except queue.Empty:
+                break
+        
         print("🔊 Wakeword 감지기 재개")
     
     def stop(self):

@@ -140,13 +140,23 @@ def embed_texts(texts, is_query=False):
         )
     else:
         # 기본: 쿼리는 encode_query, 문서는 encode (BGE-M3 권장 방식)
+        # encode_query가 없으면 encode 사용 (fallback)
         if is_query:
-            return MODEL.encode_query(
-                texts, 
-                convert_to_numpy=True, 
-                show_progress_bar=False, 
-                normalize_embeddings=True
-            )
+            if hasattr(MODEL, 'encode_query'):
+                return MODEL.encode_query(
+                    texts, 
+                    convert_to_numpy=True, 
+                    show_progress_bar=False, 
+                    normalize_embeddings=True
+                )
+            else:
+                # encode_query가 없는 경우 encode 사용
+                return MODEL.encode(
+                    texts, 
+                    convert_to_numpy=True, 
+                    show_progress_bar=False, 
+                    normalize_embeddings=True
+                )
         else:
             return MODEL.encode(
                 texts, 
