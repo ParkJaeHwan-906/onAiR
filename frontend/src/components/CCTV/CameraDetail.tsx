@@ -1,4 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { sendConnectionRequest } from "../../api/webrtc";
+import { useUserStore } from "../../store/useUserStore";
+import { useSSEStore } from "../../store/useSSEStore";
+import { useSSEEventsStore } from "../../store/useSSEEventsStore";
+import { useWebRtcRequestStore } from "../../store/useWebRtcRequestStore";
+
 import type { CCTVItem } from "../../types/cctv";
 import { PhoneCall, Headphones, Mic } from "lucide-react";
 
@@ -15,6 +22,9 @@ interface CameraDetailProps {
 
 const CameraDetail: React.FC<CameraDetailProps> = ({ camera, onClose }) => {
   const socket = useSocket();
+  const navigate = useNavigate();
+  const { events } = useSSEEventsStore();
+  const lastEvent = events[events.length - 1];
 
   const isTargetCamera = camera.id === 1;
 
@@ -23,6 +33,59 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ camera, onClose }) => {
   const clockRef = useRef<PlaybackClock | null>(null);
 
   const [isLiveConnected, setIsLiveConnected] = useState(false);
+
+  const { myInfo } = useUserStore();
+  const { isConnected, connect } = useSSEStore();
+  const { addSentRequest } = useWebRtcRequestStore();
+
+  const handleCallRequest = async () => {
+    if (!camera.worker) {
+      alert("담당자가 없습니다.");
+      return;
+    }
+
+    // SSE 연결 없으면 재연결
+    if (!isConnected) connect();
+
+    const res = await sendConnectionRequest(
+      camera.worker.id, // receiverAccountId = 담당자 계정
+      "" // description 비우거나 필요한 내용 넣기
+    );
+
+    if (!res.success) {
+      alert(res.message || "요청 실패");
+      return;
+    }
+
+    // 내 요청을 store에 기록 (CommunicationPage에서 보여야 하니까)
+    if (myInfo) {
+      addSentRequest(
+        {
+          senderAccountId: myInfo.userAccountId,
+          name: myInfo.name,
+          phone: myInfo.phone || "",
+          equipmentName: myInfo.equipmentName || null,
+        },
+        {
+          senderAccountId: camera.worker.id,
+          name: camera.worker.name,
+          phone: "",
+          equipmentName: camera.equipment.name,
+        }
+      );
+    }
+
+    alert("통신 요청이 전송되었습니다.");
+  };
+
+  useEffect(() => {
+    if (!lastEvent) return;
+
+    if (lastEvent === "callRequest") {
+      // 내가 받은 요청이라면 CommunicationPage로 이동
+      navigate("/communication");
+    }
+  }, [lastEvent]);
 
   /* --------------------------------------------
       LIVE (ID=1만)
@@ -103,7 +166,10 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ camera, onClose }) => {
               </div>
 
               <div className="detail-inline-buttons">
-                <button className="detail-ctrl-btn call">
+                <button
+                  className="detail-ctrl-btn call"
+                  onClick={handleCallRequest}
+                >
                   <PhoneCall size={16} />
                 </button>
                 <button className="detail-ctrl-btn listen">
@@ -133,7 +199,10 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ camera, onClose }) => {
               </div>
 
               <div className="detail-inline-buttons">
-                <button className="detail-ctrl-btn call">
+                <button
+                  className="detail-ctrl-btn call"
+                  onClick={handleCallRequest}
+                >
                   <PhoneCall size={16} />
                 </button>
                 <button className="detail-ctrl-btn listen">
