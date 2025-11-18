@@ -9,7 +9,7 @@ export const cctvList = [
   {
     id: 1,
     videoUrl: demo1,
-    worker: { id: 1, name: "박재환" },
+    worker: { id: 18, name: "이병헌" },
     equipment: { id: 1, name: "Boiler A" },
   },
   {
@@ -27,7 +27,7 @@ export const cctvList = [
   {
     id: 4,
     videoUrl: demo4,
-    worker: { id: 4, name: "이병헌" },
+    worker: { id: 4, name: "박재환" },
     equipment: { id: 4, name: "AHU 1" },
   },
   {
