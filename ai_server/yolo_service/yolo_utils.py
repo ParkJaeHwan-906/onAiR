@@ -10,13 +10,10 @@ def load_yolo_model(model_path: str):
 
 def yolo_infer(model, frame: np.ndarray, return_boxes: bool = False):
     """
-    YOLO 추론 실행 및 결과 후처리
-    - model: YOLO 객체
-    - frame: 추론할 이미지 (numpy array)
-    - return_boxes: True일 경우 박스 정보 포함한 딕셔너리 반환
+    YOLO 추론 + 후처리
+    - return_boxes=True → x1,y1,x2,y2 를 flat 필드로 추가
     """
     results = model(frame)
-
     detections = []
 
     for r in results:
@@ -30,21 +27,20 @@ def yolo_infer(model, frame: np.ndarray, return_boxes: bool = False):
             confidence = float(box.conf[0])
             label_name = model.names[label_idx]
 
-            detection = {
+            det = {
                 "label": label_name,
-                "confidence": confidence
+                "confidence": confidence,
             }
 
             if return_boxes:
-                # box.xyxy[0]는 tensor → numpy로 변환
+                # YOLO xyxy → numpy 변환 후 flatten
                 xyxy = box.xyxy[0].cpu().numpy().tolist()
-                detection["box"] = {
-                    "x1": xyxy[0],
-                    "y1": xyxy[1],
-                    "x2": xyxy[2],
-                    "y2": xyxy[3],
-                }
 
-            detections.append(detection)
+                det["x1"] = int(xyxy[0])
+                det["y1"] = int(xyxy[1])
+                det["x2"] = int(xyxy[2])
+                det["y2"] = int(xyxy[3])
+
+            detections.append(det)
 
     return detections
