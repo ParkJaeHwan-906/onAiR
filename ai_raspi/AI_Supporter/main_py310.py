@@ -56,37 +56,87 @@ def run_stt_loop():
     ⑦ 서비스 종료 → STT 세션 OFF (마이크는 계속 ON)
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     """
-    # 브리지 서버를 별도 스레드에서 실행
+    # 브리지 서버를 별도 스레드에서 실행 (재시도 포함)
     bridge_thread = None
-    try:
-        bridge_thread = threading.Thread(
-            target=run_server,
-            args=('127.0.0.1', 5050),
-            daemon=True
-        )
-        bridge_thread.start()
-        logger.info("🚀 브리지 서버 시작 (포트 5050)")
-        
-        # 브리지 서버가 시작될 때까지 잠시 대기
-        time.sleep(1)
-        
-        # 포트가 실제로 열렸는지 확인
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex(('127.0.0.1', 5050))
-        sock.close()
-        if result != 0:
-            logger.warning("⚠️ 브리지 서버 포트 연결 확인 실패. 서버가 시작되지 않았을 수 있습니다.")
-    except Exception as e:
-        logger.error("=" * 60)
-        logger.error(f"❌ 브리지 서버 시작 실패: {e}")
-        logger.error("   해결 방법:")
-        logger.error("   1. 포트 5050을 사용 중인 프로세스 확인: sudo lsof -i :5050")
-        logger.error("   2. 프로세스 종료: sudo kill -9 <PID>")
-        logger.error("   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
-        logger.error("=" * 60)
-        raise RuntimeError(f"브리지 서버를 시작할 수 없습니다: {e}") from e
+    max_bridge_retries = 3
+    bridge_retry_delay = 1.0
+    
+    for bridge_attempt in range(max_bridge_retries):
+        try:
+            # 포트 점유 확인 및 해제 시도
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex(('127.0.0.1', 5050))
+            sock.close()
+            
+            if result == 0:
+                # 포트가 이미 사용 중인 경우
+                if bridge_attempt < max_bridge_retries - 1:
+                    logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... ({bridge_attempt + 1}/{max_bridge_retries})")
+                    try:
+                        # 기존 프로세스 종료 시도
+                        subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
+                        time.sleep(1)
+                    except Exception:
+                        pass
+                    continue
+            
+            # 브리지 서버 시작
+            bridge_thread = threading.Thread(
+                target=run_server,
+                args=('127.0.0.1', 5050),
+                daemon=True
+            )
+            bridge_thread.start()
+            logger.info("🚀 브리지 서버 시작 (포트 5050)")
+            
+            # 브리지 서버가 시작될 때까지 대기 (최대 3초)
+            max_wait_time = 3
+            wait_start = time.time()
+            server_ready = False
+            
+            while time.time() - wait_start < max_wait_time:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(0.5)
+                    result = sock.connect_ex(('127.0.0.1', 5050))
+                    sock.close()
+                    if result == 0:
+                        server_ready = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.2)
+            
+            if server_ready:
+                logger.info("✅ 브리지 서버 시작 확인 완료")
+                break  # 성공 시 루프 종료
+            else:
+                if bridge_attempt < max_bridge_retries - 1:
+                    logger.warning(f"⚠️ 브리지 서버 포트 연결 확인 실패, 재시도 중... ({bridge_attempt + 1}/{max_bridge_retries})")
+                    time.sleep(bridge_retry_delay)
+                    continue
+                else:
+                    logger.warning("⚠️ 브리지 서버 포트 연결 확인 실패. 서버가 시작되지 않았을 수 있습니다.")
+                    break  # 마지막 시도 실패해도 계속 진행 (메인 로직 방해 최소화)
+                    
+        except Exception as e:
+            if bridge_attempt < max_bridge_retries - 1:
+                logger.warning(f"⚠️ 브리지 서버 시작 실패, 재시도 중... ({bridge_attempt + 1}/{max_bridge_retries}): {e}")
+                time.sleep(bridge_retry_delay)
+                continue
+            else:
+                logger.error("=" * 60)
+                logger.error(f"❌ 브리지 서버 시작 실패 (최종): {e}")
+                logger.error("   해결 방법:")
+                logger.error("   1. 포트 5050을 사용 중인 프로세스 확인: sudo lsof -i :5050")
+                logger.error("   2. 프로세스 종료: sudo kill -9 <PID>")
+                logger.error("   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
+                logger.error("=" * 60)
+                # 마지막 시도 실패해도 프로그램 계속 실행 (메인 로직 방해 최소화)
+                logger.warning("⚠️ 브리지 서버 없이 계속 진행합니다. 일부 기능이 제한될 수 있습니다.")
+                break
     
     # WebRTC 프로세스 확인 (마이크 점유 확인)
     webrtc_pids = []
@@ -102,19 +152,37 @@ def run_stt_loop():
     # MicStream.start()는 자동으로 장치를 선택하고 마이크를 열며,
     # WebRTC 프로세스가 마이크를 점유하고 있으면 적절한 오류 메시지를 출력합니다.
     
-    # 마이크 초기화 및 시작
+    # 마이크 초기화 및 시작 (재시도 포함)
     mic = MicStream()
     wakeword_detector = init_wakeword_detector()
     
     if wakeword_detector and wakeword_detector.interpreter is not None:
         mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
     
-    try:
-        mic.start()
-        logger.info("🔊 마이크 ON")
-    except Exception as e:
-        logger.error(f"❌ 마이크 시작 실패: {e}")
-        raise RuntimeError("마이크를 사용할 수 없습니다.") from e
+    max_mic_retries = 3
+    mic_retry_delay = 1.0
+    
+    for mic_attempt in range(max_mic_retries):
+        try:
+            mic.start()
+            logger.info("🔊 마이크 ON")
+            break  # 성공 시 루프 종료
+        except Exception as e:
+            if mic_attempt < max_mic_retries - 1:
+                logger.warning(f"⚠️ 마이크 시작 실패, 재시도 중... ({mic_attempt + 1}/{max_mic_retries}): {e}")
+                time.sleep(mic_retry_delay)
+                # 마이크 재초기화 시도
+                try:
+                    mic.stop()
+                except Exception:
+                    pass
+                mic = MicStream()
+                if wakeword_detector and wakeword_detector.interpreter is not None:
+                    mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
+                continue
+            else:
+                logger.error(f"❌ 마이크 시작 실패 (최종): {e}")
+                raise RuntimeError("마이크를 사용할 수 없습니다.") from e
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
@@ -124,11 +192,22 @@ def run_stt_loop():
     buffered_stt_running = {"running": False}
     
     async def broadcast(msg):
-        """STT 결과를 브리지 서버(Socket.IO)로 전송"""
-        success = send_stt_result(msg)
-        if not success:
-            # 소켓 연결 실패 시 예외 발생하여 wakeword 대기 상태로 복귀
-            raise ConnectionError("브리지 클라이언트 연결 실패 - STT 결과 전송 불가")
+        """STT 결과를 브리지 서버(Socket.IO)로 전송 (재시도 포함)"""
+        max_retries = 2  # 최대 2회 재시도 (메인 로직 방해 최소화)
+        retry_delay = 0.5  # 0.5초 간격 (빠른 재시도)
+        
+        for attempt in range(max_retries):
+            success = send_stt_result(msg)
+            if success:
+                return  # 전송 성공
+            
+            # 마지막 시도가 아니면 재시도
+            if attempt < max_retries - 1:
+                logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... ({attempt + 1}/{max_retries})")
+                await asyncio.sleep(retry_delay)
+        
+        # 모든 재시도 실패 시 예외 발생하여 wakeword 대기 상태로 복귀
+        raise ConnectionError("브리지 클라이언트 연결 실패 - STT 결과 전송 불가")
     
     async def stt_session():
         """STT 세션 실행 (모드에 따라 버퍼링/스트리밍 선택)"""
