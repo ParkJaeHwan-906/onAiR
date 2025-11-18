@@ -91,3 +91,13 @@ async def device_detector_loop():
             logger.exception(f"[device_monitor] 🚨 오류: {e}")
 
         await asyncio.sleep(DETECTION_INTERVAL)
+
+# ----------------------------------------------------------
+# 2) start_device_detector — Task 생성하지 말고 loop만 실행
+# ----------------------------------------------------------
+async def start_device_detector():
+    try:
+        await device_detector_loop()
+    except asyncio.CancelledError:
+        logger.info("[device_monitor] start_device_detector Cancelled")
+        raise
