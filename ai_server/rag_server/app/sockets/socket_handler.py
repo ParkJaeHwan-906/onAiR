@@ -774,15 +774,14 @@ async def handle_audio_playback_completed(sid, data):
     print(f"📝 FastAPI 서버: 모바일 오디오 재생 완료 이벤트 수신 [mobile]")
     print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
     print("=" * 60)
-    await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
     
+    # CV 탐지 실패/정상은 OPERATOR와 동일하게 즉시 처리 (wait_for_next_step 제거)
     if audio_type == "cv_detection_failed":
         # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태 (normal과 동일)
         print("=" * 60)
         print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
         print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
         print("=" * 60)
-        await wait_for_next_step("CV 탐지 실패 음성 파일 재생 완료 처리", "10-1")
         
         print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
         print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
@@ -813,7 +812,6 @@ async def handle_audio_playback_completed(sid, data):
         print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
         print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
         print("=" * 60)
-        await wait_for_next_step("CV 탐지 정상 음성 파일 재생 완료 처리", "10-1")
         
         print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
         print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
