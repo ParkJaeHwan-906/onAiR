@@ -17,7 +17,6 @@
             android:id="@+id/loading_anim"
             app:lottie_rawRes="@raw/loader"
             android:scaleType="centerCrop"
-
             />
     </androidx.cardview.widget.CardView>
 </FrameLayout>
