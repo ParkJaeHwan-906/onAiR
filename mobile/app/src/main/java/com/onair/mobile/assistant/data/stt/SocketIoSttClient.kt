@@ -52,6 +52,7 @@ class SocketIoSttClient(
     private var onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
+//    private var onCommunicationClose: (() -> Unit)? = null,
     private var onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
     private var onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
     private var onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -62,6 +63,8 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
+    private val _callEnd = MutableSharedFlow<Boolean>(replay = 1)
+    val callEnd = _callEnd.asSharedFlow()
 
     /**
      * Socket.IO 서버에 연결
@@ -346,6 +349,12 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
+            socket?.on("communication_close") { args ->
+                Log.d(TAG, "연결 종료 이벤트 수신")
+                _callEnd.tryEmit(true)
+//                onCommunicationClose?.invoke()
+
+            }
             
             // 서버 메시지 수신 (디버깅용)
             socket?.on("server_message") { args ->
@@ -536,6 +545,22 @@ class SocketIoSttClient(
             false
         }
     }
+
+//    fun sendCommunicationEnd() : Boolean {
+//        if (!isConnected()) {
+//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+//            return false
+//        }
+//
+//        return try {
+//            socket?.emit("communication_end")
+//            Log.i(TAG, "통화 종료")
+//            true
+//        } catch (e: Exception) {
+//            Log.e(TAG, "통화 종료 실패")
+//            false
+//        }
+//    }
     
     /**
      * Intent 결과에 따른 음성 파일 재생 완료 이벤트 전송 (AI_SUPPORTER용)
@@ -702,7 +727,7 @@ class SocketIoSttClient(
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
         onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
-        onArMarkerDetected: ((ArMarkerResponse) -> Unit)? = null, // Ar 마커 감지 콜백
+        onCommunicationClose: (() -> Unit)? = null,
         onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
         onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
         onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -713,9 +738,11 @@ class SocketIoSttClient(
         if (onClarifyTurn != null) this.onClarifyTurn = onClarifyTurn
         if (onFinalAnswer != null) this.onFinalAnswer = onFinalAnswer
         if (onStartSseConnection != null) this.onStartSseConnection = onStartSseConnection
+        if (onCvDetectionNormal != null) this.onCvDetectionNormal = onCvDetectionNormal
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
         if (onClarifyQaTurn != null) this.onClarifyQaTurn = onClarifyQaTurn
         if (onWakewordDetected != null) this.onWakewordDetected = onWakewordDetected
+//        if (onCommunicationClose != null) this.onCommunicationClose = onCommunicationClose
         if (onConnect != null) this.onConnect = onConnect
         if (onDisconnect != null) this.onDisconnect = onDisconnect
         if (onConnectError != null) this.onConnectError = onConnectError

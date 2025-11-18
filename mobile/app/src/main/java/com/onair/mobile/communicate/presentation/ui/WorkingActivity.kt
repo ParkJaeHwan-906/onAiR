@@ -1,13 +1,17 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -44,6 +48,7 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -186,6 +191,7 @@ class WorkingActivity : AppCompatActivity() {
 
         val taskId = intent.getLongExtra("taskId", 0)
         val taskName = intent.getStringExtra("taskName")
+
         binding.taskName.text = taskName
         binding.endButton.setOnClickListener {
             workingViewModel.endTask(taskId, "")
@@ -490,10 +496,10 @@ class WorkingActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
-                runOnUiThread {
-                    binding.taskName.text = message
-                }
+//                val message = "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다. 문제 상황을 구체적으로 말씀해주세요."
+//                runOnUiThread {
+//                    binding.taskName.text = message
+//                }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
 
                 // CV 탐지 실패 음성 파일 재생
@@ -831,7 +837,6 @@ class WorkingActivity : AppCompatActivity() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
     }
-
 
     private fun setCallBack() {
         socketIoSttClient.setCallbacks(
