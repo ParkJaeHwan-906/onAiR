@@ -70,4 +70,10 @@ public class TaskController {
     public SseEmitter connectSse(@AuthenticationPrincipal CustomUserDetails user) {
         return sseManager.connSse(user);
     }
+
+    @GetMapping("/reset")
+    public ResponseEntity<String> resetTask() {
+        taskService.resetTask();
+        return ResponseEntity.ok("ok");
+    }
 }
