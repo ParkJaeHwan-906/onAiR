@@ -187,10 +187,16 @@ class CallActivity : ComponentActivity() {
             var pulseMarkers: List<ArMarker>? = null
 
             val context = LocalContext.current
+            val activity = context as? ComponentActivity
+            
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
+                    activity?.runOnUiThread {
+                        val dialog = OnAirOnDialog()
+                        dialog.show(activity.supportFragmentManager, "onAirOn")
+                    }
                     context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-                    (context as? Activity)?.finish()
+                    activity?.finish()
                 }
             }
 
