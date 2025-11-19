@@ -25,7 +25,7 @@ export const useUserStore = create<UserState>((set) => ({
     try {
       set({ loading: true, error: null });
       const res = await getUserList(equipmentId);
-      console.log(res.data);
+      // console.log(res.data);
 
       if (res.success) {
         set({ employees: res.data });
@@ -45,7 +45,7 @@ export const useUserStore = create<UserState>((set) => ({
     try {
       set({ loading: true, error: null });
       const res = await getUserDetail();
-      console.log(res.data);
+      // console.log(res.data);
 
       if (res.success) {
         set({ myInfo: res.data });

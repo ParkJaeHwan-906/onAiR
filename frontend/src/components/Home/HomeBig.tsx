@@ -74,10 +74,6 @@ function HomeBig({
   ) => {
     // 유효성 검사
     if (!senderAccountId || !senderName) {
-      console.error("유효하지 않은 요청 데이터:", {
-        senderAccountId,
-        senderName,
-      });
       alert("요청 정보가 올바르지 않습니다.");
       return;
     }
@@ -100,10 +96,7 @@ function HomeBig({
 
         // 소켓으로 통신 요청 수락 이벤트 전송
         if (socket) {
-          console.log("accept_communication 이벤트 emit");
           socket.emit("accept_communication", null);
-        } else {
-          console.log("error : 소켓이 없음!");
         }
 
         // 요청 목록에서 상대방 정보 찾기
@@ -135,7 +128,6 @@ function HomeBig({
         );
       }
     } catch (error) {
-      console.error("연결 응답 중 오류:", error);
       alert("응답 처리 중 오류가 발생했습니다.");
     }
   };

@@ -157,16 +157,16 @@ function WorkAssign({ onTaskReassigned }: WorkAssignProps) {
 
     try {
       setLoading(true);
-      console.log("=== 작업 재할당 시작 ===");
-      console.log("재할당 요청 정보:", {
-        taskId: selectedWorkId,
-        taskRequest: selectedWork.request,
-        employeeId: selectedEmployeeId,
-        employeeName: selectedEmployee.name,
-        equipmentId: selectedWork.equipmentId,
-        taskAction: selectedWork.action,
-        taskUserAccountId: selectedWork.userAccountId,
-      });
+      // console.log("=== 작업 재할당 시작 ===");
+      // console.log("재할당 요청 정보:", {
+      //   taskId: selectedWorkId,
+      //   taskRequest: selectedWork.request,
+      //   employeeId: selectedEmployeeId,
+      //   employeeName: selectedEmployee.name,
+      //   equipmentId: selectedWork.equipmentId,
+      //   taskAction: selectedWork.action,
+      //   taskUserAccountId: selectedWork.userAccountId,
+      // });
 
       // API 호출 전 유효성 검증
       if (!selectedWorkId || !selectedEmployeeId) {
@@ -247,7 +247,7 @@ function WorkAssign({ onTaskReassigned }: WorkAssignProps) {
         setSelectedWorkId(null);
         setSelectedEmployeeId(null);
       } else {
-        console.error("재할당 실패 - 응답:", res);
+        // console.error("재할당 실패 - 응답:", res);
         alert(res.message || "작업 재할당에 실패했습니다.");
       }
     } catch (error: any) {
