@@ -52,6 +52,7 @@ async def device_detector_loop():
                     display_label = label
                     temp_value = None
 
+                    is_anomaly = False
                     # thermometer → 게이지 각도/값 계산
                     if label == "thermometer":
                         roi = frame[y1:y2, x1:x2]
@@ -60,8 +61,12 @@ async def device_detector_loop():
                         if angle_val is not None:
                             angle, value = angle_val
                             temp_value = round(float(value), 1)
+                            if temp_value < 20 or temp_value > 40:
+                                is_anomaly = True
+
                             # 라벨에 온도 표시 붙이기
                             display_label = f"thermometer({temp_value})"
+
 
                     all_boxes.append({
                         "label": display_label,
@@ -70,6 +75,7 @@ async def device_detector_loop():
                         "y1": y1,
                         "x2": x2,
                         "y2": y2,
+                        "anomaly" : is_anomaly,
                         "temperature": temp_value     # 필요하면 나중에 서버에서 활용
                     })
             await save_yolo_result(ts, all_boxes)
