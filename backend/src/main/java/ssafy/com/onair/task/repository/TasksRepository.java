@@ -152,4 +152,9 @@ public interface TasksRepository {
             WHERE t.id = #{taskId}
             """)
     TaskListDto getTaskDetail(Long taskId);
+
+    @Update("""
+            UPDATE tasks SET solution = NULL, `action`=1;
+            """)
+    Integer resetTask();
 }
