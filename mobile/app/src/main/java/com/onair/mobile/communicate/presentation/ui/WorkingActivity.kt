@@ -805,7 +805,13 @@ class WorkingActivity : AppCompatActivity() {
 
         // 모달 숨기기 ("답변 생성 중..." 모달)
         runOnUiThread {
+            Log.i(TAG, "============================================================")
+            Log.i(TAG, "🔍 [모바일] final_answer 수신 시 모달 숨기기 시작")
+            Log.i(TAG, "   aiOnDialog 상태: ${if (aiOnDialog != null) "존재" else "null"}")
+            Log.i(TAG, "   aiOnDialog isVisible: ${aiOnDialog?.isVisible}")
+            Log.i(TAG, "============================================================")
             hideModal()
+            Log.i(TAG, "✅ [모바일] 모달 숨기기 완료")
         }
         
         // 간단한 알림 메시지 카드 숨기기 (확실하게)
@@ -896,19 +902,48 @@ class WorkingActivity : AppCompatActivity() {
                             audioEncoding = safetyWarningsAudioEncoding,
                             isLastSection = true
                         ) {
-                            // 마지막 섹션 완료 → 서비스 종료 처리
+                            // 마지막 섹션 완료 → 2초 대기 후 서비스 종료 처리
                             Log.i(TAG, "============================================================")
                             Log.i(TAG, "✅ [모바일] 모든 섹션 처리 완료")
-                            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
-                            Log.i(TAG, "   Type: final_answer")
-                            Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+                            Log.i(TAG, "   💡 2초 대기 후 서비스 종료 오디오 재생")
                             Log.i(TAG, "============================================================")
-
-                            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-                            if (success) {
-                                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
-                            } else {
-                                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
+                            
+                            // 2초 대기
+                            delay(2000)
+                            
+                            // 서비스 종료 오디오 재생 및 모달 표시
+                            Log.i(TAG, "============================================================")
+                            Log.i(TAG, "🔊 [모바일] 서비스 종료 오디오 재생 시작")
+                            Log.i(TAG, "   파일: $SERVICE_END_AUDIO_FILE")
+                            Log.i(TAG, "============================================================")
+                            
+                            // 서비스 종료 오디오 재생 시작과 동시에 모달 표시
+                            runOnUiThread {
+                                showOnModal()
+                            }
+                            
+                            // 서비스 종료 오디오 재생
+                            mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
+                                Log.i(TAG, "============================================================")
+                                Log.i(TAG, "✅ [모바일] 서비스 종료 오디오 재생 완료")
+                                Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
+                                Log.i(TAG, "   Type: service_completed")
+                                Log.i(TAG, "   💡 Wakeword 감지 대기 상태로 복귀")
+                                Log.i(TAG, "============================================================")
+                                
+                                // 모달 숨기기
+                                runOnUiThread {
+                                    hideOnModal()
+                                }
+                                
+                                // FastAPI로 서비스 완료 이벤트 전송
+                                val success = socketIoSttClient.sendServiceCompletedAudioCompleted()
+                                if (success) {
+                                    Log.i(TAG, "✅ [모바일] FastAPI로 service_completed 이벤트 전송 완료")
+                                    Log.i(TAG, "   💡 Wakeword 감지 대기 상태로 복귀 완료")
+                                } else {
+                                    Log.e(TAG, "❌ [모바일] FastAPI로 service_completed 이벤트 전송 실패")
+                                }
                             }
                         }
                     }
@@ -1097,9 +1132,12 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handlePlayServiceEndAudio(audioFile: String) {
+        // ⚠️ 주의: 이 함수는 CV 탐지 이상 케이스에서만 사용됨
+        // 섹션별 카드가 표시되는 경우는 마지막 섹션 완료 후 직접 서비스 종료 오디오를 재생함
         Log.i(TAG, "============================================================")
-        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신")
+        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신 (handlePlayServiceEndAudio)")
         Log.i(TAG, "   파일: $audioFile")
+        Log.i(TAG, "   ⚠️ 주의: 섹션별 카드가 있는 경우는 이 함수를 사용하지 않음")
         Log.i(TAG, "============================================================")
 
         lifecycleScope.launch {
@@ -1119,6 +1157,11 @@ class WorkingActivity : AppCompatActivity() {
                     Log.i(TAG, "📤 FastAPI로 audio_playback_completed (type: service_completed) 이벤트 전송 시작")
                     Log.i(TAG, "============================================================")
 
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideOnModal()
+                    }
+
                     val success = socketIoSttClient.sendServiceCompletedAudioCompleted()
                     if (success) {
                         Log.i(TAG, "✅ [모바일] FastAPI로 service_completed 이벤트 전송 완료")
@@ -1137,9 +1180,20 @@ class WorkingActivity : AppCompatActivity() {
     }
  
     private fun showModal(statusMessage: String) {
-        if (aiOnDialog?.isVisible == true) return
+        // 이미 모달이 표시되어 있으면 숨기고 새로 표시
+        if (aiOnDialog != null) {
+            Log.d(TAG, "showModal: 기존 모달이 존재함, 먼저 숨김")
+            try {
+                aiOnDialog?.dismiss()
+                aiOnDialog?.dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 기존 모달 dismiss 오류: ${e.message}")
+            }
+            aiOnDialog = null
+        }
         aiOnDialog = AiOnDialog(statusMessage)
         aiOnDialog?.show(supportFragmentManager, "waiting call")
+        Log.d(TAG, "showModal: 모달 표시 완료 - $statusMessage")
     }
     private fun showOnModal() {
         Log.d("show on modal", "모달 호출")
@@ -1149,8 +1203,21 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun hideModal() {
-        aiOnDialog?.dismiss()
+        Log.d(TAG, "hideModal() 호출")
+        if (aiOnDialog != null) {
+            Log.d(TAG, "aiOnDialog가 존재함, dismiss() 호출")
+            try {
+                aiOnDialog?.dismiss()
+                aiOnDialog?.dismissAllowingStateLoss()  // 상태 손실 허용하여 확실히 닫기
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 모달 dismiss 오류: ${e.message}")
+                e.printStackTrace()
+            }
+        } else {
+            Log.d(TAG, "aiOnDialog가 null임")
+        }
         aiOnDialog = null
+        Log.d(TAG, "hideModal() 완료")
     }
     private fun hideOnModal() {
         onAirOnDialog?.dismiss()
