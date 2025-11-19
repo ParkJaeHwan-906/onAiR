@@ -609,56 +609,15 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handleCvDetectionAnomaly(cvAnomaly: CvDetectionAnomalyDto) {
+        // showCvAnswer() 함수가 cvAnswer Flow를 collect하고 있어서
+        // SocketIoSttClient에서 _cvAnswer.tryEmit(cvAnomaly)를 호출하면
+        // 자동으로 showCvAnswer()의 collect가 트리거됩니다.
+        // 따라서 이 함수에서는 추가 처리 없이 로그만 남깁니다.
         Log.i(TAG, "============================================================")
-        Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (1단계: 간단한 알림)")
+        Log.i(TAG, "✅ [모바일] CV 탐지 이상 이벤트 수신 (showCvAnswer 함수로 처리)")
         Log.i(TAG, "   메시지: ${cvAnomaly.message}")
+        Log.i(TAG, "   💡 SocketIoSttClient에서 cvAnswer Flow에 emit → showCvAnswer() 자동 실행")
         Log.i(TAG, "============================================================")
-
-        lifecycleScope.launch {
-            try {
-                // UI 업데이트
-                runOnUiThread {
-//                    binding.taskName.text = cvAnomaly.message
-                }
-
-                // TTS 재생
-                if (cvAnomaly.audio_content != null && cvAnomaly.audio_content.isNotBlank()) {
-                    Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
-                    ttsRepository.playAudio(cvAnomaly.audio_content, cvAnomaly.audio_encoding) {
-                        // 재생 완료 콜백
-                        Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
-
-                        // 모달 표시 ("답변 생성 중...")
-                        runOnUiThread {
-                            showModal("답변 생성 중...")
-                        }
-
-                        // FastAPI 서버로 재생 완료 이벤트 전송
-                        val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
-                        if (success) {
-                            Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료")
-                            Log.i(TAG, "   💡 모달 표시 중: '답변 생성 중...'")
-                            Log.i(TAG, "   💡 final_answer 수신 시 모달 자동 숨김")
-                        } else {
-                            Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패")
-                            // 전송 실패해도 모달은 유지 (final_answer 수신 시 숨김)
-                        }
-                    }
-                } else {
-                    // 오디오가 없어도 모달 표시 및 이벤트 전송
-                    runOnUiThread {
-                        showModal("답변 생성 중...")
-                    }
-                    val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
-                    if (success) {
-                        Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료 (오디오 없음)")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ CV 탐지 이상 처리 오류: ${e.message}")
-                e.printStackTrace()
-            }
-        }
     }
 
     private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
@@ -1145,6 +1104,11 @@ class WorkingActivity : AppCompatActivity() {
     private fun showCvAnswer() {
         lifecycleScope.launch {
             workingViewModel.cvAnswer.collect { value ->
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (showCvAnswer 함수)")
+                Log.i(TAG, "   메시지: ${value.message}")
+                Log.i(TAG, "============================================================")
+                
                 binding.cvResultError.visibility = View.VISIBLE
                 withContext(Dispatchers.Main) {
                     binding.cvResultError.slideIn()
@@ -1152,10 +1116,35 @@ class WorkingActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     showTypingEffect(binding.cvResultErrorText, value.message)
                 }
-                playAudio(value.audio_content)
-                delay(2000)
+                
+                // 오디오 재생
+                if (value.audio_content != null && value.audio_content.isNotBlank()) {
+                    Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
+                    playAudio(value.audio_content)
+                    Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
+                } else {
+                    Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
+                }
+                
+                // 오디오 재생 완료 후 바로 카드 fadeOut
                 withContext(Dispatchers.Main) {
                     binding.cvResultError.fadeOut()
+                }
+                
+                // 모달 표시 ("답변 생성 중...")
+                runOnUiThread {
+                    showModal("답변 생성 중...")
+                }
+                
+                // FastAPI 서버로 재생 완료 이벤트 전송
+                val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
+                if (success) {
+                    Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료")
+                    Log.i(TAG, "   💡 모달 표시 중: '답변 생성 중...'")
+                    Log.i(TAG, "   💡 final_answer 수신 시 모달 자동 숨김")
+                } else {
+                    Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패")
+                    // 전송 실패해도 모달은 유지 (final_answer 수신 시 숨김)
                 }
             }
         }
