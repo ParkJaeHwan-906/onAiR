@@ -332,6 +332,38 @@ def process_frame(frame_bgr, sid=None):
         frame=frame,
     )
 
+    reset_condition = (
+        prev_valid is None or
+        next_valid is None or
+        len(prev_valid) < 20 or
+        len(next_valid) < 20 or
+        prev_valid.ndim != 3 or
+        next_valid.ndim != 3 or
+        prev_valid.shape[2] != 2 or
+        next_valid.shape[2] != 2
+    )
+
+    if reset_condition:
+        print("[RESET] tracking lost → feature reinitialization")
+        pts, method = extract_features(gray)
+
+        if pts is None or len(pts) == 0:
+            prev_gray = gray.copy()
+            prev_pts = None
+            last_flow_mean[:] = 0.0
+            return {"status": "no_tracks"}
+
+        prev_gray = gray.copy()
+        prev_pts = pts
+        last_flow_mean[:] = 0.0
+
+        return {
+            "status": "reset",
+            "tracked": int(len(pts)),
+            "flow_mean": (0.0, 0.0),
+            "size": float(size_acc)
+        }
+
     # if prev_valid is None:
     #     print("[DEBUG]  ▶ Optical Flow 결과: prev_valid=None")
     # else:
