@@ -9,7 +9,6 @@ import androidx.fragment.app.DialogFragment
 import androidx.core.graphics.drawable.toDrawable
 import com.bumptech.glide.Glide
 import com.onair.mobile.R
-import com.onair.mobile.databinding.DialogAiOnBinding
 import com.onair.mobile.databinding.DialogOnairOnBinding
 
 class OnAirOnDialog() : DialogFragment(
@@ -36,7 +35,5 @@ class OnAirOnDialog() : DialogFragment(
             .asGif()
             .load(R.drawable.start_logo)
             .into(gif)
-
-//        binding.aiStatusText.text = statusMessage
     }
 }
