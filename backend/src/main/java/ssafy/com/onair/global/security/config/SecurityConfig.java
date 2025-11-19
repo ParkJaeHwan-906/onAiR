@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests((authorize) -> authorize
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/sse/**").permitAll()
+                        .requestMatchers("/task/reset").permitAll()
                         .anyRequest().authenticated()
                 );
 
