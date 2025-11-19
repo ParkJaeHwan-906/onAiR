@@ -486,18 +486,32 @@ class MicStream:
                 pass
             raise
 
-    def read(self):
-        """큐에서 오디오 버퍼 읽기 (16000Hz로 리샘플링)"""
-        data = self.q.get()
-        audio_48k = np.frombuffer(data, dtype=np.int16)
+    def read(self, timeout=None):
+        """
+        큐에서 오디오 버퍼 읽기 (16000Hz로 리샘플링)
         
-        # 48000Hz → 16000Hz 리샘플링 (3:1 비율)
-        if self.mic_rate != self.stt_rate:
-            num_samples_16k = int(len(audio_48k) * self.stt_rate / self.mic_rate)
-            audio_16k = signal.resample(audio_48k.astype(np.float32), num_samples_16k)
-            return audio_16k.astype(np.int16)
-        else:
-            return audio_48k
+        Args:
+            timeout: 대기 시간 (초), None이면 무한 대기
+        
+        Returns:
+            오디오 데이터 (numpy array) 또는 None (타임아웃 시)
+        """
+        try:
+            if timeout is not None:
+                data = self.q.get(timeout=timeout)
+            else:
+                data = self.q.get()
+            audio_48k = np.frombuffer(data, dtype=np.int16)
+            
+            # 48000Hz → 16000Hz 리샘플링 (3:1 비율)
+            if self.mic_rate != self.stt_rate:
+                num_samples_16k = int(len(audio_48k) * self.stt_rate / self.mic_rate)
+                audio_16k = signal.resample(audio_48k.astype(np.float32), num_samples_16k)
+                return audio_16k.astype(np.int16)
+            else:
+                return audio_48k
+        except queue.Empty:
+            return None
 
     def pause(self):
         """마이크 입력 일시 정지"""
