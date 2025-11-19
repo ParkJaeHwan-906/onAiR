@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:background="#80000000">
 
-
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/ai_connect_card"
         android:layout_width="wrap_content"

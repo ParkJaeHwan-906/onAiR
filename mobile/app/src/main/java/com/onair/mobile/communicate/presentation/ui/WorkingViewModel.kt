@@ -22,6 +22,7 @@ class WorkingViewModel(
     private val _liveKitToken = MutableStateFlow("")
     val liveKitToken = _liveKitToken.asStateFlow()
     val finalAnswer = SocketHolder.socketClient.finalAnswer
+    val cvAnswer = SocketHolder.socketClient.cvAnswer
 
     fun endTask(taskId: Long, solution: String) {
         viewModelScope.launch {

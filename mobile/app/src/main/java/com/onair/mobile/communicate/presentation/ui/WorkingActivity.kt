@@ -1,6 +1,8 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Base64
@@ -14,7 +16,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewModelScope
 import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
@@ -69,8 +74,6 @@ class WorkingActivity : AppCompatActivity() {
     private val sseViewModel: CommunicationViewModel by lazy {
         (application as OnairApp).sseViewModel
     }
-
-
     // Socket.IO 클라이언트 및 Assistant 로직
     private lateinit var socketIoSttClient: SocketIoSttClient
     private lateinit var sttRepository: SttRepositoryImpl
@@ -84,6 +87,7 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
+    private lateinit var description : String
 
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
@@ -225,6 +229,22 @@ class WorkingActivity : AppCompatActivity() {
         binding.endButton.setOnClickListener {
             workingViewModel.endTask(taskId, "")
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                socketIoSttClient.videoFrames.collect { value ->
+                    value.let {
+                        val bitmap = it.toBitmap()
+                        Log.d("Demonstrate Activity", bitmap.toString())
+                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
+                        binding.videoView.setImageBitmap(bitmap)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun ByteArray.toBitmap(): Bitmap? {
+        return BitmapFactory.decodeByteArray(this, 0, this.size)
     }
 
     private fun observeViewModel() {
@@ -257,7 +277,8 @@ class WorkingActivity : AppCompatActivity() {
     private fun showCallRequestCard(data: JSONObject) {
         Log.d("SSE_show card", data.toString())
         binding.senderInfo.text = data.getString("name")
-        binding.description.text = "통신을 요청합니다: ${data.getString("description")}"
+        description = data.getString("description")
+        binding.description.text = "통신을 요청합니다: ${description}"
 
         binding.callRequestCard.visibility = View.VISIBLE
         val anim = AnimationUtils.loadAnimation(this, R.anim.cardview_slide)
@@ -277,12 +298,15 @@ class WorkingActivity : AppCompatActivity() {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
                 if (token.isNotBlank()) {
-                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java). apply {
+//                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
-                        putExtra("description", binding.description.text)
+                        putExtra("description", description)
                     }
+                    socketIoSttClient.sendAcceptCommunication()
                     startActivity(intent)
+
                     binding.callRequestCard.visibility = View.GONE
                 }
             }
@@ -412,14 +436,14 @@ class WorkingActivity : AppCompatActivity() {
 
                         // UI 업데이트: "AI Supporter on" (1초간)
                         runOnUiThread {
-                            binding.taskName.text = "AI Supporter on"
+//                            binding.taskName.text = "AI Supporter on"
                         }
 
                         // 1초 후 "오류 탐지 중..." 표시
                         lifecycleScope.launch {
                             kotlinx.coroutines.delay(1000)
                             runOnUiThread {
-                                binding.taskName.text = "오류 탐지 중..."
+//                                binding.taskName.text = "오류 탐지 중..."
                             }
                         }
 
@@ -452,7 +476,7 @@ class WorkingActivity : AppCompatActivity() {
 
                         // UI 업데이트: "통신 중..." 표시
                         runOnUiThread {
-                            binding.taskName.text = "통신 중..."
+//                            binding.taskName.text = "통신 중..."
                         }
 
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
@@ -506,7 +530,7 @@ class WorkingActivity : AppCompatActivity() {
                     else -> {
                         Log.w(TAG, "⚠️ 알 수 없는 Intent 타입: $intentType")
                         runOnUiThread {
-                            binding.taskName.text = "처리할 수 없는 요청입니다."
+//                            binding.taskName.text = "처리할 수 없는 요청입니다."
                         }
                     }
                 }
@@ -524,7 +548,7 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 // UI 업데이트: "통신 중..." 표시 (normal과 동일)
                 runOnUiThread {
-                    binding.taskName.text = "통신 중..."
+//                    binding.taskName.text = "통신 중..."
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
 
@@ -593,7 +617,7 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 // UI 업데이트
                 runOnUiThread {
-                    binding.taskName.text = cvAnomaly.message
+//                    binding.taskName.text = cvAnomaly.message
                 }
 
                 // TTS 재생
@@ -643,7 +667,7 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 // UI 업데이트: "통신 중..." 표시
                 runOnUiThread {
-                    binding.taskName.text = "통신 중..."
+//                    binding.taskName.text = "통신 중..."
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
@@ -718,7 +742,7 @@ class WorkingActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    binding.taskName.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
+//                    binding.taskName.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
                 }
 
                 Log.i(TAG, "============================================================")
@@ -806,7 +830,7 @@ class WorkingActivity : AppCompatActivity() {
         }
 
         runOnUiThread {
-            binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
+//            binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
         }
 
         // 각 섹션별 말풍선 표시 및 오디오 재생
@@ -923,38 +947,38 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "📋 [모바일] 섹션 처리 시작: $sectionName")
         Log.i(TAG, "============================================================")
 
-        // 마크다운 말풍선 표시 (코틀린 팀원이 구현할 부분)
-        runOnUiThread {
-            // TODO: 코틀린 팀원이 각 섹션별 마크다운 말풍선 UI 구현
-            // markdownText를 Markwon 라이브러리로 렌더링하여 말풍선에 표시
-            // 예시: showSectionBubbleWithMarkdown(sectionName, markdownText)
-            if (markdownText != null && markdownText.isNotBlank()) {
-                Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시")
-                Log.i(TAG, "   마크다운 텍스트: ${markdownText.take(100)}...")
-            } else {
-                Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다")
+        // 섹션별 CardView와 TextView 매핑
+        val (cardView, textView) = when (sectionName) {
+            "원인" -> Pair(binding.aiResultCause, binding.aiResultCauseText)
+            "조치" -> Pair(binding.aiResultAction, binding.aiResultActionText)
+            "주의사항" -> Pair(binding.aiResultWarning, binding.aiResultWarningText)
+            else -> {
+                Log.w(TAG, "⚠️ 알 수 없는 섹션: $sectionName")
+                // 기본값으로 원인 섹션 사용
+                Pair(binding.aiResultCause, binding.aiResultCauseText)
             }
         }
 
-        // 오디오 재생
-        if (audioContent != null && audioContent.isNotBlank()) {
-            Log.i(TAG, "🔊 [모바일] $sectionName 오디오 재생 시작")
-            ttsRepository.playAudio(audioContent, audioEncoding) {
-                // 재생 완료 콜백
-                Log.i(TAG, "✅ [모바일] $sectionName 오디오 재생 완료")
-                // suspend 함수이므로 lifecycleScope에서 호출
-                lifecycleScope.launch {
-                    onComplete()
-                }
-            }
+        // 마크다운 텍스트가 있으면 runSection() 호출하여 UI 표시 및 오디오 재생
+        if (markdownText != null && markdownText.isNotBlank()) {
+            Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시 시작")
+            runSection(
+                cardView = cardView,
+                textView = textView,
+                text = markdownText,
+                audioBase64 = audioContent
+            )
+            Log.i(TAG, "✅ [UI] $sectionName 마크다운 말풍선 표시 및 오디오 재생 완료")
         } else {
-            // 오디오가 없으면 바로 완료 처리
-            Log.i(TAG, "⚠️ [모바일] $sectionName 오디오 없음, 바로 완료 처리")
-            // suspend 함수이므로 lifecycleScope에서 호출
-            lifecycleScope.launch {
-                onComplete()
+            // 마크다운 텍스트가 없으면 오디오만 재생
+            Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다. 오디오만 재생합니다.")
+            if (audioContent != null && audioContent.isNotBlank()) {
+                playAudio(audioContent)
             }
         }
+
+        // 완료 콜백 호출
+        onComplete()
     }
 
     private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
@@ -980,7 +1004,7 @@ class WorkingActivity : AppCompatActivity() {
             } else {
                 guidance
             }
-            binding.taskName.text = "Clarify: $clarifyMessage"
+//            binding.taskName.text = "Clarify: $clarifyMessage"
         }
     }
 
@@ -1116,6 +1140,18 @@ class WorkingActivity : AppCompatActivity() {
     private fun hideModal() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
+    }
+    private fun showCvAnswer() {
+        lifecycleScope.launch {
+            workingViewModel.cvAnswer.collect { value ->
+                runSection(
+                    binding.cvResultError,
+                    binding.cvResultErrorText,
+                    value.message,
+                    value.audio_content
+                )
+            }
+        }
     }
     private fun showAiAnswer() {
         lifecycleScope.launch {
@@ -1317,7 +1353,7 @@ class WorkingActivity : AppCompatActivity() {
             
             // UI 초기화
             runOnUiThread {
-                binding.taskName.text = "대기 중..."
+//                binding.taskName.text = "대기 중..."
                 hideModal()
             }
             
