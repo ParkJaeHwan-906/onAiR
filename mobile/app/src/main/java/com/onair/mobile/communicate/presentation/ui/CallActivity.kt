@@ -93,16 +93,6 @@ class CallActivity : ComponentActivity() {
         )
     }
 
-    private val screenCaptureIntentLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            val resultCode = result.resultCode
-            val data = result.data
-            if (resultCode != RESULT_OK || data == null) {
-                return@registerForActivityResult
-            }
-        }
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

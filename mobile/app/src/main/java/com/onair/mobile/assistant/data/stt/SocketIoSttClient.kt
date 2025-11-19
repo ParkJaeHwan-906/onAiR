@@ -1,5 +1,7 @@
 package com.onair.mobile.assistant.data.stt
 
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
@@ -13,6 +15,7 @@ import com.google.gson.Gson
 import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
+import com.onair.mobile.communicate.data.socket.dto.VideoFrameResponse
 import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
@@ -26,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import livekit.org.webrtc.VideoFrame
 
 /**
  * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과 및 Clarify 응답을 수신
@@ -70,6 +74,9 @@ class SocketIoSttClient(
     val callEnd = _callEnd.receiveAsFlow()
     private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
+
+    private val _videoFrames = MutableSharedFlow<ByteArray>(extraBufferCapacity = 10)
+    val videoFrames = _videoFrames.asSharedFlow()
 
     /**
      * Socket.IO 서버에 연결
@@ -300,7 +307,7 @@ class SocketIoSttClient(
                     if (data != null) {
                         val jsonString = data.toString()
                         Log.i(TAG, "📩 CV 탐지 이상 수신: $jsonString")
-                        
+
                         val cvAnomaly = gson.fromJson(jsonString, CvDetectionAnomalyDto::class.java)
                         Log.i(TAG, "   → Message: ${cvAnomaly.message}")
                         onCvDetectionAnomaly?.invoke(cvAnomaly)
@@ -397,7 +404,20 @@ class SocketIoSttClient(
 
 
             }
-            
+            socket?.on("video_frame") { args ->
+                try {
+                    val data = args[0].toString()
+                    val videoFrame = Json.decodeFromString<VideoFrameResponse>(data)
+                    val decodedBytes = Base64.decode(videoFrame.frame, Base64.DEFAULT)
+                    val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                    Log.d(TAG, "$decodedBytes, $bitmap")
+                    _videoFrames.tryEmit(decodedBytes)
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Frame decode error: ${e.message}")
+                }
+            }
+
             // play_service_end_audio 이벤트 수신 (서비스 종료 오디오 재생 요청)
             socket?.on("play_service_end_audio") { args ->
                 Log.i(TAG, "🔔 [이벤트 수신] play_service_end_audio 이벤트 도착!")
@@ -415,7 +435,7 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-            
+
             // 서버 메시지 수신 (디버깅용)
             socket?.on("server_message") { args ->
                 val data = args[0] as? JSONObject
@@ -791,7 +811,7 @@ class SocketIoSttClient(
     
     /**
      * 서비스 종료 오디오 재생 완료 이벤트 전송
-     * 
+     *
      * @return 전송 성공 여부
      */
     fun sendServiceCompletedAudioCompleted(): Boolean {
@@ -799,13 +819,13 @@ class SocketIoSttClient(
             Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
             return false
         }
-        
+
         return try {
             val payload = JSONObject().apply {
                 put("type", "service_completed")
                 put("timestamp", System.currentTimeMillis())
             }
-            
+
             socket?.emit("audio_playback_completed", payload)
             Log.i(TAG, "📤 모바일 서비스 종료 오디오 재생 완료 이벤트 전송")
             true
@@ -815,7 +835,7 @@ class SocketIoSttClient(
             false
         }
     }
-    
+
     /**
      * 통신 종료 이벤트 전송 (WorkingActivity 비정상 종료 시 wakeword 대기 상태로 복귀)
      * 
