@@ -1966,6 +1966,10 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
+    # 기본 AR 컴포넌트 추가
+    global ar_markers
+    ar_markers.clear()  # 혹시라도 남아있는 컴포넌트 삭제
+
     print("=" * 60)
     print("🔔 [이벤트 수신] accept_communication 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -2028,8 +2032,6 @@ async def accept_communication(sid, data):
     print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
     print("=" * 60)
 
-    # 기본 AR 컴포넌트 추가
-    global ar_markers
     description = {
         "type": "description",
         "idx": -1,      # 마커에만 idx 적용
@@ -2051,6 +2053,8 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
+    # 마커 데이터 초기화
+    global ar_markers
     print("=" * 60)
     print("🔔 [이벤트 수신] communication_close 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -2076,9 +2080,7 @@ async def communication_close(sid, data):
     print("   목적: STT/Wakeword 프로세스가 마이크 장치를 물리적 재점유")
     print("=" * 60)
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
-    # 마커 데이터 초기화
-    global ar_markers
-    ar_markers = []
+    ar_markers.clear()
     # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
     print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
