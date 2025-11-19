@@ -64,8 +64,8 @@ async def device_detector_loop():
                             if temp_value < 20 or temp_value > 40:
                                 is_anomaly = True
 
-                            # 라벨에 온도 표시 붙이기
-                            display_label = f"thermometer({temp_value})"
+                            # # 라벨에 온도 표시 붙이기
+                            # display_label = f"thermometer({temp_value})"
 
 
                     all_boxes.append({
