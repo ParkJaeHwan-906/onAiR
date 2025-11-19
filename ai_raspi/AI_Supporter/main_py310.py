@@ -165,6 +165,7 @@ def run_stt_loop():
                     mic.stop()
                 except Exception:
                     pass
+                # TODO: 오히려 이 부분에 time.sleep() 작성필요
                 # ---------------------------------------------------------------------------------------
                 # TODO: 해당 부분 전체가 필요하다고 느껴지지 않아요
                 mic = MicStream()        # TODO: 계속해서 인스턴스를 생성하는 것은 Singleton 위배 -> 제거 필요
