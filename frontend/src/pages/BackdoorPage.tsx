@@ -40,6 +40,7 @@ function BackdoorPage() {
       ].includes(label)
     )
       return "#eab308";
+
     return "#9333ea";
   };
 
@@ -65,14 +66,13 @@ function BackdoorPage() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, ORI_W, ORI_H);
-
     ctx.lineWidth = 1.6;
     ctx.font = "12px Arial";
 
     overlay?.boxes?.forEach((b: any) => {
-      if (b.confidence < 0.2) return;
+      if (b.confidence < 0.6) return;
 
-      const color = overlay.anomaly ? "#ff3333" : getClassColor(b.label);
+      const color = b.anomaly ? "#ff3333" : getClassColor(b.label);
 
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
@@ -94,43 +94,55 @@ function BackdoorPage() {
   const MAX_BUFFER = 10;
 
   /* ------------------------------------------
-   * 랜더 루프
+   * 렌더 루프 + 언마운트 시 정리
    * ------------------------------------------ */
-  const startRenderLoop = () => {
-    const loop = () => {
-      const canvas = videoCanvasRef.current;
-      if (!canvas) {
-        requestAnimationFrame(loop);
-        return;
-      }
+  const rafId = useRef<number | null>(null);
 
-      if (frameBuffer.current.length > 0) {
-        const { img, timestamp } = frameBuffer.current.shift();
+  useEffect(() => {
+    const startRenderLoop = () => {
+      const loop = () => {
+        const canvas = videoCanvasRef.current;
 
-        drawVideo(img, canvas);
+        if (canvas && frameBuffer.current.length > 0) {
+          const { img, timestamp } = frameBuffer.current.shift();
+          drawVideo(img, canvas);
 
-        // timestamp 기준 가장 가까운 overlay 찾기
-        let bestOverlay = null;
-        let smallestDiff = Infinity;
+          // timestamp 기준 가장 가까운 overlay 찾기
+          let bestOverlay = null;
+          let smallestDiff = Infinity;
 
-        overlayBuffer.current.forEach((ov) => {
-          const diff = Math.abs(ov.timestamp - timestamp);
-          if (diff < smallestDiff) {
-            smallestDiff = diff;
-            bestOverlay = ov;
-          }
-        });
+          overlayBuffer.current.forEach((ov) => {
+            const diff = Math.abs(ov.timestamp - timestamp);
+            if (diff < smallestDiff) {
+              smallestDiff = diff;
+              bestOverlay = ov;
+            }
+          });
 
-        if (bestOverlay) {
-          drawOverlay(bestOverlay);
+          if (bestOverlay) drawOverlay(bestOverlay);
         }
-      }
 
-      requestAnimationFrame(loop);
+        rafId.current = requestAnimationFrame(loop);
+      };
+
+      rafId.current = requestAnimationFrame(loop);
     };
 
-    requestAnimationFrame(loop);
-  };
+    startRenderLoop();
+
+    /* cleanup */
+    return () => {
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+
+      const v = videoCanvasRef.current;
+      const o = overlayCanvasRef.current;
+      v?.getContext("2d")?.clearRect(0, 0, ORI_W, ORI_H);
+      o?.getContext("2d")?.clearRect(0, 0, ORI_W, ORI_H);
+
+      frameBuffer.current = [];
+      overlayBuffer.current = [];
+    };
+  }, []);
 
   /* ------------------------------------------
    * 영상 수신 → buffer push
@@ -147,9 +159,8 @@ function BackdoorPage() {
       const img = new Image();
       img.onload = () => {
         frameBuffer.current.push({ img, timestamp });
-        if (frameBuffer.current.length > MAX_BUFFER) {
+        if (frameBuffer.current.length > MAX_BUFFER)
           frameBuffer.current.shift();
-        }
       };
 
       img.src = URL.createObjectURL(new Blob([data.frame]));
@@ -162,35 +173,36 @@ function BackdoorPage() {
   }, [socket]);
 
   /* ------------------------------------------
-   * Overlay 수신 → buffer push (+ YOLO 좌표 로그 출력)
+   * Overlay 수신 → buffer push
    * ------------------------------------------ */
   useEffect(() => {
     if (!socket) return;
 
     const handleOverlay = (data: any) => {
       const timestamp = data.timestamp;
-      /* ---- YOLO 좌표 + anomaly + confidence 로그 ---- */
-      console.group("🟦 YOLO Overlay 수신됨");
-      console.log("📌 timestamp:", data.timestamp);
-      console.log("📌 anomaly:", data.anomaly);
-      console.log("📌 total boxes:", data.boxes?.length || 0);
+      const hasAnomaly = data.boxes?.some((b: any) => b.anomaly) ?? false;
+      console.log("📌 frame anomaly:", hasAnomaly);
 
+      // // 로그
+      console.group("🟦 YOLO Overlay 수신됨");
+      console.log("📌 timestamp:", timestamp);
+      // console.log("📌 anomaly:", hasAnomaly);
+      console.log("📌 total boxes:", data.boxes?.length || 0);
       data.boxes?.forEach((b: any, idx: number) => {
         console.group(`▶ Box ${idx + 1}`);
         console.log("label:", b.label);
         console.log("confidence:", b.confidence.toFixed(3));
         console.log("x1:", b.x1, "y1:", b.y1);
         console.log("x2:", b.x2, "y2:", b.y2);
+        console.log("anomaly:", b.anomaly);
+        console.log("temperature", b.temperature);
         console.groupEnd();
       });
-
       console.groupEnd();
 
-      /* ---- 싱크 버퍼에 저장 ---- */
       overlayBuffer.current.push({ ...data, timestamp });
-      if (overlayBuffer.current.length > MAX_BUFFER) {
+      if (overlayBuffer.current.length > MAX_BUFFER)
         overlayBuffer.current.shift();
-      }
     };
 
     socket.on("video_overlay", handleOverlay);
@@ -198,13 +210,6 @@ function BackdoorPage() {
       socket.off("video_overlay", handleOverlay);
     };
   }, [socket]);
-
-  /* ------------------------------------------
-   * 렌더 루프 시작
-   * ------------------------------------------ */
-  useEffect(() => {
-    startRenderLoop();
-  }, []);
 
   return (
     <div className="backdoor-canvas">
