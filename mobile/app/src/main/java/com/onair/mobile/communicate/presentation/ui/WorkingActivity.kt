@@ -90,6 +90,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
+        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -1076,6 +1077,41 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
+    private fun handlePlayServiceEndAudio(audioFile: String) {
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신")
+        Log.i(TAG, "   파일: $audioFile")
+        Log.i(TAG, "============================================================")
+
+        lifecycleScope.launch {
+            try {
+                // 파일명이 제공되지 않으면 기본 파일 사용
+                val fileToPlay = if (audioFile.isNotBlank()) audioFile else SERVICE_END_AUDIO_FILE
+                Log.i(TAG, "🔊 서비스 종료 오디오 재생 시작: $fileToPlay")
+
+                mediaPlayerController.playLocalAudio(fileToPlay) {
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "✅ 서비스 종료 오디오 재생 완료")
+                    Log.i(TAG, "📤 FastAPI로 audio_playback_completed (type: service_completed) 이벤트 전송 시작")
+                    Log.i(TAG, "============================================================")
+
+                    val success = socketIoSttClient.sendServiceCompletedAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "✅ [모바일] FastAPI로 service_completed 이벤트 전송 완료")
+                        Log.i(TAG, "   💡 Wakeword 감지 대기 상태로 복귀")
+                    } else {
+                        Log.e(TAG, "❌ [모바일] FastAPI로 service_completed 이벤트 전송 실패")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 서비스 종료 오디오 재생 오류: ${e.message}")
+                e.printStackTrace()
+                // 오류 발생 시에도 이벤트 전송
+                socketIoSttClient.sendServiceCompletedAudioCompleted()
+            }
+        }
+    }
+
     private fun showModal(statusMessage: String) {
         if (aiOnDialog?.isVisible == true) return
         aiOnDialog = AiOnDialog(statusMessage)
@@ -1121,6 +1157,9 @@ class WorkingActivity : AppCompatActivity() {
             onWakewordDetected = {
                 handleWakewordDetected()
             },
+            onPlayServiceEndAudio = { audioFile ->
+                handlePlayServiceEndAudio(audioFile)
+            },
             onConnect = {
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
             },
@@ -1146,6 +1185,7 @@ class WorkingActivity : AppCompatActivity() {
             onCvDetectionAnomaly = null,
             onClarifyQaTurn = null,
             onWakewordDetected = null,
+            onPlayServiceEndAudio = null,
         )
     }
     
