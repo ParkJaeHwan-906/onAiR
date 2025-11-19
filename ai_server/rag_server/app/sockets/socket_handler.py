@@ -440,6 +440,7 @@ async def handle_intent_audio_completed(sid, data):
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
     AI_SUPPORTER인 경우 CV 로직 실행
     """
+    global _pending_cv_detection
     print("=" * 60)
     print(f"🔔 [이벤트 수신] intent_audio_completed 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -537,7 +538,6 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
-                global _pending_cv_detection
                 _pending_cv_detection = {
                     "device_type": device_type,
                     "modules": modules,
@@ -564,7 +564,6 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
-                global _pending_cv_detection
                 _pending_cv_detection = {
                     "device_type": device_type,
                     "modules": modules,
@@ -634,7 +633,7 @@ async def handle_intent_audio_completed(sid, data):
                 await wait_for_next_step("모바일로 CV 탐지 알림 전송 완료", "11")
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
-                global _pending_cv_detection
+                
                 _pending_cv_detection = {
                     "device_type": device_type,
                     "modules": modules,
@@ -682,6 +681,10 @@ async def handle_audio_playback_completed(sid, data):
     - type="final_answer": 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
     - type="service_completed": 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
     """
+    # CV 탐지 관련 오디오 재생 완료 처리
+    # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
+    global _pending_cv_detection
+    
     sender_device = device_map.get(sid, "unknown")
     
     # 모바일에서만 받음
@@ -698,9 +701,6 @@ async def handle_audio_playback_completed(sid, data):
     print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
     print("=" * 60)
     
-    # CV 탐지 관련 오디오 재생 완료 처리
-    # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
-    global _pending_cv_detection
     
     # CV 탐지 결과가 있는 경우 (cv_detection_failed, cv_detection_normal, cv_detection_anomaly)
     if _pending_cv_detection:
@@ -1820,11 +1820,8 @@ async def handle_video_frame(sid, data):
             "timestamp": timestamp,
             "frame": jpeg_bytes.tobytes()
         })
-        frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-        await broadcast_to('mobile', "video_frame", {
-            "timestamp": timestamp,
-            "frame": frame_base64
-        })
+        # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+        await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1865,11 +1862,8 @@ async def handle_video_frame(sid, data):
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
-    frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-    await broadcast_to('mobile', "video_frame", {
-        "timestamp": timestamp,
-        "frame": frame_base64
-    })
+    # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+    await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
     try:
         yolo_res = await get_latest_yolo_result()
         if yolo_res:
