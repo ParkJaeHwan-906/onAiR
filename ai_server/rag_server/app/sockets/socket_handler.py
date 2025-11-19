@@ -2101,8 +2101,9 @@ async def accept_communication(sid, data):
         "type": "description",
         "idx": -1,      # 마커에만 idx 적용
         "info": {
+            # 화면의 가장 좌측 상단에 고정
             "x": 0.0,
-            "y": 180.0,
+            "y": 0.0,
             "size": 10  # Client 에서 고정해서 사용
         },
         "color": None,
