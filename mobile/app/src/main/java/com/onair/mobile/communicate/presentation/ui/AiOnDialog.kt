@@ -38,4 +38,10 @@ class AiOnDialog(val statusMessage: String) : DialogFragment(
 
         binding.aiStatusText.text = statusMessage
     }
+    
+    fun updateMessage(newMessage: String) {
+        if (::binding.isInitialized) {
+            binding.aiStatusText.text = newMessage
+        }
+    }
 }
