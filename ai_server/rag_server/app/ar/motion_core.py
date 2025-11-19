@@ -276,7 +276,7 @@ def process_frame(frame_bgr, sid=None):
             "pose_ok": False,
         }
     
-    
+
     
     # ==========================================================
     # --- Optical Flow 호출 전 prev_pts 유효성 검사 ---
@@ -359,10 +359,12 @@ def process_frame(frame_bgr, sid=None):
 
         # 재추출 성공 → init 상태로 복귀
         # print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
-        if prev_valid is not None and len(prev_valid) > 0:
-            prev_pts = np.vstack([prev_valid, pts])
-        else:
-            prev_pts = pts
+        # if prev_valid is not None and len(prev_valid) > 0:
+        #     prev_pts = np.vstack([prev_valid, pts])
+        # else:
+        #     prev_pts = pts
+
+        prev_pts = pts
 
         prev_gray = gray.copy()
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
