@@ -923,38 +923,38 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "📋 [모바일] 섹션 처리 시작: $sectionName")
         Log.i(TAG, "============================================================")
 
-        // 마크다운 말풍선 표시 (코틀린 팀원이 구현할 부분)
-        runOnUiThread {
-            // TODO: 코틀린 팀원이 각 섹션별 마크다운 말풍선 UI 구현
-            // markdownText를 Markwon 라이브러리로 렌더링하여 말풍선에 표시
-            // 예시: showSectionBubbleWithMarkdown(sectionName, markdownText)
-            if (markdownText != null && markdownText.isNotBlank()) {
-                Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시")
-                Log.i(TAG, "   마크다운 텍스트: ${markdownText.take(100)}...")
-            } else {
-                Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다")
+        // 섹션별 CardView와 TextView 매핑
+        val (cardView, textView) = when (sectionName) {
+            "원인" -> Pair(binding.aiResultCause, binding.aiResultCauseText)
+            "조치" -> Pair(binding.aiResultAction, binding.aiResultActionText)
+            "주의사항" -> Pair(binding.aiResultWarning, binding.aiResultWarningText)
+            else -> {
+                Log.w(TAG, "⚠️ 알 수 없는 섹션: $sectionName")
+                // 기본값으로 원인 섹션 사용
+                Pair(binding.aiResultCause, binding.aiResultCauseText)
             }
         }
 
-        // 오디오 재생
-        if (audioContent != null && audioContent.isNotBlank()) {
-            Log.i(TAG, "🔊 [모바일] $sectionName 오디오 재생 시작")
-            ttsRepository.playAudio(audioContent, audioEncoding) {
-                // 재생 완료 콜백
-                Log.i(TAG, "✅ [모바일] $sectionName 오디오 재생 완료")
-                // suspend 함수이므로 lifecycleScope에서 호출
-                lifecycleScope.launch {
-                    onComplete()
-                }
-            }
+        // 마크다운 텍스트가 있으면 runSection() 호출하여 UI 표시 및 오디오 재생
+        if (markdownText != null && markdownText.isNotBlank()) {
+            Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시 시작")
+            runSection(
+                cardView = cardView,
+                textView = textView,
+                text = markdownText,
+                audioBase64 = audioContent
+            )
+            Log.i(TAG, "✅ [UI] $sectionName 마크다운 말풍선 표시 및 오디오 재생 완료")
         } else {
-            // 오디오가 없으면 바로 완료 처리
-            Log.i(TAG, "⚠️ [모바일] $sectionName 오디오 없음, 바로 완료 처리")
-            // suspend 함수이므로 lifecycleScope에서 호출
-            lifecycleScope.launch {
-                onComplete()
+            // 마크다운 텍스트가 없으면 오디오만 재생
+            Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다. 오디오만 재생합니다.")
+            if (audioContent != null && audioContent.isNotBlank()) {
+                playAudio(audioContent)
             }
         }
+
+        // 완료 콜백 호출
+        onComplete()
     }
 
     private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
