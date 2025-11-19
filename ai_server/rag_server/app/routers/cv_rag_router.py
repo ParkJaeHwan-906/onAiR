@@ -128,9 +128,35 @@ def process_cv_detection_rag(
                         error_code = module_name
                     break  # 첫 번째 이상만 사용
             
-            answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
-            answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
-            structured_answer = answer_result
+            print("=" * 60)
+            print(f"🤖 [CV RAG Router] GPT-4o 호출 시작")
+            print(f"   Query: {query}")
+            print(f"   Error Code: {error_code}")
+            print(f"   Snippets 개수: {len(snippets)}")
+            print("=" * 60)
+            
+            try:
+                answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
+                answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+                structured_answer = answer_result
+                
+                print("=" * 60)
+                print(f"✅ [CV RAG Router] GPT-4o 답변 생성 완료")
+                print(f"   Answer Text 길이: {len(answer_text) if answer_text else 0}")
+                print(f"   Markdown Text 길이: {len(answer_result.get('markdown_text', ''))}")
+                print(f"   Causes 개수: {len(answer_result.get('possible_causes', []))}")
+                print(f"   Actions 개수: {len(answer_result.get('recommended_actions', []))}")
+                print("=" * 60)
+            except Exception as e:
+                import traceback
+                print("=" * 60)
+                print(f"❌ [CV RAG Router] GPT-4o 호출 중 오류 발생")
+                print(f"   오류 타입: {type(e).__name__}")
+                print(f"   오류 메시지: {str(e)}")
+                print(f"   상세 오류:\n{traceback.format_exc()}")
+                print("=" * 60)
+                # 예외를 다시 발생시켜서 HTTPException으로 변환
+                raise
         
         # 4. TTS 변환 (무조건 수행)
         audio_content = None

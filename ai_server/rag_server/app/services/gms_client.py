@@ -97,8 +97,8 @@ def call_openai_via_gms(
         모델 응답 텍스트
     """
     # GMS OpenAI 엔드포인트 구성
-    # 예: https://gms.ssafy.io/gmsapi/api.openai.com/v1/responses
-    endpoint = f"{GMS_BASE_URL}/api.openai.com/v1/responses"
+    # 예: https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions
+    endpoint = f"{GMS_BASE_URL}/api.openai.com/v1/chat/completions"
     
     # 요청 본문 구성
     messages = []
