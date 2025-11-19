@@ -236,9 +236,10 @@ class WorkingActivity : AppCompatActivity() {
                 socketIoSttClient.videoFrames.collect { value ->
                     value.let {
                         val bitmap = it.toBitmap()
+                        val cropped = bitmap?.toBottomCropped()
                         Log.d("Demonstrate Activity", bitmap.toString())
                         Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
-                        binding.videoView.setImageBitmap(bitmap)
+                        binding.videoView.setImageBitmap(cropped)
                     }
                 }
             }
@@ -247,6 +248,23 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun ByteArray.toBitmap(): Bitmap? {
         return BitmapFactory.decodeByteArray(this, 0, this.size)
+    }
+    private fun Bitmap.toBottomCropped(targetRatio: Float = 4f/3f) : Bitmap {
+        val srcWidth = this.width
+        val srcHeight = this.height
+
+        val targetHeight = (srcWidth / targetRatio).toInt()
+
+        if (targetHeight >= srcHeight) return this
+
+        val top = (srcHeight - targetHeight) / 2
+//        val top = srcHeight - targetHeight
+
+        return Bitmap.createBitmap(
+            this,
+            0, top, srcWidth,
+            targetHeight
+        )
     }
 
     private fun observeViewModel() {
@@ -267,10 +285,10 @@ class WorkingActivity : AppCompatActivity() {
                         setResult(RESULT_OK)
                         finish()
                     } else {
-                        Toast.makeText(
-                            this@WorkingActivity,
-                            "작업 완료 처리 실패",
-                            Toast.LENGTH_SHORT).show()
+//                        Toast.makeText(
+//                            this@WorkingActivity,
+//                            "작업 완료 처리 실패",
+//                            Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -1043,12 +1061,19 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 Log.i(TAG, "🔊 로컬 음성 파일 재생 시작: $WAKEWORD_AUDIO_FILE")
 
+                runOnUiThread {
+                    showOnModal()
+                }
+
                 mediaPlayerController.playLocalAudio(WAKEWORD_AUDIO_FILE) {
                     Log.i(TAG, "✅ 로컬 음성 파일 재생 완료")
 
                     val success = socketIoSttClient.sendWakewordAudioCompleted()
                     if (success) {
                         Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송 완료")
+                        runOnUiThread {
+                            hideOnModal()
+                        }
                     } else {
                         Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패")
                     }
@@ -1107,6 +1132,7 @@ class WorkingActivity : AppCompatActivity() {
         aiOnDialog?.show(supportFragmentManager, "waiting call")
     }
     private fun showOnModal() {
+        Log.d("show on modal", "모달 호출")
         if (onAirOnDialog?.isVisible == true) return
         onAirOnDialog = OnAirOnDialog()
         onAirOnDialog?.show(supportFragmentManager, "onAiR on")
@@ -1115,6 +1141,10 @@ class WorkingActivity : AppCompatActivity() {
     private fun hideModal() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
+    }
+    private fun hideOnModal() {
+        onAirOnDialog?.dismiss()
+        onAirOnDialog = null
     }
     private fun showCvAnswer() {
         lifecycleScope.launch {
