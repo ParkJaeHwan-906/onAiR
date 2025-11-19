@@ -68,7 +68,7 @@ class SocketIoSttClient(
     val arMarkers = _arMarkers.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
-    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>()
+    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
     /**
@@ -386,12 +386,13 @@ class SocketIoSttClient(
                     if (data != null) {
                         val answerStr = data.getJSONObject("structured_answer").toString()
                         val answer = Json.decodeFromString<StructuredAnswer>(answerStr)
+                        Log.d(TAG, "답변 파싱 성공 ${answer.markdown_text}")
                         _finalAnswer.tryEmit(answer)
                     } else {
                         Log.e(TAG, "답변 data가 없습니다.")
                     }
                 } catch (e: Exception) {
-                Log.e(TAG, "❌ Clarify 응답 처리 오류: ${e.message}")
+                Log.e(TAG, "❌ AI 답변 응답 처리 오류: ${e.message}")
             }
 
 

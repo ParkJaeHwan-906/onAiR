@@ -63,7 +63,6 @@
             android:breakStrategy="simple"
             android:lineSpacingExtra="2dp"
             android:scrollbars="none"
-            android:text="이것이 원인입니다. 다시 해보세요"
             android:paddingVertical="8dp"
             android:paddingHorizontal="10dp"
             android:textColor="@color/white">
@@ -89,7 +88,6 @@
             android:breakStrategy="simple"
             android:lineSpacingExtra="2dp"
             android:scrollbars="none"
-            android:text="이것이 원인입니다. 다시 해보세요"
             android:paddingVertical="8dp"
             android:paddingHorizontal="10dp"
             android:textColor="@color/white">
@@ -115,7 +113,6 @@
             android:breakStrategy="simple"
             android:lineSpacingExtra="2dp"
             android:scrollbars="none"
-            android:text="이것이 원인입니다. 다시 해보세요"
             android:paddingVertical="8dp"
             android:paddingHorizontal="10dp"
             android:textColor="@color/white">
