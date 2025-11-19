@@ -93,6 +93,7 @@ class WorkingActivity : AppCompatActivity() {
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1
     private var aiOnDialog: AiOnDialog? = null
+    private var onAirOnDialog:  OnAirOnDialog? = null
     private var isActivityResumed = false  // Activity가 resume 상태인지 추적
     private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
@@ -1136,6 +1137,11 @@ class WorkingActivity : AppCompatActivity() {
         if (aiOnDialog?.isVisible == true) return
         aiOnDialog = AiOnDialog(statusMessage)
         aiOnDialog?.show(supportFragmentManager, "waiting call")
+    }
+    private fun showOnModal() {
+        if (onAirOnDialog?.isVisible == true) return
+        onAirOnDialog = OnAirOnDialog()
+        onAirOnDialog?.show(supportFragmentManager, "onAiR on")
     }
 
     private fun hideModal() {
