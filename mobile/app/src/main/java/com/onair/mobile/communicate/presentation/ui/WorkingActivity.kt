@@ -1069,6 +1069,11 @@ class WorkingActivity : AppCompatActivity() {
                 val fileToPlay = if (audioFile.isNotBlank()) audioFile else SERVICE_END_AUDIO_FILE
                 Log.i(TAG, "🔊 서비스 종료 오디오 재생 시작: $fileToPlay")
 
+                // 서비스 종료 오디오 재생 시 OnAir 모달 표시
+                runOnUiThread {
+                    showOnModal()
+                }
+
                 mediaPlayerController.playLocalAudio(fileToPlay) {
                     Log.i(TAG, "============================================================")
                     Log.i(TAG, "✅ 서비스 종료 오디오 재생 완료")
