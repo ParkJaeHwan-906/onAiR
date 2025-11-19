@@ -75,6 +75,9 @@ class SocketIoSttClient(
     private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
+    private val _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
+    val cvAnswer = _cvAnswer.asSharedFlow()
+
     private val _videoFrames = MutableSharedFlow<ByteArray>(replay = 1)
     val videoFrames = _videoFrames.asSharedFlow()
 
@@ -311,6 +314,8 @@ class SocketIoSttClient(
                         val cvAnomaly = gson.fromJson(jsonString, CvDetectionAnomalyDto::class.java)
                         Log.i(TAG, "   → Message: ${cvAnomaly.message}")
                         onCvDetectionAnomaly?.invoke(cvAnomaly)
+                        _cvAnswer.tryEmit(cvAnomaly)
+
                     } else {
                         Log.w(TAG, "⚠️ CV 탐지 이상 수신: 데이터가 null입니다")
                     }
