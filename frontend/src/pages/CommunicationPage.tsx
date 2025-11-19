@@ -13,9 +13,9 @@ export const CommunicationPage = () => {
   const { token, partnerInfo } = location.state || {};
   const { completeRequest, completeSentRequest } = useWebRtcRequestStore();
 
-  const handleSerialize = (lines: DrawingLine[]) => {
-    const json = JSON.stringify(lines);
-    console.log(json);
+  const handleSerialize = (_lines: DrawingLine[]) => {
+    // const json = JSON.stringify(lines);
+    // console.log(json);
   };
 
   // 통신 종료 핸들러
@@ -47,7 +47,7 @@ export const CommunicationPage = () => {
       <div className="communication-container empty">
         <div className="communication-empty-card">
           <h2 className="communication-empty-title">
-            통화 연결을 준비하고 있어요
+            통신 연결을 준비하고 있어요
           </h2>
           <p className="communication-empty-sub">
             승인이 아직 완료되지 않았을 수 있어요. <br />
@@ -75,19 +75,20 @@ export const CommunicationPage = () => {
   }
 
   return (
-    <div className="communication-container">
-      <LiveKitRoom
-        token={token}
-        serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
-        connect={true}
-      >
+    <LiveKitRoom
+      className="communication-livekit"
+      token={token}
+      serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
+      connect={true}
+      audio={true}
+    >
+      <div className="communication-container">
         <VideoFrame
           handleSerialize={handleSerialize}
           onEndCall={handleEndCall}
         />
-      </LiveKitRoom>
-
-      <WorkerPanel partnerInfo={partnerInfo} />
-    </div>
+        <WorkerPanel partnerInfo={partnerInfo} />
+      </div>
+    </LiveKitRoom>
   );
 };

@@ -2,8 +2,7 @@
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-# from app.routers import chat_router, embedding_router, tts_router, stt_router, clarify_router, ar_process
-from app.routers import chat_router, tts_router, stt_router, clarify_router, ar_process
+from app.routers import tts_router, cv_rag_router
 from app.sockets.socket_handler import init_socketio, sio
 from app.core.config import settings
 
@@ -26,54 +25,44 @@ if USE_SOCKETIO:
     init_socketio()  # 이벤트 핸들러 등록
     print("✅ Socket.IO 초기화 완료")
 
-# RAG Chat 엔드포인트 (Answerability + Generator + Self-Score)
-# chat_router는 이미 prefix="/rag"를 가지고 있음
-app.include_router(chat_router.router)
-
-# Embedding 엔드포인트 제거됨 (Gemini-Flash로 Intent 분류 대체)
-
 # TTS 엔드포인트 (Text-to-Speech)
 # tts_router는 prefix="/api"를 가지고 있음
 app.include_router(tts_router.router)
 
-# STT 엔드포인트 (Speech-to-Text 버퍼링 결과 수신)
-# stt_router는 prefix="/api/stt"를 가지고 있음
-app.include_router(stt_router.router)
+# CV RAG 엔드포인트 (YOLO 탐지 결과 기반 RAG 답변 생성)
+# 실제 서비스 로직을 재사용하는 HTTP 엔드포인트 (Postman 테스트용)
+app.include_router(cv_rag_router.router)
 
-# Clarify 엔드포인트 (Clarify 처리)
-# clarify_router는 prefix="/api/clarify"를 가지고 있음
-app.include_router(clarify_router.router)
-
-# AR 마커 엔드포인트
-# ar_process는 prefix="/ar"를 가지고 있음
-# 마완성
-app.include_router(ar_process.router)
+# 주의: 실제 서비스는 Socket.IO를 통해 통신합니다.
+# - RAG Chat: Socket.IO 이벤트로 처리 (socket_handler.py)
+# - STT: Socket.IO 이벤트로 처리 (socket_handler.py)
+# - Clarify: Socket.IO 이벤트로 처리 (socket_handler.py)
+# - AR 마커: Socket.IO 이벤트로 처리 (socket_handler.py)
 
 @app.get("/")
 def root():
     return {
         "message": "RAG Server is running 🚀",
-        "server_url": settings.FASTAPI_SERVER_URL,
-        "host": settings.FASTAPI_SERVER_HOST,
-        "port": settings.FASTAPI_SERVER_PORT,
         "endpoints": {
-            "rag_chat": "/rag/chat",
             "tts": "/api/tts",
-            "stt_buffered": "/api/stt/buffered",
-            "clarify_streaming": "/api/clarify/streaming",
-            "clarify_process": "/api/clarify/process",
-            "clarify_response": "/api/clarify/response",
+            "cv_rag": "/api/cv/rag",
             "docs": "/docs"
         },
         "socketio": {
             "enabled": USE_SOCKETIO,
             "path": "/ws",
-            "note": "Socket.IO 서버는 FastAPI 서버에 통합되어 있습니다." if USE_SOCKETIO else "Socket.IO를 사용할 수 없습니다.",
-            "fastapi_endpoints": [
-                "/api/stt/buffered (버퍼링 STT 수신)",
-                "/api/stt/streaming (Streaming STT 수신)",
-                "/api/clarify/process (Clarify 처리)",
-                "/api/clarify/response (Clarify 응답 수신)"
+            "note": "실제 서비스는 Socket.IO를 통해 통신합니다. (socket_handler.py)",
+            "events": [
+                "stt_result (STT 결과 수신)",
+                "intent_audio_completed (Intent 음성 재생 완료)",
+                "audio_playback_completed (오디오 재생 완료)",
+                "clarify_turn (Clarify 턴)",
+                "final_answer (최종 답변)",
+                "cv_detection_failed (CV 탐지 실패)",
+                "cv_detection_normal (CV 탐지 정상)",
+                "wakeword_detected (Wakeword 감지)",
+                "ar-marker (AR 마커 생성)",
+                "video_frame (비디오 프레임)"
             ]
         }
     }

@@ -157,4 +157,7 @@ public interface TasksRepository {
             UPDATE tasks SET solution = NULL, `action`=1;
             """)
     Integer resetTask();
+
+    @Update("UPDATE tasks SET `created_at`=NOW(), `updated_at`=NOW()")
+    Integer updateTodayTasks();
 }

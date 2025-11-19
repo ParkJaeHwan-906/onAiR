@@ -11,14 +11,6 @@ from config import settings
 import numpy as np
 
 
-# ========================================
-# 디버그 모드 제거됨 - 자동 진행
-# ========================================
-
-async def wait_for_next_step_async(step_name: str, step_number: str = ""):
-    """디버그 모드 제거됨 - 즉시 진행"""
-    pass
-
 class GcpBufferedStt:
     def __init__(self):
         self.language = settings.LANGUAGE
@@ -109,20 +101,83 @@ class GcpBufferedStt:
                 except:
                     break
         
-        # 3~5초 동안 음성 수집
+        # 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초)을 고려하여 음성 수집
         buffer = []
         start_time = time.time()
         target_duration = self.buffer_duration
         
+        # 음성 입력 타임아웃: 12초 동안 실제 음성이 들어오지 않으면 타임아웃
+        # (모바일 오디오 재생 시간 + 사용자 말 시작 시간을 고려하여 충분한 시간 제공)
+        SPEECH_TIMEOUT_SEC = 12.0
+        # 초기 대기 시간: 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초) = 6초
+        # (모바일 오디오 재생 완료를 기다리지 않고 버퍼링 STT가 시작되므로 충분한 시간 제공)
+        INITIAL_GRACE_PERIOD = 6.0
+        last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
+        MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
+        
         chunk_count = 0
+        # 청크 읽기 타임아웃: 0.1초 (큐가 비어있을 때 무한 대기 방지)
+        CHUNK_READ_TIMEOUT = 0.1
+        
         while time.time() - start_time < target_duration:
-            chunk = mic.read()
+            # 타임아웃을 사용하여 큐가 비어있을 때 무한 대기 방지
+            chunk = mic.read(timeout=CHUNK_READ_TIMEOUT)
             if chunk is None:
-                break
+                # 타임아웃 발생 (큐가 비어있음) - 계속 루프 진행하여 전체 타임아웃 체크
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                
+                # 전체 타임아웃 체크 (초기 대기 시간 이후)
+                if elapsed_time > INITIAL_GRACE_PERIOD:
+                    if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
+                        # 타임아웃 발생
+                        error_msg = f"음성 입력 타임아웃 ({int(SPEECH_TIMEOUT_SEC)}초 동안 음성이 감지되지 않음)"
+                        await broadcaster({
+                            "type": "error",
+                            "text": error_msg
+                        })
+                        raise ValueError(error_msg)
+                
+                # 타임아웃이 아니면 계속 루프 진행
+                continue
+            
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            
+            # 실제 음성인지 확인 (RMS 값으로)
+            has_speech = False
             if isinstance(chunk, np.ndarray):
+                # RMS 계산
+                audio_array = chunk.astype(np.int16) if chunk.dtype != np.int16 else chunk
+                rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
+                if rms >= MIN_RMS_THRESHOLD:
+                    has_speech = True
+                    last_speech_time = current_time
                 buffer.append(chunk.tobytes())
             else:
+                # bytes인 경우 numpy로 변환하여 확인
+                try:
+                    audio_array = np.frombuffer(chunk, dtype=np.int16)
+                    rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
+                    if rms >= MIN_RMS_THRESHOLD:
+                        has_speech = True
+                        last_speech_time = current_time
+                except:
+                    pass
                 buffer.append(chunk)
+            
+            # 타임아웃 확인: 초기 대기 시간 이후에만 타임아웃 체크
+            # (초기 대기 시간 동안은 사용자가 말을 시작할 시간을 제공)
+            # 주의: chunk가 None일 때는 이미 위에서 타임아웃 체크를 했으므로 여기서는 음성이 있을 때만 체크
+            if elapsed_time > INITIAL_GRACE_PERIOD:
+                if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
+                    # 타임아웃 발생
+                    error_msg = f"음성 입력 타임아웃 ({int(SPEECH_TIMEOUT_SEC)}초 동안 음성이 감지되지 않음)"
+                    await broadcaster({
+                        "type": "error",
+                        "text": error_msg
+                    })
+                    raise ValueError(error_msg)
         
         if not buffer:
             await broadcaster({
@@ -177,31 +232,54 @@ class GcpBufferedStt:
             response = await loop.run_in_executor(None, blocking_recognize)
             
             # 결과 처리
-            if response.results:
+            if response.results and len(response.results) > 0:
+                has_valid_result = False
                 for result in response.results:
-                    transcript = result.alternatives[0].transcript
-                    confidence = result.alternatives[0].confidence
-                    
-                    # Socket.IO로 결과 전송
-                    stt_data = {
-                        "type": "final",
-                        "text": transcript,
-                        "confidence": confidence
-                    }
-                    await broadcaster(stt_data)
-                    print(f"📤 STT 결과 전송: {transcript[:30]}...")
+                    if result.alternatives and len(result.alternatives) > 0:
+                        transcript = result.alternatives[0].transcript
+                        confidence = result.alternatives[0].confidence
+                        
+                        # 빈 텍스트 체크
+                        if transcript and transcript.strip():
+                            has_valid_result = True
+                            # Socket.IO로 결과 전송
+                            stt_data = {
+                                "type": "final",
+                                "text": transcript,
+                                "confidence": confidence
+                            }
+                            await broadcaster(stt_data)
+                            # 로그 최소화: 정상 전송 시 로그 제거
+                
+                # 유효한 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
+                if not has_valid_result:
+                    error_msg = "STT 결과가 None이거나 빈 텍스트입니다"
+                    # 로그 최소화: 경고 로그 제거
+                    await broadcaster({
+                        "type": "error",
+                        "text": error_msg
+                    })
+                    raise ValueError(error_msg)
             else:
+                # 결과가 없으면 예외 발생 (wakeword 대기 상태로 복귀)
+                error_msg = "음성이 인식되지 않았습니다 (STT 결과 없음)"
+                # 로그 최소화: 경고 로그 제거
                 await broadcaster({
                     "type": "info",
-                    "text": "음성이 인식되지 않았습니다."
+                    "text": error_msg
                 })
+                raise ValueError(error_msg)
                 
+        except ValueError as e:
+            # STT 결과가 None이거나 빈 텍스트인 경우
+            raise  # 상위로 전파하여 wakeword 대기 상태로 복귀
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ STT 오류: {error_msg}")
+            # 로그 최소화: 오류 로그는 메인 루프에서 처리
             await broadcaster({
                 "type": "error",
                 "text": error_msg
             })
             # 마이크는 계속 ON 상태로 유지됨
+            raise  # 상위로 예외 전파하여 wakeword 대기 상태로 복귀
 

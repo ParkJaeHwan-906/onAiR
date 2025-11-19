@@ -38,12 +38,15 @@ class CameraService:
     def __init__(self):
         self.picam2 = Picamera2()
         self.video_config = self.picam2.create_video_configuration(
-            main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameRate": 13}
+            # main={"size": (640, 480), "format": "RGB888"},
+            # controls={"FrameRate": 13}
+            main={"size": (480, 360), "format": "RGB888"},
+            controls={"FrameRate": 10}
         )
         self.picam2.configure(self.video_config)
         self.output = StreamingOutput()
-        self.encoder = JpegEncoder(q=45)
+        # self.encoder = JpegEncoder(q=45)
+        self.encoder = JpegEncoder(q=35)
         self.file_output = FileOutput(self.output)
         self.is_streaming = False
 

@@ -9,6 +9,7 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 """
 import socketio
 import cv2
+import base64
 import numpy as np
 import asyncio
 import os
@@ -19,11 +20,12 @@ from app.services.intent_service import classify_intent
 from app.services import memory
 from app.services.retrieve_service import hybrid_retrieve, rerank
 from app.services.answerability import comprehensive_evidence_check, normalize_query_style
-from app.services.generator import llm_generate_answer
+from app.services.generator import llm_generate_answer, generate_cv_detection_notification
 from app.services.tts_service import text_to_speech
 from app.services.llm_service import clarify_query
 from app.ar import motion_core
 import httpx
+from app.services.yolo_overlay import get_latest_yolo_result
 
 YOLO_URL = os.getenv("YOLO_SERVICE_URL", "http://vision:9000")
 
@@ -35,14 +37,6 @@ async def run_anomaly_detection():
         res.raise_for_status()
         return res.json()
 
-async def stop_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/stop")
-
-async def start_device_detector_task():
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{YOLO_URL}/device/start")
-
 # Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
     import google.generativeai as genai
@@ -53,6 +47,9 @@ try:
 except Exception:
     genai = None
     genai_available = False
+
+# CV 탐지 결과 임시 저장 (audio_playback_completed에서 사용)
+_pending_cv_detection: Optional[Dict[str, Any]] = None
 
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
 sio = socketio.AsyncServer(
@@ -163,6 +160,7 @@ def init_socketio():
     sio.on("register_device")(handle_register_device)
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)  # 라즈베리파이에서 Wakeword 감지 이벤트 수신
+    sio.on("wakeword_waiting_ready")(handle_wakeword_waiting_ready)  # 라즈베리파이에서 Wakeword 대기 준비 완료 이벤트 수신 (YOLO 서버 API 요청 트리거)
     sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("intent_audio_completed")(handle_intent_audio_completed)  # 모바일에서 Intent 음성 파일 재생 완료 이벤트 수신 (AI_SUPPORTER용)
     sio.on("audio_playback_completed")(handle_audio_playback_completed)  # 모바일에서 오디오 재생 완료 이벤트 수신 (CV 탐지 실패, Clarify Q&A 턴 등)
@@ -192,47 +190,55 @@ async def broadcast_to(device_types, event: str, payload: dict):
     targets = list(device_map.items())
     sent_count = 0
     
-    # 디버깅: 현재 device_map 상태 출력
-    # print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
-    # print(f"   현재 device_map: {dict(device_map)}")
-    # print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    # 디버깅: 현재 device_map 상태 출력 (cv_detection_anomaly 이벤트 전송 시에만)
+    if event == "cv_detection_anomaly":
+        print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+        print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
     
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
-        # print(f"   요청 디바이스: {device_types}")
-        # print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
-        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        if event == "cv_detection_anomaly":
+            print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
+            print(f"   요청 디바이스: {device_types}")
+            print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+            print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    if event == "cv_detection_anomaly":
+        print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                # print(f"   Payload: {str(payload)[:100]}...")
+                if event == "cv_detection_anomaly":
+                    print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                    print(f"   Payload 크기: {len(str(payload))} bytes")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                if event == "cv_detection_anomaly":
+                    print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                if event == "cv_detection_anomaly":
+                    print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        if event == "cv_detection_anomaly":
+                            print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    # if sent_count == 0:
-    #     print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    # else:
-    #     print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    if event == "cv_detection_anomaly":
+        if sent_count == 0:
+            print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+        else:
+            print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -242,7 +248,6 @@ async def broadcast_to(device_types, event: str, payload: dict):
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
     try:
-        await start_device_detector_task()
         # 클라이언트 정보 확인
         user_agent = environ.get("HTTP_USER_AGENT", "unknown")
         remote_addr = environ.get("REMOTE_ADDR", "unknown")
@@ -307,7 +312,6 @@ async def handle_wakeword_detected(sid, data):
     print(f"   연결된 디바이스: {list(set(device_map.values()))}")
     print("=" * 60)
 
-    await stop_device_detector_task()
     print("✅ 기기 탐지 종료")
     sender_device = device_map.get(sid, "unknown")
     print(f"   발신자 디바이스: {sender_device}")
@@ -353,6 +357,33 @@ async def handle_wakeword_detected(sid, data):
     print("=" * 60)
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
 
+
+async def handle_wakeword_waiting_ready(sid, data):
+    """
+    라즈베리파이로부터 Wakeword 대기 준비 완료 이벤트 수신
+    YOLO 서버로 API 요청을 보내기 위한 트리거
+    """
+    print("=" * 60)
+    print(f"🔔 [이벤트 수신] wakeword_waiting_ready 이벤트 도착")
+    print(f"   SID: {sid[:15]}...")
+    print(f"   Data: {data}")
+    print(f"   현재 device_map: {dict(device_map)}")
+    print(f"   연결된 디바이스: {list(set(device_map.values()))}")
+    print("=" * 60)
+    
+    sender_device = device_map.get(sid, "unknown")
+    print(f"   발신자 디바이스: {sender_device}")
+    
+    # 라즈베리파이에서만 받음
+    if sender_device != "raspi":
+        print("=" * 60)
+        print(f"⚠️ [오류] Wakeword 대기 준비 완료 이벤트는 라즈베리파이에서만 받을 수 있습니다.")
+        print(f"   수신자: {sender_device}")
+        print("=" * 60)
+        return
+    
+    print("=" * 60)
+    print(f"✅ [FastAPI] Wakeword 대기 준비 완료 이벤트 수신 [raspi]")
 
 async def handle_wakeword_audio_completed(sid, data):
     """
@@ -417,6 +448,7 @@ async def handle_intent_audio_completed(sid, data):
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
     AI_SUPPORTER인 경우 CV 로직 실행
     """
+    global _pending_cv_detection
     print("=" * 60)
     print(f"🔔 [이벤트 수신] intent_audio_completed 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -438,7 +470,6 @@ async def handle_intent_audio_completed(sid, data):
     print(f"📝 [단계 8-1] FastAPI 서버: 모바일 Intent 음성 파일 재생 완료 이벤트 수신 [mobile]")
     print(f"   Intent: {intent}")
     print("=" * 60)
-    await wait_for_next_step("모바일 Intent 음성 파일 재생 완료 이벤트 수신 완료", "8-1")
     
     # AI_SUPPORTER인 경우 CV 모델 실행
     if intent == "AI_SUPPORTER":
@@ -447,36 +478,90 @@ async def handle_intent_audio_completed(sid, data):
             print("🔍 [단계 9] CV 모델 실행 시작")
             print("=" * 60)
 
+            # ========================================
+            # 원래 로직 (CV 모델 실행)
+            # ========================================
             cv_raw = await run_anomaly_detection()
             print("CV 결과:", cv_raw)
-
+            
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
-            has_anomaly = cv_raw.get("detected", False)
-
+            detected = cv_raw.get("detected", False)  # 모듈 탐지 여부
+            
             filtered_anomalies = {
                 k: v for k, v in anomalies.items()
                 if v.get("results") and len(v.get("results")) > 0
             }      
-
+            
             raw_messages = cv_raw.get("messages", [])
             filtered_msgs = [
                 msg for msg in raw_messages
-                if not any(kw in msg for kw in ("미검출", "없음"))
+                if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
-
-            if not has_anomaly and modules:
-                has_anomaly = "Normal"
-
+            
             cv_result = {
-                "detected": has_anomaly,
+                "detected": detected,
                 "device_type": cv_raw.get("device_type"),
                 "modules": modules,
                 "anomalies": filtered_anomalies,
                 "message": filtered_msgs
             }
+            
+            # ========================================
+            # 테스트용 하드코딩 (주석 처리 - 테스트 시에만 사용)
+            # ========================================
+            # print("=" * 60)
+            # print("⚠️ [테스트 모드] CV 모델 실행 결과를 하드코딩 값으로 덮어씁니다.")
+            # print("   원래 로직(run_anomaly_detection)은 주석 처리되어 실행되지 않습니다.")
+            # print("=" * 60)
+            # 
+            # # 하드코딩된 테스트 값
+            # device_type = "AHU"
+            # modules = [
+            #     {
+            #         "label": "thermometer",
+            #         "confidence": 0.88,
+            #         "x1": 150,
+            #         "y1": 250,
+            #         "x2": 350,
+            #         "y2": 450
+            #     }
+            # ]
+            # anomalies = {
+            #     "gauge": {
+            #         "type": "gauge",
+            #         "status": "anomaly",
+            #         "detail": "thermo_high",
+            #         "message": "온도 과열. 현재 측정값: 85.50",
+            #         "results": {
+            #             "thermometer": {
+            #                 "angle": 280.5,
+            #                 "value": 85.5,
+            #                 "status": "anomaly",
+            #                 "message": "온도 과열"
+            #             }
+            #         }
+            #     }
+            # }
+            # has_anomaly = True  # 오류 탐지 성공
+            # is_normal = False
+            # is_anomaly = True
+            # 
+            # cv_result = {
+            #     "detected": True,
+            #     "device_type": device_type,
+            #     "modules": modules,
+            #     "anomalies": anomalies,
+            #     "message": ["온도 과열. 현재 측정값: 85.50"]
+            # }
+            # 
+            # print("=" * 60)
+            # print("✅ [테스트 모드] 하드코딩 값 설정 완료")
+            # print(f"   detected: {cv_result['detected']}")
+            # print(f"   is_normal: {is_normal}")
+            # print(f"   is_anomaly: {is_anomaly}")
+            # print("=" * 60)
 
-                
             # CV 결과 상세 출력
             print("=" * 60)
             print("📊 [단계 9-2 완료] CV 모델 실행 결과")
@@ -501,16 +586,39 @@ async def handle_intent_audio_completed(sid, data):
             print(f"   메시지: {cv_result.get('message', '')}")
             print("=" * 60)
             
-            await wait_for_next_step("CV 모델 실행 완료", "9")
+            detected = bool(cv_result["detected"])
+            device_type = cv_result.get("device_type", "unknown")
+            anomalies = cv_result.get("anomalies", {})
+            messages = cv_result.get("message", [])
             
-            if not cv_result.get("detected", False):
-                # CV 모델이 오류를 탐지하지 못한 경우
+            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
+            has_real_anomaly = len(anomalies) > 0 or len(messages) > 0
+            
+            # 디버깅: 조건 분기 확인
+            print("=" * 60)
+            print("🔍 [디버깅] 조건 분기 확인:")
+            print(f"   detected: {detected} (모듈 탐지 여부)")
+            print(f"   modules: {len(modules)}개")
+            print(f"   has_real_anomaly: {has_real_anomaly} (anomalies: {len(anomalies)}, messages: {len(messages)})")
+            print("=" * 60)
+            
+            # 3가지 케이스로 분기
+            if not detected:
+                # 케이스 1: detected = False + modules 없음 → 탐지 실패(failed)
                 print("=" * 60)
-                print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                print(f"⚠️ [단계 9 완료] CV 모델 탐지 실패: detected=False (모듈 탐지 실패)")
+                print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
-                await wait_for_next_step("CV 모델 실행 완료 (탐지 실패)", "9")
                 
-                # 모바일과 라즈베리파이로 cv_detection_failed 이벤트 전송
+                # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
+                _pending_cv_detection = {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "cv_result": cv_result
+                }
+                
+                # 모바일로 cv_detection_failed 이벤트 전송 (Operator와 동일하게 즉시 처리)
                 print("=" * 60)
                 print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
                 print("=" * 60)
@@ -518,142 +626,152 @@ async def handle_intent_audio_completed(sid, data):
                     "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                 })
                 print("✅ [단계 10 완료] 모바일로 cv_detection_failed 이벤트 전송 완료")
-                await wait_for_next_step("모바일로 cv_detection_failed 이벤트 전송 완료", "10")
+                print("=" * 60)
+                print("✅ CV 탐지 실패 처리 완료")
+                print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+                print("=" * 60)
+            elif detected and not has_real_anomaly:
+                # 케이스 2: detected = True + modules 있음 + 실제 이상 없음 → 정상(normal)
+                print("=" * 60)
+                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: 모듈은 탐지되었지만 이상 없음")
+                print(f"   메시지: {cv_result.get('message', '')}")
+                print("=" * 60)
                 
+                # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
+                _pending_cv_detection = {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "cv_result": cv_result
+                }
+                
+                # 모바일로 cv_detection_normal 이벤트 전송 (Operator와 동일하게 즉시 처리)
                 print("=" * 60)
-                print("📤 [단계 11] 라즈베리파이로 cv_detection_failed 이벤트 전송 시작")
+                print("📤 [단계 10] 모바일로 cv_detection_normal 이벤트 전송 시작")
                 print("=" * 60)
-                await broadcast_to("raspi", "cv_detection_failed", {
-                    "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
+                await broadcast_to("mobile", "cv_detection_normal", {
+                    "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
                 })
-                print("✅ [단계 11 완료] 라즈베리파이로 cv_detection_failed 이벤트 전송 완료")
+                print("✅ [단계 10 완료] 모바일로 cv_detection_normal 이벤트 전송 완료")
                 print("=" * 60)
-                await wait_for_next_step("라즈베리파이로 cv_detection_failed 이벤트 전송 완료", "11")
-                
-                # 라즈베리파이에 마이크 켜고 Streaming STT 세션 시작 요청
-                # (라즈베리파이에서 이 이벤트를 받아서 처리)
+                print("✅ CV 탐지 정상 처리 완료")
+                print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+                print("=" * 60)
             else:
-                # CV 모델이 오류를 탐지한 경우
+                # CV 모델이 오류(=anomaly)를 탐지한 경우
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
-
-                device_type = cv_result.get("device_type", "unknown")
-                anomalies = cv_result.get("anomalies", {})
-
-                query_parts = []
-
-                # 장비 유형
-                if device_type and device_type != "unknown":
-                    query_parts.append(f"{device_type}에서")
-
-                # 모듈별 이상 탐지
-                detected_modules = []
-                for module_name, module_res in anomalies.items():
-                    if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
-                        detected_modules.append(module_name)
-
-                if detected_modules:
-                    query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
-                else:
-                    query_parts.append("이상이 탐지되었습니다")
-
-                query = " ".join(query_parts)
                 
+
+                # ---------------------------
+                # 1단계: 간단한 탐지 알림 메시지 생성 및 전송
+                # ---------------------------
                 print("=" * 60)
-                print(f"🔍 [단계 10] CV 탐지 결과 기반 RAG 쿼리 생성")
-                print(f"   Query: {query}")
+                print(f"📢 [단계 10] CV 탐지 알림 메시지 생성 시작")
                 print("=" * 60)
-                await wait_for_next_step("RAG 쿼리 생성 완료", "10")
                 
-                # RAG 검색 (Hybrid Retrieve + Rerank)
-                print("=" * 60)
-                print(f"📚 [단계 11] RAG 검색 시작 (Hybrid Retrieve + Rerank)")
-                print("=" * 60)
-                try:
-                    from app.core.config import settings
-                    base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
-                    hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
-                    used_hits = hits[:5]
-                    
-                    if not used_hits:
-                        print("⚠️ RAG 검색 결과가 없습니다.")
-                        answer_text = f"{query}에 대한 관련 문서를 찾을 수 없습니다."
-                        structured_answer = {
-                            "summary": answer_text,
-                            "tts_text": answer_text,
-                            "citations": []
-                        }
-                    else:
-                        print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
-                        await wait_for_next_step("RAG 검색 완료", "11")
-                        
-                        # GPT-4o로 최종 답변 생성
-                        print("=" * 60)
-                        print(f"🤖 [단계 12] GPT-4o로 최종 답변 생성 시작")
-                        print("=" * 60)
-                        
-                        # GPT-4o 호출 시점에 Streaming STT 세션 종료 이벤트 전송
-                        # 주의: 마이크는 계속 ON 상태이지만, Streaming STT 세션을 종료하여 큐에 데이터가 누적되지 않도록 함
-                        print("[DEBUG] GPT-4o 호출 시점: Streaming STT 세션 종료 이벤트 전송")
-                        # CV 탐지 성공은 세션이 없으므로 세션 종료 이벤트는 전송하지 않음
-                        # (이 경우는 Streaming STT가 실행되지 않았으므로)
-                        
-                        snippets = [h["source"]["content"] for h in used_hits]
-                        answer_result = llm_generate_answer(query, snippets, used_hits)
-                        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
-                        structured_answer = answer_result
-                        print(f"✅ 최종 답변 생성 완료: {answer_text[:50]}...")
-                        await wait_for_next_step("최종 답변 생성 완료 (GPT-4o)", "12")
-                except Exception as e:
-                    print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    answer_text = f"{query}에 대한 답변을 생성하는 중 오류가 발생했습니다."
-                    structured_answer = {
-                        "summary": answer_text,
-                        "tts_text": answer_text,
-                        "citations": []
-                    }
+                # GPT-4o로 간단한 알림 메시지 생성
+                notification_text = generate_cv_detection_notification(device_type, anomalies)
+                print(f"✅ 탐지 알림 메시지 생성: {notification_text}")
                 
                 # TTS 변환
-                print("=" * 60)
-                print(f"🔊 [단계 13] 최종 답변 TTS 변환 시작")
-                print("=" * 60)
                 try:
-                    tts_result = text_to_speech(answer_text)
-                    audio_content = tts_result.get("audio_content")
-                    audio_encoding = tts_result.get("mime_type")
-                    print(f"✅ 최종 답변 TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
+                    notification_tts = text_to_speech(notification_text)
+                    notification_audio = notification_tts.get("audio_content")
+                    notification_audio_encoding = notification_tts.get("mime_type")
+                    print(f"✅ 탐지 알림 TTS 변환 완료")
                 except Exception as e:
-                    print(f"⚠️ TTS 생성 실패: {e}")
-                    audio_content = None
-                    audio_encoding = None
-                await wait_for_next_step("최종 답변 TTS 변환 완료", "13")
+                    print(f"⚠️ 탐지 알림 TTS 변환 실패: {e}")
+                    notification_audio = None
+                    notification_audio_encoding = None
                 
-                # 모바일로 최종 답변 전송 (텍스트 + TTS 음성 파일)
+                # ⚠️ 중요: _pending_cv_detection은 이벤트 전송 전에 저장해야 함
+                # (audio_playback_completed에서 사용하기 위해)
+                _pending_cv_detection = {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "cv_result": cv_result
+                }
+                print(f"🔍 [디버깅] _pending_cv_detection 저장 완료 (이벤트 전송 전)")
+                print(f"   device_type: {device_type}")
+                print(f"   detected: {cv_result.get('detected')}")
                 print("=" * 60)
-                print(f"📤 [단계 14] 모바일로 최종 답변 전송 시작")
+                
+                # 모바일로 탐지 알림 전송
                 print("=" * 60)
-                await broadcast_to("mobile", "final_answer", {
-                    "session_id": None,  # CV 탐지 성공은 세션이 없음
-                    "turn_id": 1,
-                    "status": "completed",
-                    "answer": answer_text,
-                    "structured_answer": structured_answer,
-                    "audio_content": audio_content,
-                    "audio_encoding": audio_encoding,
-                    "citations": structured_answer.get("citations", []),
+                print(f"📤 [단계 11] 모바일로 CV 탐지 알림 전송 시작")
+                print("=" * 60)
+                
+                # 디버깅: 전송할 payload 확인
+                payload = {
+                    "message": notification_text,
+                    "audio_content": notification_audio,
+                    "audio_encoding": notification_audio_encoding,
                     "cv_detection_result": {
                         "device_type": device_type,
                         "modules": modules,
                         "anomalies": anomalies,
                         "message": cv_result.get('message', '')
                     }
-                })
-                print("✅ 모바일로 최종 답변 전송 완료")
+                }
+                print(f"🔍 [디버깅] 전송할 payload:")
+                print(f"   이벤트명: cv_detection_anomaly")
+                print(f"   message: {notification_text}")
+                print(f"   audio_content: {'있음' if notification_audio else 'None'} ({len(notification_audio) if notification_audio else 0} bytes)")
+                print(f"   audio_encoding: {notification_audio_encoding}")
+                print(f"   cv_detection_result.device_type: {device_type}")
                 print("=" * 60)
-                await wait_for_next_step("모바일로 최종 답변 전송 완료", "14")
+                
+                # 모바일 연결 상태 확인
+                mobile_sids = [s for s, d in device_map.items() if d == "mobile"]
+                print(f"🔍 [디버깅] 모바일 연결 상태:")
+                print(f"   연결된 모바일 수: {len(mobile_sids)}")
+                if mobile_sids:
+                    print(f"   모바일 SID: {[s[:15] + '...' for s in mobile_sids]}")
+                else:
+                    print(f"   ⚠️ 연결된 모바일이 없습니다!")
+                print("=" * 60)
+                
+                # 이벤트 전송 전 최종 확인
+                print(f"🔍 [디버깅] 이벤트 전송 전 최종 확인:")
+                print(f"   이벤트명: cv_detection_anomaly")
+                print(f"   payload 크기: {len(str(payload))} bytes")
+                print(f"   audio_content 존재: {notification_audio is not None}")
+                if notification_audio:
+                    print(f"   audio_content 길이: {len(notification_audio)} bytes")
+                print("=" * 60)
+                
+                # 이벤트 전송 시도
+                try:
+                    await broadcast_to("mobile", "cv_detection_anomaly", payload)
+                    print("✅ 모바일로 CV 탐지 알림 전송 완료")
+                    
+                    # 전송 후 확인: 실제로 전송되었는지 확인
+                    mobile_sids_after = [s for s, d in device_map.items() if d == "mobile"]
+                    print(f"🔍 [디버깅] 이벤트 전송 후 모바일 연결 상태:")
+                    print(f"   연결된 모바일 수: {len(mobile_sids_after)}")
+                    if mobile_sids_after:
+                        print(f"   모바일 SID: {[s[:15] + '...' for s in mobile_sids_after]}")
+                    print("=" * 60)
+                except Exception as e:
+                    print(f"❌ [오류] 모바일로 CV 탐지 알림 전송 실패: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print("=" * 60)
+                    # 전송 실패 시에도 전체 정비 가이드 생성
+                
+                # ⚠️ 중요: 간단한 알림 전송 직후 바로 전체 정비 가이드 생성 시작
+                # 모바일에서 간단한 알림 오디오를 재생하는 동안 백그라운드에서 전체 정비 가이드 생성
+                print("=" * 60)
+                print("📚 [단계 11-1] 간단한 알림 전송 직후 전체 정비 가이드 생성 시작 (백그라운드)")
+                print("   💡 모바일에서 간단한 알림 오디오 재생 중에도 전체 정비 가이드 생성 진행")
+                print("=" * 60)
+                
+                # 바로 전체 정비 가이드 생성 로직 실행
+                # (모바일에서 간단한 알림 오디오 재생과 병렬로 진행)
+                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
                 
                 # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
                 # CV 탐지 성공 시 마이크는 OFF 상태 유지 (켜지 않음)
@@ -663,13 +781,12 @@ async def handle_intent_audio_completed(sid, data):
             import traceback
             traceback.print_exc()
     
-            # CV 모델 오류 시에도 탐지 실패로 처리
+            # CV 모델 오류 시에도 탐지 실패로 처리 (Operator와 동일하게 처리)
+            # ⚠️ 중요: 예외 발생 시 함수를 즉시 종료하여 중복 이벤트 전송 방지
             await broadcast_to("mobile", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
             })
-            await broadcast_to("raspi", "cv_detection_failed", {
-                "message": "오류를 탐지하지 못했습니다. Streaming STT 세션을 시작하세요."
-            })
+            return  # 함수 즉시 종료하여 중복 이벤트 전송 방지
     elif intent == "OPERATOR":
         # OPERATOR인 경우 WebRTC 오디오 스트리밍 대기 상태
         print("=" * 60)
@@ -688,12 +805,174 @@ async def handle_intent_audio_completed(sid, data):
         print(f"ℹ️ Intent '{intent}'는 CV 로직을 실행하지 않습니다.")
 
 
+async def generate_final_maintenance_guide(device_type, modules, anomalies, cv_result):
+    """
+    CV 탐지 이상 결과를 기반으로 전체 정비 가이드를 생성하고 모바일로 전송하는 함수
+    
+    Args:
+        device_type: 장비 타입 (예: "AHU")
+        modules: 탐지된 모듈 목록
+        anomalies: 이상 탐지 결과
+        cv_result: CV 탐지 결과 전체
+    """
+    # ---------------------------
+    # 2단계: 전체 정비 가이드 생성
+    # ---------------------------
+    print("=" * 60)
+    print(f"📚 [단계 12] 전체 정비 가이드 생성 시작")
+    print("=" * 60)
+    
+    # RAG용 질의 문장 생성
+    query_parts = []
+    if device_type and device_type != "unknown":
+        query_parts.append(f"{device_type}에서")
+    
+    # 모듈별 이상 탐지 (detail 필드 포함)
+    detected_modules = []
+    for module_name, module_res in anomalies.items():
+        if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+            detail = module_res.get("detail")
+            if detail:
+                detected_modules.append(f"{module_name}.{detail}")
+            else:
+                detected_modules.append(module_name)
+    
+    if detected_modules:
+        query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+    else:
+        query_parts.append("이상이 탐지되었습니다")
+    
+    query = " ".join(query_parts)
+    print(f"   Query: {query}")
+    
+    # RAG 검색
+    try:
+        from app.core.config import settings
+        base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
+        hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
+        used_hits = hits[:5]
+        
+        if not used_hits:
+            print("⚠️ RAG 검색 결과가 없습니다.")
+            answer_text = f"{query}에 대한 관련 문서를 찾을 수 없습니다."
+            structured_answer = {
+                "error_code": query,
+                "markdown_text": "",
+                "possible_causes": [],
+                "recommended_actions": [],
+                "safety_warnings": [],
+                "possible_causes_markdown": "",
+                "recommended_actions_markdown": "",
+                "safety_warnings_markdown": "",
+                "possible_causes_audio": None,
+                "possible_causes_audio_encoding": None,
+                "recommended_actions_audio": None,
+                "recommended_actions_audio_encoding": None,
+                "safety_warnings_audio": None,
+                "safety_warnings_audio_encoding": None,
+                "tts_text": answer_text,
+                "query": query,
+                "citations": []
+            }
+        else:
+            print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+            
+            # GPT-4o로 최종 답변 생성
+            print("=" * 60)
+            print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
+            print("=" * 60)
+            
+            snippets = [h["source"]["content"] for h in used_hits]
+            
+            # error_code 추출
+            error_code = None
+            for module_name, module_res in anomalies.items():
+                if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+                    detail = module_res.get("detail")
+                    if detail:
+                        error_code = f"{module_name}.{detail}"
+                    else:
+                        error_code = module_name
+                    break
+            
+            answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
+            answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+            structured_answer = answer_result
+            print(f"✅ 전체 정비 가이드 생성 완료")
+    except Exception as e:
+        print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        answer_text = f"{query}에 대한 답변을 생성하는 중 오류가 발생했습니다."
+        structured_answer = {
+            "error_code": query,
+            "markdown_text": "",
+            "possible_causes": [],
+            "recommended_actions": [],
+            "safety_warnings": [],
+            "possible_causes_markdown": "",
+            "recommended_actions_markdown": "",
+            "safety_warnings_markdown": "",
+            "possible_causes_audio": None,
+            "possible_causes_audio_encoding": None,
+            "recommended_actions_audio": None,
+            "recommended_actions_audio_encoding": None,
+            "safety_warnings_audio": None,
+            "safety_warnings_audio_encoding": None,
+            "tts_text": answer_text,
+            "query": query,
+            "citations": []
+        }
+    
+    # 모바일로 전체 정비 가이드 전송 (각 섹션별 TTS 포함)
+    print("=" * 60)
+    print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
+    print("=" * 60)
+    await broadcast_to("mobile", "final_answer", {
+        "session_id": None,
+        "turn_id": 1,
+        "status": "completed",
+        "answer": answer_text,
+        "structured_answer": structured_answer,
+        "audio_content": None,  # 전체 TTS는 제거 (각 섹션별로 분리)
+        "audio_encoding": None,
+        "citations": structured_answer.get("citations", []),
+        "cv_detection_result": {
+            "device_type": device_type,
+            "modules": modules,
+            "anomalies": anomalies,
+            "message": cv_result.get('message', '')
+        }
+    })
+    print("✅ 모바일로 전체 정비 가이드 전송 완료")
+    print("=" * 60)
+    
+    # 전역 변수 초기화
+    global _pending_cv_detection
+    _pending_cv_detection = None
+    
+    # 라즈베리파이로 CV 탐지 성공 알림
+    await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
+    
+    # 주의: 서비스 종료 오디오는 final_answer의 모든 섹션 재생 완료 후 재생됩니다.
+    # 모바일에서 final_answer의 마지막 섹션 재생 완료 후 자동으로 서비스 종료 오디오를 재생하고
+    # audio_playback_completed (type="service_completed") 이벤트를 전송합니다.
+
+
 async def handle_audio_playback_completed(sid, data):
     """
     모바일로부터 오디오 재생 완료 이벤트 수신
-    - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+    - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+    - type="cv_detection_normal": CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+    - type="cv_detection_anomaly": CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
     - type="clarify_qa_turn": Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
+    - type="final_answer": 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
+    - type="service_completed": 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
     """
+    # CV 탐지 관련 오디오 재생 완료 처리
+    # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
+    global _pending_cv_detection
+    
     sender_device = device_map.get(sid, "unknown")
     
     # 모바일에서만 받음
@@ -709,47 +988,119 @@ async def handle_audio_playback_completed(sid, data):
     print(f"📝 FastAPI 서버: 모바일 오디오 재생 완료 이벤트 수신 [mobile]")
     print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
     print("=" * 60)
-    await wait_for_next_step("모바일 오디오 재생 완료 이벤트 수신 완료", "12-1")
     
-    if audio_type == "cv_detection_failed":
-        # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
-        print("=" * 60)
-        print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
-        print("=" * 60)
+    # 디버깅: _pending_cv_detection 상태 확인
+    print(f"🔍 [디버깅] _pending_cv_detection 상태:")
+    print(f"   _pending_cv_detection: {'있음' if _pending_cv_detection else 'None'}")
+    if _pending_cv_detection:
+        cv_result = _pending_cv_detection.get("cv_result", {})
+        print(f"   detected: {cv_result.get('detected')}")
+        print(f"   device_type: {_pending_cv_detection.get('device_type')}")
+    print("=" * 60)
+    
+    # CV 탐지 결과가 있는 경우 (cv_detection_failed, cv_detection_normal, cv_detection_anomaly)
+    if _pending_cv_detection:
+        cv_result = _pending_cv_detection.get("cv_result", {})
+        detected = cv_result.get("detected", False)
         
-        # 세션 ID 생성 (Clarify 세션용)
-        import uuid
-        session_id = str(uuid.uuid4())
+        # ⚠️ 중요: audio_type만으로 정확한 분기 처리 (detected 값으로는 판단하지 않음)
+        if audio_type == "cv_detection_failed":
+            # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+            print("=" * 60)
+            print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
+            print(f"   Type: {audio_type}, Detected: {detected}")
+            print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+            print("=" * 60)
+            
+            print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
+            print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+            print("=" * 60)
+            
+            # 전역 변수 초기화
+            _pending_cv_detection = None
+            
+            # 주의: CV 탐지 실패 시 Streaming STT 로직은 제거되었습니다.
+            # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
+            # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
+            
+        elif audio_type == "cv_detection_normal":
+            # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+            print("=" * 60)
+            print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
+            print(f"   Type: {audio_type}, Detected: {detected}")
+            print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+            print("=" * 60)
+            
+            print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
+            print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+            print("=" * 60)
+            
+            # 전역 변수 초기화
+            _pending_cv_detection = None
         
-        await broadcast_to("raspi", "start_streaming_stt", {
-            "session_id": session_id,
-            "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
-        })
-        print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
-        await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        elif audio_type == "cv_detection_anomaly":
+            # CV 탐지 알림 TTS 재생 완료 이벤트 수신
+            # ⚠️ 주의: 이미 handle_intent_audio_completed에서 간단한 알림 전송 직후
+            # 전체 정비 가이드가 생성되어 전송되었을 수 있음
+            print("=" * 60)
+            print(f"✅ [FastAPI] CV 탐지 알림 TTS 재생 완료 이벤트 수신")
+            print("=" * 60)
+            
+            # _pending_cv_detection이 None이면 이미 전체 정비 가이드가 생성되어 전송됨
+            if _pending_cv_detection is None:
+                print("=" * 60)
+                print("ℹ️ [FastAPI] _pending_cv_detection이 None입니다.")
+                print("   이미 전체 정비 가이드가 생성되어 전송되었습니다.")
+                print("   추가 처리 없이 종료합니다.")
+                print("=" * 60)
+            else:
+                # _pending_cv_detection이 남아있으면 (타임아웃 등으로 인해 아직 생성되지 않은 경우)
+                # 전체 정비 가이드 생성 및 전송
+                print("=" * 60)
+                print("⚠️ [FastAPI] _pending_cv_detection이 아직 남아있습니다.")
+                print("   전체 정비 가이드 생성이 아직 완료되지 않았습니다.")
+                print("   지금 생성합니다.")
+                print("=" * 60)
+                
+                # _pending_cv_detection에서 CV 탐지 결과 가져오기
+                device_type = _pending_cv_detection["device_type"]
+                modules = _pending_cv_detection["modules"]
+                anomalies = _pending_cv_detection["anomalies"]
+                cv_result = _pending_cv_detection["cv_result"]
+                
+                # 전체 정비 가이드 생성 및 전송 (공통 함수 사용)
+                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
         
-    elif audio_type == "clarify_qa_turn":
-        # Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
-        # (이미 라즈베리파이에서 Streaming STT가 실행 중이므로 별도 처리 불필요)
-        print("=" * 60)
-        print(f"✅ [FastAPI] Clarify Q&A 턴 TTS 재생 완료 이벤트 수신")
-        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-        print("=" * 60)
-        print("=" * 60)
-        print(f"🔄 [FastAPI] 다음 Streaming STT 질문 대기 중")
-        print(f"   💡 라즈베리파이 Streaming STT는 계속 실행 중")
-        print(f"   💡 사용자가 다음 질문을 말하면 자동으로 처리됩니다")
-        print("=" * 60)
-        await wait_for_next_step("Clarify Q&A 턴 TTS 재생 완료 처리", "12-3")
     elif audio_type == "final_answer":
-        # AI_Supporter 최종 답변 TTS 재생 완료 → 마이크 ON + Wakeword 감지 대기 시작
+        # AI_Supporter 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
         print("=" * 60)
-        print(f"✅ [FastAPI] 최종 답변 TTS 재생 완료 이벤트 수신")
+        print(f"✅ [FastAPI] 최종 답변의 모든 섹션 TTS 재생 완료 이벤트 수신")
         print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
         print("=" * 60)
         print("=" * 60)
-        print(f"🎉 [FastAPI] 서비스 로직 종료")
-        print(f"   💡 Clarify 루프 완료 → 최종 답변 전달 완료")
+        print(f"📤 [FastAPI] 모바일로 서비스 종료 오디오 재생 요청 전송")
+        print(f"   파일: 001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+        print("=" * 60)
+        
+        # 모바일로 서비스 종료 오디오 재생 요청
+        await broadcast_to("mobile", "play_service_end_audio", {
+            "audio_file": "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+        })
+        
+        print("✅ 모바일로 서비스 종료 오디오 재생 요청 전송 완료")
+        print("   💡 모바일에서 오디오 재생 완료 후 service_completed 이벤트 수신 대기")
+        print("=" * 60)
+        await wait_for_next_step("서비스 종료 오디오 재생 요청 전송 완료", "14-1")
+    
+    elif audio_type == "service_completed":
+        # 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
+        print("=" * 60)
+        print(f"✅ [FastAPI] 서비스 종료 오디오 재생 완료 이벤트 수신")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+        print("=" * 60)
+        print("=" * 60)
+        print(f"🎉 [FastAPI] 서비스 로직 종료 완료")
+        print(f"   💡 모든 처리 완료 → Wakeword 감지 대기 상태로 복귀")
         print("=" * 60)
         print("=" * 60)
         print(f"📤 [FastAPI] 라즈베리파이로 wakeword_start_waiting 이벤트 전송")
@@ -761,9 +1112,9 @@ async def handle_audio_playback_completed(sid, data):
         
         print("=" * 60)
         print(f"✅ [FastAPI] Wakeword 감지 대기 시작 이벤트 전송 완료")
-        print(f"   💡 서비스 로직 종료 완료")
+        print(f"   💡 서비스 로직 종료 완료 → 초기 상태로 복귀")
         print("=" * 60)
-        await wait_for_next_step("최종 답변 TTS 재생 완료 처리", "14-1")
+        await wait_for_next_step("Wakeword 감지 대기 상태 복귀 완료", "14-2")
     else:
         print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
 
@@ -1415,13 +1766,16 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
             print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   💡 모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
+            print(f"   💡 모바일에서 모든 섹션 TTS 재생 완료 후 audio_playback_completed (type: final_answer) 이벤트 수신 대기")
+            print(f"   💡 그 후 서비스 종료 오디오 재생 및 wakeword 대기 상태로 복귀")
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
-            # 주의: 문서에 따르면 final_answer 전송 후 service_completed를 보내지 않고,
-            # audio_playback_completed (type: "final_answer") 수신 후에만
-            # mic_on과 wakeword_start_waiting을 전송합니다.
+            # 주의: final_answer 전송 후 모든 섹션 재생 완료 시
+            # audio_playback_completed (type: "final_answer") 수신 후
+            # 서비스 종료 오디오 재생 요청을 보내고,
+            # 서비스 종료 오디오 재생 완료 후 audio_playback_completed (type: "service_completed") 수신 시
+            # wakeword_start_waiting을 전송합니다.
             # 이는 handle_audio_playback_completed에서 처리됩니다.
             
     except Exception as e:
@@ -1626,7 +1980,7 @@ async def handle_video_frame(sid, data):
     #--- ③ 프레임 스트림에 추가 (최근 N개만 유지) ---
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame)
+        await add_frame(frame, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
@@ -1636,7 +1990,15 @@ async def handle_video_frame(sid, data):
     if result["status"] not in ("ok", "init"):
         # print("[DEBUG] 모션 추적에 실패했습니다.")
         _, jpeg_bytes = cv2.imencode(".jpg", frame)
-        await broadcast_to("pc", "video_frame", jpeg_bytes.tobytes())
+        frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+        # await broadcast_to('pc', "video_frame", jpeg_bytes.tobytes())
+        # await broadcast_to('mobile', "video_frame", frame_base64)
+        await broadcast_to('pc', "video_frame", {
+            "timestamp": timestamp,
+            "frame": jpeg_bytes.tobytes()
+        })
+        # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+        await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1659,7 +2021,7 @@ async def handle_video_frame(sid, data):
                 "info": {
                     "x": round(u_new, 2),
                     "y": round(v_new, 2),
-                    "z": round(z_size, 4),
+                    # "z": round(z_size, 4),
                     "size": round(size_px, 3) if m["type"] == "marker" else m["info"]["size"]
                 },
                 "color": m["color"],
@@ -1669,14 +2031,33 @@ async def handle_video_frame(sid, data):
             })
         ar_markers[:] = updated
         # print(f"arr : {ar_markers}")
-        await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+        await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to("pc", "video_frame", {
+    await broadcast_to('pc', "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
+    # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+    await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
+    try:
+        yolo_res = await get_latest_yolo_result()
+        if yolo_res:
+            frame_ts = yolo_res.get("frame_ts")
+
+            if frame_ts and abs(frame_ts - timestamp) <= 200:
+                payload = {
+                    "timestamp": frame_ts,
+                    "boxes": yolo_res.get("boxes", []),
+                }
+                await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
+
+    except Exception as e:
+        print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
+
+
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
@@ -1713,6 +2094,10 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
+    # 기본 AR 컴포넌트 추가
+    global ar_markers
+    ar_markers.clear()  # 혹시라도 남아있는 컴포넌트 삭제
+
     print("=" * 60)
     print("🔔 [이벤트 수신] accept_communication 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -1775,12 +2160,30 @@ async def accept_communication(sid, data):
     print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
     print("=" * 60)
 
+    description = {
+        "type": "description",
+        "idx": -1,      # 마커에만 idx 적용
+        "info": {
+            # 화면의 가장 좌측 상단에 고정
+            "x": 0.0,
+            "y": 0.0,
+            "size": 10  # Client 에서 고정해서 사용
+        },
+        "color": None,
+        "pulseScale": None,
+        "pulseOpacity": None,
+        "opacity": None
+    }
+    ar_markers.append(description)
+
 # 웹에서 통신 종료 이벤트 전달
 @sio.on("communication_close")
 async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
+    # 마커 데이터 초기화
+    global ar_markers
     print("=" * 60)
     print("🔔 [이벤트 수신] communication_close 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -1806,15 +2209,13 @@ async def communication_close(sid, data):
     print("   목적: STT/Wakeword 프로세스가 마이크 장치를 물리적 재점유")
     print("=" * 60)
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
-    # 마커 데이터 초기화
-    global ar_markers
-    ar_markers = []
+    ar_markers.clear()
     # WebRTC 프로세스가 마이크를 완전히 해제하고 Python 3.10 프로세스가 마이크를 재점유할 시간 확보
     print("⏳ [통신 종료] 마이크 장치 재점유 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
-    # 주의: 마이크는 handle_audio_stream({"start": False})에서 이미 재점유되어 ON 상태임
-    # 마이크는 항상 ON 상태로 유지되므로 별도의 mic_on 이벤트 불필요
+    # 모바일 기기에 통신 종료 이벤트 전달
+    await broadcast_to("mobile", "communication_close", {})
     
     # Wakeword 감지 대기 시작
     print("=" * 60)
@@ -1826,7 +2227,6 @@ async def communication_close(sid, data):
     print("=" * 60)
     print("📤 [통신 종료] 기기 탐지 작업 시작")
     print("=" * 60)
-    await start_device_detector_task()
     
     print("✅ 통신 종료 처리 완료: WebRTC 오디오 스트리밍 중지, STT 목적 음성 수집 재개, Wakeword 감지 대기 시작, 기기 탐지 시작")
 
@@ -1917,9 +2317,10 @@ async def handle_ar_marker(sid, data):
     u_new, v_new, z_scale = motion_core.update_marker_position(u, v)
     # z_scale = Essential Matrix에서 얻은 상대 깊이 변화량
     size_px = motion_core.compute_marker_size(z_scale)
+    next_idx = sum(1 for m in ar_markers if m.get("type") == "marker") + 1
     marker = {
         "type": "marker",
-        "idx": len(ar_markers) + 1,
+        "idx": next_idx,
         "info": {
             "x": u_new,
             "y": v_new,
@@ -1933,7 +2334,7 @@ async def handle_ar_marker(sid, data):
     ar_markers.append(marker)
     # print(f"[DEBUG] arr : {ar_markers}")
     # await sio.emit("ar-info", {"markers": ar_markers}, to=sid)
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
 async def delete_marker(sid, data):
     """
@@ -1954,8 +2355,11 @@ async def delete_marker(sid, data):
 
 
     # 삭제 이후 남아있는 모든 마커 idx를 다시 1부터 정렬할 필요가 있다면:
-    for i, marker in enumerate(ar_markers, start=1):
-        marker["idx"] = i
+    idx = 1
+    for marker in ar_markers:
+        if marker.get("type") == "marker":
+            marker["idx"] = idx
+            idx += 1
     
     # 전송을 하긴 하는데, 없어도 될듯?
-    await broadcast_to("pc", "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})

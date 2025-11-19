@@ -93,6 +93,20 @@ def init(K_in: np.ndarray | None = None, D_in: np.ndarray | None = None):
 
     # print("✅ [motion_core] 초기화 완료")
 
+def is_valid_pts(pts):
+    if pts is None:
+        return False
+    if not isinstance(pts, np.ndarray):
+        return False
+    if pts.dtype != np.float32:
+        return False
+    if pts.ndim != 3:
+        return False
+    if pts.shape[1:] != (1, 2):
+        return False
+    if len(pts) == 0:
+        return False
+    return True
 
 # ==========================================================
 # 🔧 prev_pts / pts 정규화 유틸 (feature_tracker와 동일한 안정판)
@@ -275,6 +289,83 @@ def process_frame(frame_bgr, sid=None):
             "flow_mean": (0.0, 0.0),
             "pose_ok": False,
         }
+    
+
+    
+    # ==========================================================
+    # --- Optical Flow 호출 전 prev_pts 유효성 검사 ---
+    # ==========================================================
+    # if prev_pts is None or len(prev_pts) == 0:
+    #     # print("[DEBUG] prev_pts 없음 → 신규 특징점 추출")
+    #     pts, method = extract_features(gray)
+
+    #     if pts is None or len(pts) == 0:
+    #         # 재추출도 실패 → no_tracks
+    #         prev_gray = gray.copy()
+    #         prev_pts = None
+    #         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+    #         return {
+    #             "status": "no_tracks",
+    #             "tracked": 0,
+    #             "inliers": 0,
+    #             "ransac_ratio": 0.0,
+    #             "size": float(size_acc),
+    #             "flow_mean": (0.0, 0.0),
+    #             "pose_ok": False,
+    #         }
+
+    #     # 재추출 성공 → 새 prev_pts 로 초기화
+    #     prev_gray = gray.copy()
+    #     prev_pts = pts
+    #     last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+
+    #     return {
+    #         "status": "init",
+    #         "tracked": int(len(pts)),
+    #         "inliers": int(len(pts)),
+    #         "ransac_ratio": 100.0,
+    #         "size": float(size_acc),
+    #         "flow_mean": (0.0, 0.0),
+    #         "pose_ok": False,
+    #     }
+
+    # ==========================================================
+    # --- Optical Flow 호출 전 prev_pts 유효성 검사 ---
+    # ==========================================================
+    if not is_valid_pts(prev_pts):
+        # print("[DEBUG] prev_pts 없음/무효 → 신규 특징점 추출")
+        pts, method = extract_features(gray)
+
+        # 1) 재추출 실패 → no_tracks
+        if pts is None or len(pts) == 0:
+            prev_pts = None
+            prev_gray = gray.copy()
+            last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+            return {
+                "status": "no_tracks",
+                "tracked": 0,
+                "inliers": 0,
+                "ransac_ratio": 0.0,
+                "size": float(size_acc),
+                "flow_mean": (0.0, 0.0),
+                "pose_ok": False,
+            }
+
+        # 2) 재추출 성공 → prev_pts 초기화 (중요!)
+        prev_pts = np.asarray(pts, dtype=np.float32).reshape(-1, 1, 2)
+        prev_gray = gray.copy()
+        last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+
+        return {
+            "status": "init",
+            "tracked": int(len(prev_pts)),
+            "inliers": int(len(prev_pts)),
+            "ransac_ratio": 100.0,
+            "size": float(size_acc),
+            "flow_mean": (0.0, 0.0),
+            "pose_ok": False,
+        }
+
 
     # --- 3) Optical Flow 추적 ---
     # print("[DEBUG] [STEP2] Optical Flow 추적 시작")
@@ -290,6 +381,38 @@ def process_frame(frame_bgr, sid=None):
         lk_max_level=4,
         frame=frame,
     )
+
+    reset_condition = (
+        prev_valid is None or
+        next_valid is None or
+        len(prev_valid) < 20 or
+        len(next_valid) < 20 or
+        prev_valid.ndim != 3 or
+        next_valid.ndim != 3 or
+        prev_valid.shape[2] != 2 or
+        next_valid.shape[2] != 2
+    )
+
+    if reset_condition:
+        # print("[RESET] tracking lost → feature reinitialization")
+        pts, method = extract_features(gray)
+
+        if pts is None or len(pts) == 0:
+            prev_gray = gray.copy()
+            prev_pts = None
+            last_flow_mean[:] = 0.0
+            return {"status": "no_tracks"}
+
+        prev_gray = gray.copy()
+        prev_pts = pts
+        last_flow_mean[:] = 0.0
+
+        return {
+            "status": "reset",
+            "tracked": int(len(pts)),
+            "flow_mean": (0.0, 0.0),
+            "size": float(size_acc)
+        }
 
     # if prev_valid is None:
     #     print("[DEBUG]  ▶ Optical Flow 결과: prev_valid=None")
@@ -318,8 +441,14 @@ def process_frame(frame_bgr, sid=None):
 
         # 재추출 성공 → init 상태로 복귀
         # print(f"[DEBUG]  ▶ 재추출 성공: {method}, 특징점 {len(pts)}개")
+        # if prev_valid is not None and len(prev_valid) > 0:
+        #     prev_pts = np.vstack([prev_valid, pts])
+        # else:
+        #     prev_pts = pts
+
+        prev_pts = pts
+
         prev_gray = gray.copy()
-        prev_pts = None
         last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
 
         return {
@@ -387,7 +516,7 @@ def process_frame(frame_bgr, sid=None):
             R_total[:] = R @ R_total
             t_total[:] = t_total + (R_total @ t)
         # else:
-            # print("[DEBUG]  ▶ pose_ok=False → size_acc 유지")
+        #     print("[DEBUG]  ▶ pose_ok=False → size_acc 유지")
 
     except Exception as e:
         # Essential 계산 실패해도 크래시 나지 않게 보호

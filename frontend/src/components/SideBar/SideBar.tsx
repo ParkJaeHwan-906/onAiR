@@ -1,26 +1,47 @@
+import {
+  Video,
+  House,
+  Users,
+  ListChecks,
+  Wrench,
+  Cctv,
+  AlertTriangle,
+} from "lucide-react";
 import { NavLink } from "react-router-dom";
 import "../../styles/SideBar.css";
 
 const navItems = [
-  { id: "home", label: "홈", icon: "/icons/home.png", to: "/home" },
+  { id: "home", label: "홈", icon: House, to: "/home" },
   {
     id: "communication",
-    label: "커뮤니케이션 관리",
-    icon: "/icons/text.png",
+    label: "커뮤니케이션",
+    icon: Video,
     to: "/communication",
   },
   {
     id: "staff",
     label: "직원 관리",
-    icon: "/icons/profile.png",
+    icon: Users,
     to: "/employees",
   },
-  { id: "work", label: "작업 관리", icon: "/icons/list.png", to: "/work" },
+  { id: "work", label: "작업 현황", icon: ListChecks, to: "/work" },
   {
     id: "equipment",
     label: "설비 관리",
-    icon: "/icons/box.png",
+    icon: Wrench,
     to: "/equipment",
+  },
+  {
+    id: "cctv",
+    label: "CCTV 모니터링",
+    icon: Cctv,
+    to: "/cctv",
+  },
+  {
+    id: "anomaly",
+    label: "이상탐지 모니터링",
+    icon: AlertTriangle,
+    to: "/anomaly",
   },
 ];
 
@@ -35,17 +56,23 @@ function SideBar() {
         </div>
       </div>
 
-      {navItems.map((item) => (
-        <NavLink
-          key={item.id}
-          to={item.to}
-          end={item.to === "/home"}
-          className={({ isActive }) => `nav-button${isActive ? " active" : ""}`}
-        >
-          <img src={item.icon} alt={item.label} />
-          <span className="button-text">{item.label}</span>
-        </NavLink>
-      ))}
+      {navItems.map((item) => {
+        const Icon = item.icon;
+
+        return (
+          <NavLink
+            key={item.id}
+            to={item.to}
+            end={item.to === "/home"}
+            className={({ isActive }) =>
+              `nav-button${isActive ? " active" : ""}`
+            }
+          >
+            <Icon className="nav-icon" />
+            <span className="button-text">{item.label}</span>
+          </NavLink>
+        );
+      })}
     </aside>
   );
 }

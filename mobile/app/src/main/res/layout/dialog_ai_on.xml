@@ -25,8 +25,8 @@
             android:background="@color/white">
 
             <ImageView
-                android:layout_width="100dp"
-                android:layout_height="100dp"
+                android:layout_width="70dp"
+                android:layout_height="70dp"
                 android:id="@+id/ai_on_gif"
                 android:layout_gravity="center"
                 android:scaleType="fitCenter"
@@ -37,9 +37,10 @@
                 android:layout_height="wrap_content"
                 android:id="@+id/ai_status_text"
                 android:layout_gravity="center"
+                android:gravity="center"
                 android:paddingHorizontal="20dp"
                 android:paddingVertical="5dp"
-                android:textSize="20sp"
+                android:textSize="16sp"
                 android:background="@drawable/style_modal"
                 android:textColor="@color/white"
                 android:textFontWeight="700"/>

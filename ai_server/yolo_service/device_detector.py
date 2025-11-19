@@ -2,129 +2,127 @@
 
 import asyncio
 from loguru import logger
-
 from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
-from ai_server.yolo_service.redis_client import save_device_state, get_device_state, get_latest_frame
+from ai_server.yolo_service.redis_client import (
+    save_device_state, get_device_state, get_latest_frame, save_yolo_result
+)
+from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, DEVICE_CLASSES
+from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG
 
-
-YOLO_MODEL_PATH = "/app/ai_server/yolo_service/models/device_best.pt"
 DETECTION_INTERVAL = 2.0
+CONF_THRESHOLD = 0.75
+STABLE_COUNT_REQUIRED = 5
 
-# 안정성 파라미터
-CONF_THRESHOLD = 0.65
-STABLE_COUNT_REQUIRED = 2
-
-# 모델 및 Task (Task는 main.py가 가지고 있음)
 _device_model = None
 
 
-# ----------------------------------------------------------
-# 1) 메인 디바이스 감지 루프 (cancel 대응 완료)
-# ----------------------------------------------------------
 async def device_detector_loop():
-    """장비(AHU/Boiler/Chiller 등)를 2초마다 감지하는 메인 루프."""
-
     global _device_model
-
+    _device_model = load_yolo_model(ALL_MODEL_PATH)
     logger.info("[device_monitor] 📡 디바이스 감지 루프 시작")
 
-    # 1) YOLO 모델 로드
-    if _device_model is None:
-        try:
-            logger.info("[device_monitor] YOLO 모델 로드 중...")
-            _device_model = load_yolo_model(YOLO_MODEL_PATH)
-            logger.info("[device_monitor] ✅ YOLO device 모델 로드 완료")
-        except Exception as e:
-            logger.exception(f"[device_monitor] ❌ YOLO 모델 로드 실패: {e}")
-            return
-
-    # 2) Redis 상태 초기화
     info = await get_device_state()
     prev_state = info["label"] if info else None
     candidate_label = None
     stable_counter = 0
 
-    logger.info(f"[device_monitor] 초기 prev_state = {prev_state}")
-
-    # 3) 감지 루프
     while True:
         try:
-            frame = await get_latest_frame()
-            logger.info(f"[device_monitor] Redis 저장 상태(prev_state): {prev_state}")
+            res = await get_latest_frame()
+            if res is None:
+                await asyncio.sleep(DETECTION_INTERVAL)
+                continue
 
+            frame, ts = res if isinstance(res, tuple) else (res.get("frame"), res.get("ts"))
             if frame is None:
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            detections = yolo_infer(_device_model, frame, return_boxes=False)
+            detections = yolo_infer(_device_model, frame, return_boxes=True)
 
-            if not detections:
+            # YOLO 박스 표준 스키마로 변환
+            all_boxes = []
+            for d in detections:
+                if "x1" in d and "y1" in d and "x2" in d and "y2" in d:
+
+                    x1, y1, x2, y2 = map(int, [d["x1"], d["y1"], d["x2"], d["y2"]])
+                    label = d["label"]
+                    conf = float(d["confidence"])
+
+                    display_label = label
+                    temp_value = None
+
+                    is_anomaly = False
+                    # thermometer → 게이지 각도/값 계산
+                    if label == "thermometer":
+                        roi = frame[y1:y2, x1:x2]
+
+                        angle_val = detect_gauge_angle_fast(roi, THERMO_CONFIG)
+                        if angle_val is not None:
+                            angle, value = angle_val
+                            temp_value = round(float(value), 1)
+                            if temp_value < 20 or temp_value > 40:
+                                is_anomaly = True
+
+                            # # 라벨에 온도 표시 붙이기
+                            # display_label = f"thermometer({temp_value})"
+
+
+                    all_boxes.append({
+                        "label": display_label,
+                        "confidence": conf,
+                        "x1": x1,
+                        "y1": y1,
+                        "x2": x2,
+                        "y2": y2,
+                        "anomaly" : is_anomaly,
+                        "temperature": temp_value     # 필요하면 나중에 서버에서 활용
+                    })
+            await save_yolo_result(ts, all_boxes)
+
+            # 디바이스 후보
+            device_candidates = [
+                d for d in detections
+                if d["label"] in DEVICE_CLASSES and d["confidence"] >= CONF_THRESHOLD
+            ]
+
+            if not device_candidates:
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 가장 신뢰도 높은 label 선택
-            top = max(detections, key=lambda d: d["confidence"])
+            top = max(device_candidates, key=lambda d: d["confidence"])
             label, confidence = top["label"], top["confidence"]
 
-            logger.debug(f"[device_monitor] 감지: {label} ({confidence:.2f})")
-
-            # confidence 기준 미달
-            if confidence < CONF_THRESHOLD:
-                stable_counter = 0
-                await asyncio.sleep(DETECTION_INTERVAL)
-                continue
-
-            # 기존 상태와 같으면 후보 초기화
             if label == prev_state:
                 candidate_label = None
                 stable_counter = 0
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # 후보 라벨 안정화 검사
             if candidate_label != label:
                 candidate_label = label
                 stable_counter = 1
-                logger.debug(f"[device_monitor] 후보 라벨 변경 → {candidate_label}")
             else:
                 stable_counter += 1
-                logger.debug(
-                    f"[device_monitor] 후보 안정화 진행 {candidate_label}: "
-                    f"{stable_counter}/{STABLE_COUNT_REQUIRED}"
-                )
 
-            # 안정성 만족 시 prev_state 업데이트
             if stable_counter >= STABLE_COUNT_REQUIRED:
                 prev_state = candidate_label
                 await save_device_state(prev_state, confidence)
-                logger.info(f"[device_monitor] 🔄 상태 변경 확정 → {prev_state} ({confidence:.2f})")
-
                 candidate_label = None
                 stable_counter = 0
-
-        except asyncio.CancelledError:
-            logger.info("[device_monitor] 🛑 디바이스 감지 루프 Cancelled")
-            break
 
         except Exception as e:
             logger.exception(f"[device_monitor] 🚨 오류: {e}")
 
         await asyncio.sleep(DETECTION_INTERVAL)
 
-    logger.info("[device_monitor] 디바이스 감지 루프 종료 완료")
-
-
 # ----------------------------------------------------------
 # 2) start_device_detector — Task 생성하지 말고 loop만 실행
 # ----------------------------------------------------------
 async def start_device_detector():
-    """main.py에서 Task로 실행할 엔트리 포인트.
-    Task는 main.py가 관리.
-    """
     try:
         await device_detector_loop()
     except asyncio.CancelledError:
         logger.info("[device_monitor] start_device_detector Cancelled")
         raise
-
