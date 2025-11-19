@@ -541,28 +541,18 @@ def run_stt_loop():
                     reset_to_wakeword_waiting(f"Wakeword 이벤트 전송 예외: {e}", allow_new_service=False)
                     continue
                 
-                # 모바일에서 음성 파일 재생 완료 대기
+                # 모바일 음성 파일 재생 완료 콜백 등록 (버퍼링 STT와 병렬로 대기)
                 wakeword_audio_completed_flag = {"completed": False}
                 
                 def on_wakeword_audio_completed():
                     """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
                     wakeword_audio_completed_flag["completed"] = True
                 
-                # 모바일 음성 파일 재생 완료 콜백 등록
                 set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
                 
-                max_wait_time = 30  # 최대 30초 대기 (음성 파일 재생 시간)
-                wait_start = time.time()
-                
-                while not wakeword_audio_completed_flag["completed"] and (time.time() - wait_start) < max_wait_time:
-                    time.sleep(0.5)  # 0.5초마다 확인
-                
-                if not wakeword_audio_completed_flag["completed"]:
-                    # 타임아웃 발생 시 예외 처리이므로 allow_new_service=False
-                    reset_to_wakeword_waiting("모바일 음성 파일 재생 완료 신호 미수신 (타임아웃)", allow_new_service=False)
-                    continue
-                
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
+                # 주의: 버퍼링 STT는 모바일 음성 파일 재생 완료를 기다리지 않고 즉시 시작
+                # 사용자가 말을 시작할 수 있도록 하기 위함 (타임아웃 방지)
                 try:
                     loop.run_until_complete(stt_session())
                 except ValueError as e:
