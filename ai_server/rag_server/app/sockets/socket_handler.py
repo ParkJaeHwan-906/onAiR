@@ -497,12 +497,8 @@ async def handle_intent_audio_completed(sid, data):
                 if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
             
-            if not has_anomaly and modules:
-                has_anomaly = "Normal"
-            
-            # has_anomaly가 "Normal" 문자열인지 확인
-            is_normal = (has_anomaly == "Normal")
-            is_anomaly = (has_anomaly is True or (isinstance(has_anomaly, bool) and has_anomaly))
+            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
+            has_real_anomaly = len(filtered_anomalies) > 0 or len(filtered_msgs) > 0
             
             has_thermo = any(m["label"] == "thermometer" for m in modules)
             if has_thermo:
@@ -541,13 +537,13 @@ async def handle_intent_audio_completed(sid, data):
                     "message": "thermometer 과열"
                 }
             else:
-                    cv_result = {
-                        "detected": has_anomaly,
-                        "device_type": cv_raw.get("device_type"),
-                        "modules": modules,
-                        "anomalies": filtered_anomalies,
-                        "message": filtered_msgs
-                    }
+                cv_result = {
+                    "detected": detected,
+                    "device_type": cv_raw.get("device_type"),
+                    "modules": modules,
+                    "anomalies": filtered_anomalies,
+                    "message": filtered_msgs
+                }
             
             # ========================================
             # 테스트용 하드코딩 (주석 처리 - 테스트 시에만 사용)
