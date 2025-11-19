@@ -2181,3 +2181,7 @@ async def delete_marker(sid, data):
     
     # 전송을 하긴 하는데, 없어도 될듯?
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+
+@sio.on("final_answer")
+async def send_final_answer(sid, data):
+    await broadcast_to(['pc', 'mobile'], "final_answer", data)
