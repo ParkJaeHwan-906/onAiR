@@ -183,19 +183,7 @@ class WorkingActivity : AppCompatActivity() {
         
         if (::socketIoSttClient.isInitialized) {
             removeCallback()
-            // 비정상 종료 시 wakeword 대기 상태로 복귀
-            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
-            if (!hasSentCommunicationClose) {
-                sendCommunicationCloseForRecovery()
-                hasSentCommunicationClose = true
-            } else {
-                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
-            }
         }
-//        if (::socketIoSttClient.isInitialized) {
-//            socketIoSttClient.disconnect()
-//            Log.i(TAG, "🔌 Socket.IO 연결 종료")
-//        }
     }
 
     override fun onDestroy() {
