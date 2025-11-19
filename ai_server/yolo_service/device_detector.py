@@ -45,7 +45,7 @@ async def device_detector_loop():
             for d in detections:
                 if "x1" in d and "y1" in d and "x2" in d and "y2" in d:
 
-                    x1, y1, x2, y2 = map(int, [d["x1"], d["y1"], d["x2"], d["y"]])
+                    x1, y1, x2, y2 = map(int, [d["x1"], d["y1"], d["x2"], d["y2"]])
                     label = d["label"]
                     conf = float(d["confidence"])
 
