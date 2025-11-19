@@ -75,7 +75,10 @@ class SocketIoSttClient(
     private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
-    private val _videoFrames = MutableSharedFlow<ByteArray>(extraBufferCapacity = 10)
+    private val _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
+    val cvAnswer = _cvAnswer.asSharedFlow()
+
+    private val _videoFrames = MutableSharedFlow<ByteArray>(replay = 1)
     val videoFrames = _videoFrames.asSharedFlow()
 
     /**
@@ -311,6 +314,8 @@ class SocketIoSttClient(
                         val cvAnomaly = gson.fromJson(jsonString, CvDetectionAnomalyDto::class.java)
                         Log.i(TAG, "   → Message: ${cvAnomaly.message}")
                         onCvDetectionAnomaly?.invoke(cvAnomaly)
+                        _cvAnswer.tryEmit(cvAnomaly)
+
                     } else {
                         Log.w(TAG, "⚠️ CV 탐지 이상 수신: 데이터가 null입니다")
                     }
@@ -406,13 +411,8 @@ class SocketIoSttClient(
             }
             socket?.on("video_frame") { args ->
                 try {
-                    val data = args[0].toString()
-                    val videoFrame = Json.decodeFromString<VideoFrameResponse>(data)
-                    val decodedBytes = Base64.decode(videoFrame.frame, Base64.DEFAULT)
-                    val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-                    Log.d(TAG, "$decodedBytes, $bitmap")
-                    _videoFrames.tryEmit(decodedBytes)
-
+                    val data = args[0] as ByteArray
+                    _videoFrames.tryEmit(data)
                 } catch (e: Exception) {
                     Log.e(TAG, "Frame decode error: ${e.message}")
                 }
@@ -626,21 +626,19 @@ class SocketIoSttClient(
         }
     }
 
-//    fun sendCommunicationEnd() : Boolean {
-//        if (!isConnected()) {
-//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-//            return false
-//        }
-//
-//        return try {
-//            socket?.emit("communication_end")
-//            Log.i(TAG, "통화 종료")
-//            true
-//        } catch (e: Exception) {
-//            Log.e(TAG, "통화 종료 실패")
-//            false
-//        }
-//    }
+    fun sendAcceptCommunication(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+        }
+
+        return try {
+            socket?.emit("accept_communication", null)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 통신 시작 이벤트 전송 실패: ${e.message}")
+            false
+        }
+    }
     
     /**
      * Intent 결과에 따른 음성 파일 재생 완료 이벤트 전송 (AI_SUPPORTER용)
