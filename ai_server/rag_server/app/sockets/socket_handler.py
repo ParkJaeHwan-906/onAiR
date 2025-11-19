@@ -479,85 +479,95 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 60)
 
             # ========================================
-            # 테스트용 하드코딩 (CV 모델 실행 결과 덮어쓰기)
+            # 원래 로직 (CV 모델 실행)
             # ========================================
-            print("⚠️ [테스트 모드] CV 모델 실행 결과를 하드코딩 값으로 덮어씁니다.")
+            cv_raw = await run_anomaly_detection()
+            print("CV 결과:", cv_raw)
             
-            # 하드코딩된 테스트 값
-            device_type = "AHU"
-            modules = [
-                {
-                    "label": "thermometer",
-                    "confidence": 0.88,
-                    "x1": 150,
-                    "y1": 250,
-                    "x2": 350,
-                    "y2": 450
-                }
+            modules = cv_raw.get("modules", [])
+            anomalies = cv_raw.get("anomalies", {})
+            has_anomaly = cv_raw.get("detected", False)
+            
+            filtered_anomalies = {
+                k: v for k, v in anomalies.items()
+                if v.get("results") and len(v.get("results")) > 0
+            }      
+            
+            raw_messages = cv_raw.get("messages", [])
+            filtered_msgs = [
+                msg for msg in raw_messages
+                if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
-            anomalies = {
-                "gauge": {
-                    "type": "gauge",
-                    "status": "anomaly",
-                    "detail": "thermo_high",
-                    "message": "온도 과열. 현재 측정값: 85.50",
-                    "results": {
-                        "thermometer": {
-                            "angle": 280.5,
-                            "value": 85.5,
-                            "status": "anomaly",
-                            "message": "온도 과열"
-                        }
-                    }
-                }
-            }
-            has_anomaly = True  # 오류 탐지 성공
-            is_normal = False
-            is_anomaly = True
+            
+            if not has_anomaly and modules:
+                has_anomaly = "Normal"
+            
+            # has_anomaly가 "Normal" 문자열인지 확인
+            is_normal = (has_anomaly == "Normal")
+            is_anomaly = (has_anomaly is True or (isinstance(has_anomaly, bool) and has_anomaly))
             
             cv_result = {
-                "detected": True,
-                "device_type": device_type,
+                "detected": has_anomaly,
+                "device_type": cv_raw.get("device_type"),
                 "modules": modules,
-                "anomalies": anomalies,
-                "message": ["온도 과열. 현재 측정값: 85.50"]
+                "anomalies": filtered_anomalies,
+                "message": filtered_msgs
             }
             
             # ========================================
-            # 원래 로직 (주석 처리 - 테스트 후 복구)
+            # 테스트용 하드코딩 (주석 처리 - 테스트 시에만 사용)
             # ========================================
-            # cv_raw = await run_anomaly_detection()
-            # print("CV 결과:", cv_raw)
+            # print("=" * 60)
+            # print("⚠️ [테스트 모드] CV 모델 실행 결과를 하드코딩 값으로 덮어씁니다.")
+            # print("   원래 로직(run_anomaly_detection)은 주석 처리되어 실행되지 않습니다.")
+            # print("=" * 60)
             # 
-            # modules = cv_raw.get("modules", [])
-            # anomalies = cv_raw.get("anomalies", {})
-            # has_anomaly = cv_raw.get("detected", False)
-            # 
-            # filtered_anomalies = {
-            #     k: v for k, v in anomalies.items()
-            #     if v.get("results") and len(v.get("results")) > 0
-            # }      
-            # 
-            # raw_messages = cv_raw.get("messages", [])
-            # filtered_msgs = [
-            #     msg for msg in raw_messages
-            #     if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
+            # # 하드코딩된 테스트 값
+            # device_type = "AHU"
+            # modules = [
+            #     {
+            #         "label": "thermometer",
+            #         "confidence": 0.88,
+            #         "x1": 150,
+            #         "y1": 250,
+            #         "x2": 350,
+            #         "y2": 450
+            #     }
             # ]
-            # 
-            # if not has_anomaly and modules:
-            #     has_anomaly = "Normal"
-            # 
-            # # has_anomaly가 "Normal" 문자열인지 확인
-            # is_normal = (has_anomaly == "Normal")
-            # is_anomaly = (has_anomaly is True or (isinstance(has_anomaly, bool) and has_anomaly))
+            # anomalies = {
+            #     "gauge": {
+            #         "type": "gauge",
+            #         "status": "anomaly",
+            #         "detail": "thermo_high",
+            #         "message": "온도 과열. 현재 측정값: 85.50",
+            #         "results": {
+            #             "thermometer": {
+            #                 "angle": 280.5,
+            #                 "value": 85.5,
+            #                 "status": "anomaly",
+            #                 "message": "온도 과열"
+            #             }
+            #         }
+            #     }
+            # }
+            # has_anomaly = True  # 오류 탐지 성공
+            # is_normal = False
+            # is_anomaly = True
             # 
             # cv_result = {
-            #     "detected": has_anomaly,
-            #     "device_type": cv_raw.get("device_type"),
+            #     "detected": True,
+            #     "device_type": device_type,
             #     "modules": modules,
-            #     "anomalies": filtered_anomalies,
-            #     "message": filtered_msgs
+            #     "anomalies": anomalies,
+            #     "message": ["온도 과열. 현재 측정값: 85.50"]
             # }
+            # 
+            # print("=" * 60)
+            # print("✅ [테스트 모드] 하드코딩 값 설정 완료")
+            # print(f"   detected: {cv_result['detected']}")
+            # print(f"   is_normal: {is_normal}")
+            # print(f"   is_anomaly: {is_anomaly}")
+            # print("=" * 60)
 
             # CV 결과 상세 출력
             print("=" * 60)
@@ -586,6 +596,16 @@ async def handle_intent_audio_completed(sid, data):
             detected = bool(cv_result["detected"])
             device_type = cv_result.get("device_type", "unknown")
             anomalies = cv_result.get("anomalies", {})
+            
+            # 디버깅: 조건 분기 확인
+            print("=" * 60)
+            print("🔍 [디버깅] 조건 분기 확인:")
+            print(f"   detected: {detected} (type: {type(detected)})")
+            print(f"   is_normal: {is_normal} (type: {type(is_normal)})")
+            print(f"   is_anomaly: {is_anomaly} (type: {type(is_anomaly)})")
+            print(f"   not detected: {not detected}")
+            print(f"   detected and is_normal: {detected and is_normal}")
+            print("=" * 60)
             
             if not detected:
                 # CV 모델이 오류를 탐지하지 못한 경우
@@ -800,9 +820,11 @@ async def handle_intent_audio_completed(sid, data):
             traceback.print_exc()
     
             # CV 모델 오류 시에도 탐지 실패로 처리 (Operator와 동일하게 처리)
+            # ⚠️ 중요: 예외 발생 시 함수를 즉시 종료하여 중복 이벤트 전송 방지
             await broadcast_to("mobile", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
             })
+            return  # 함수 즉시 종료하여 중복 이벤트 전송 방지
     elif intent == "OPERATOR":
         # OPERATOR인 경우 WebRTC 오디오 스트리밍 대기 상태
         print("=" * 60)
