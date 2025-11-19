@@ -93,7 +93,7 @@
   font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease;
 }
 
 .complete-button {

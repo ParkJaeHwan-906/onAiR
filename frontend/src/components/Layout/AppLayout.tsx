@@ -209,10 +209,10 @@ function AppLayout() {
       if (!detail) return;
 
       // rtcCanceled 이벤트는 시간 초과로 인한 취소
-      console.log("rtcCanceled 이벤트 수신 - 시간 초과로 인한 취소:", detail);
+      // console.log("rtcCanceled 이벤트 수신 - 시간 초과로 인한 취소:", detail);
 
       if (!myInfo) {
-        console.warn("myInfo가 없어 rtcCanceled 이벤트를 처리할 수 없습니다.");
+        // console.warn("myInfo가 없어 rtcCanceled 이벤트를 처리할 수 없습니다.");
         return;
       }
 
@@ -226,12 +226,13 @@ function AppLayout() {
           detail.requestUserAccountId || detail.senderAccountId;
         if (senderAccountId) {
           cancelRequestByTimeout(senderAccountId);
-        } else {
-          console.warn(
-            "rtcCanceled 이벤트에 senderAccountId가 없습니다:",
-            detail
-          );
         }
+        // else {
+        //   console.warn(
+        //     "rtcCanceled 이벤트에 senderAccountId가 없습니다:",
+        //     detail
+        //   );
+        // }
       }
       calculateTodayCount();
     };

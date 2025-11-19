@@ -27,6 +27,7 @@ interface ServerToClientEvents {
       x2: number;
       y2: number;
     }>;
+    anomaly: boolean;
   }) => void;
   "marker-created": (data: { msg: string }) => void;
   "ar-info": (
@@ -104,18 +105,18 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     // 5. 서버 코드에 맞춘 'register_device' 이벤트 전송
     socket.on("connect", () => {
-      console.log("Socket Connected:", socket.id);
+      // console.log("Socket Connected:", socket.id);
       // (타입 추론됨) socket.emit('register_device', ...)
       socket.emit("register_device", { device: "pc" });
     });
 
     // 연결 해제/오류 이벤트
-    socket.on("disconnect", (reason) => {
-      console.log("Socket Disconnected:", reason);
+    socket.on("disconnect", () => {
+      // console.log("Socket Disconnected:", reason);
     });
 
-    socket.on("connect_error", (err) => {
-      console.error("Socket Connection Error:", err.message);
+    socket.on("connect_error", () => {
+      // console.error("Socket Connection Error:", err.message);
     });
 
     // 6. 컴포넌트 언마운트 시 소켓 연결 해제

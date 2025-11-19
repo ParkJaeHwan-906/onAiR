@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         throw new Error(res.message || "로그인 실패");
       }
     } catch (error) {
-      console.error("로그인 중 오류:", error);
+      // console.error("로그인 중 오류:", error);
       throw error;
     }
   },

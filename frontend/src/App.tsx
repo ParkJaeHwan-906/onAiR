@@ -32,10 +32,8 @@ function App() {
   // 로그인 후 자동 SSE 연결
   useEffect(() => {
     if (isAuthenticated) {
-      console.log("🔌 [App] SSE Connect");
       connect();
     } else {
-      console.log("🔌 [App] SSE Disconnect");
       disconnect();
     }
   }, [isAuthenticated, connect, disconnect]);
