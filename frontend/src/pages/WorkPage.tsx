@@ -35,7 +35,7 @@ function WorkPage() {
           setSelectedWork(work || null);
         }
       } catch (error) {
-        console.error("작업 정보 조회 실패:", error);
+        // console.error("작업 정보 조회 실패:", error);
         setSelectedWork(null);
       }
     };
