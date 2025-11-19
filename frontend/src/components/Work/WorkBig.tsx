@@ -43,7 +43,7 @@ function WorkBig({ refreshKey, onSelectTask }: WorkBigProps) {
     if (!dateTimeString) return "-";
 
     const utcDate = new Date(dateTimeString); // 백엔드에서 UTC 기준으로 전달됨
-    const kstDate = new Date(utcDate.getTime() + 9 * 60 * 60 * 1000); // +9시간
+    const kstDate = new Date(utcDate.getTime());
 
     const hours = String(kstDate.getHours()).padStart(2, "0");
     const minutes = String(kstDate.getMinutes()).padStart(2, "0");
