@@ -1,10 +1,13 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.content.Intent
+import android.media.MediaPlayer
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -45,6 +48,12 @@ import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import io.noties.markwon.Markwon
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -117,6 +126,7 @@ class WorkingActivity : AppCompatActivity() {
         goCall()
         // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
+        showAiAnswer()
     }
 
     override fun onStart() {
@@ -227,37 +237,32 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun observeViewModel() {
         lifecycleScope.launch {
-//            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    sseViewModel.eventFlow.collectLatest { event ->
-                        Log.d("SSE_working", event.toString())
-                        when (event) {
-                            is SseEvent.CallRequest -> showCallRequestCard(event.data)
-                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
-                            else -> Unit
-                        }
+            launch {
+                sseViewModel.eventFlow.collectLatest { event ->
+                    Log.d("SSE_working", event.toString())
+                    when (event) {
+                        is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                        is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
+                        else -> Unit
                     }
                 }
-                launch {
-                    workingViewModel.endStatus.collect { success ->
-                        if (success) {
-                            setResult(RESULT_OK)
-                            finish()
-                        } else {
-                            Toast.makeText(
-                                this@WorkingActivity,
-                                "작업 완료 처리 실패",
-                                Toast.LENGTH_SHORT).show()
-                        }
+            }
+            launch {
+                workingViewModel.endStatus.collect { success ->
+                    if (success) {
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        Toast.makeText(
+                            this@WorkingActivity,
+                            "작업 완료 처리 실패",
+                            Toast.LENGTH_SHORT).show()
                     }
                 }
-
-
+            }
         }
     }
     private fun showCallRequestCard(data: JSONObject) {
-        println(data)
-        println(data.getString("name"))
         Log.d("SSE_show card", data.toString())
         binding.senderInfo.text = data.getString("name")
         binding.description.text = "통신을 요청합니다: ${data.getString("description")}"
@@ -279,10 +284,11 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
-                if (!token.isNullOrBlank()) {
+                if (token.isNotBlank()) {
                     val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
+                        putExtra("description", binding.description.text)
                     }
                     startActivity(intent)
                     binding.callRequestCard.visibility = View.GONE
@@ -897,6 +903,94 @@ class WorkingActivity : AppCompatActivity() {
     private fun hideModal() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
+    }
+    private fun showAiAnswer() {
+        lifecycleScope.launch {
+            workingViewModel.finalAnswer.collect { answer ->
+                runSection(
+                    binding.aiResultCauseText,
+                    answer.possible_causes_markdown,
+                    answer.possible_causes_audio
+                )
+                runSection(
+                    binding.aiResultActionText,
+                    answer.recommended_actions_markdown,
+                    answer.recommended_actions_audio
+                )
+                runSection(
+                    binding.aiResultWarningText,
+                    answer.safety_warnings_markdown,
+                    answer.safety_warnings_audio
+                )
+            }
+        }
+    }
+    suspend fun runSection(
+        textView: TextView,
+        text: String,
+        audioBase64: String?
+    ) {
+        withContext(Dispatchers.Main) {
+            textView.slideIn()
+        }
+        withContext(Dispatchers.Main) {
+            showTypingEffect(textView, text)
+        }
+        playAudio(audioBase64)
+        withContext(Dispatchers.Main) {
+            textView.fadeOut()
+        }
+        delay(2000)
+    }
+    suspend fun showTypingEffect(textView: TextView, text: String) {
+        val markwon = Markwon.create(textView.context)
+
+        for (i in 1..text.length) {
+            val sub = text.substring(0, i)
+            markwon.setMarkdown(textView, sub)
+            delay(15)
+        }
+    }
+    suspend fun playAudio(base64: String?) {
+        if (base64 == null) return
+
+        val audioBytes = Base64.decode(base64, Base64.DEFAULT)
+        val tempFile = File.createTempFile("tts", ".mp3")
+
+        tempFile.writeBytes(audioBytes)
+
+        val player = MediaPlayer().apply {
+            setDataSource(tempFile.path)
+        }
+        val completion = CompletableDeferred<Unit>()
+        player.setOnCompletionListener {
+            completion.complete(Unit)
+            player.release()
+        }
+        player.prepare()
+        player.start()
+
+        completion.await()
+    }
+
+    fun View.slideIn(duration:Long = 400) {
+        this.translationX = -300f
+        this.alpha = 0f
+        this.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(duration)
+            .start()
+    }
+
+    suspend fun View.fadeOut(duration: Long = 400) {
+        val job = CompletableDeferred<Unit>()
+        this.animate()
+            .alpha(0f)
+            .setDuration(duration)
+            .withEndAction { job.complete(Unit) }
+            .start()
+        job.await()
     }
 
 

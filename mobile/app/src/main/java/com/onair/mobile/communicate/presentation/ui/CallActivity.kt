@@ -17,9 +17,17 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,6 +51,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toColorLong
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -61,12 +70,15 @@ data class TimedPath(
     val color: Color,
     val timestamp: Long = System.currentTimeMillis()
 )
+lateinit var description : String
 class CallActivity : ComponentActivity() {
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
         val token = intent.getStringExtra("token")
             ?: throw NullPointerException("token is null")
+        description = intent.getStringExtra("description")
+            ?: throw java.lang.NullPointerException("description is null")
         CallViewModel(
             url = url,
             token = token,
@@ -99,16 +111,6 @@ class CallActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 CallScreen(callViewModel)
-            }
-        }
-    }
-
-    private fun handleCommunicationClose() {
-        lifecycleScope.launch {
-            try {
-                finish()
-            } catch (e: Exception) {
-
             }
         }
     }
@@ -295,15 +297,12 @@ fun WhiteboardCanvas(
             Log.d("CallActivity marker", markers.toString())
             markers.forEach { marker ->
                 val p = transform(marker.info.x, marker.info.y)
-                ArMarker(marker = marker, p.x, p.y)
+                if (marker.type == "description") {
+                    DescriptionMarker(marker = marker, p.x, p.y)
+                } else {
+                    ArMarker(marker = marker, p.x, p.y)
+                }
             }
-    //        SmallFloatingActionButton(
-    //            onClick = { (context as? Activity)?.finish() },
-    //            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-    //            contentColor = MaterialTheme.colorScheme.secondary
-    //        ) {
-    //            Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
-    //        }
         }
     }
 //    val points = remember { mutableStateListOf<Points>() }
@@ -350,6 +349,27 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
             radius = scale,
             center = Offset(x, y),
             style = Stroke(width = 4f)
+        )
+    }
+}
+@Composable
+fun DescriptionMarker(marker: ArMarker, x: Float, y: Float) {
+    // MaterialCardView -> Card
+    Card(
+        modifier = Modifier
+            .wrapContentSize()
+            // XML의 layout_constraintTop... 등은 부모 레이아웃(Column 등)에서 처리
+            .padding(4.dp), // 카드 자체의 외곽 여백 (선택사항)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant // FilledStyle과 유사한 색상
+        )
+    ) {
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium, // textAppearanceBodyMedium
+            modifier = Modifier
+                .padding(end = 10.dp) // layout_marginEnd="10dp"
+                .weight(1f, fill = false) // 텍스트가 길어질 경우 처리
         )
     }
 }

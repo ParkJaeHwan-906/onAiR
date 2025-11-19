@@ -128,5 +128,6 @@ dependencies {
     implementation "com.squareup.retrofit2:converter-gson:2.9.0"
     implementation libs.lottie
     implementation libs.glide
+    implementation libs.core
 
 }
