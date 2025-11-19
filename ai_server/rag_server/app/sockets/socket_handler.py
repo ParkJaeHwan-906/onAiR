@@ -440,6 +440,7 @@ async def handle_intent_audio_completed(sid, data):
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
     AI_SUPPORTER인 경우 CV 로직 실행
     """
+    global _pending_cv_detection
     print("=" * 60)
     print(f"🔔 [이벤트 수신] intent_audio_completed 이벤트 도착")
     print(f"   SID: {sid[:15]}...")
@@ -564,7 +565,6 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
-                global _pending_cv_detection
                 _pending_cv_detection = {
                     "device_type": device_type,
                     "modules": modules,
