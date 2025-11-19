@@ -66,6 +66,9 @@ clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, his
 # Intent 결과 저장 (CV 로직 실행 대기용)
 pending_intents: Dict[str, str] = {}  # { session_id 또는 임시 키: "AI_SUPPORTER" | "OPERATOR" }
 
+# WebRTC 통신 상태 추적
+webrtc_communication_active: bool = False  # WebRTC 오디오 스트리밍이 활성화되어 있는지 여부
+
 
 # ========================================
 # 🐛 단계별 수동 실행 모드 (디버깅용)
@@ -1947,10 +1950,19 @@ async def accept_communication(sid, data):
     print("⏳ [통신 요청 수락] 마이크 장치 해제 대기 중... (0.3초)")
     await asyncio.sleep(0.3)
     
+    # WebRTC 통신 상태 플래그 설정
+    global webrtc_communication_active
+    webrtc_communication_active = True
+    
+    # 주의: 모바일은 Spring 서버의 SSE 이벤트 callResponse를 통해 WebRTC 토큰을 받아 연결을 시작합니다.
+    # FastAPI는 라즈베리파이 오디오 스트리밍만 시작하면 되며, 모바일로 별도 이벤트를 보낼 필요가 없습니다.
+    
     print("=" * 60)
     print("✅ [통신 요청 수락] 처리 완료")
     print("   - AI_Supporter/OPERATOR 기능 중지")
     print("   - WebRTC 오디오 스트리밍 시작 준비 완료")
+    print("   - WebRTC 통신 상태: 활성화됨")
+    print("   💡 모바일은 Spring 서버의 SSE callResponse 이벤트를 통해 WebRTC 토큰을 받아 연결을 시작합니다.")
     print("=" * 60)
 
     # 기본 AR 컴포넌트 추가
@@ -1987,10 +1999,22 @@ async def communication_close(sid, data):
     if sender_device == "unknown":
         print("⚠️ 알 수 없는 디바이스에서 communication_close 이벤트 수신 - 무시")
         return
+    
+    # WebRTC 통신 상태 확인
+    global webrtc_communication_active
+    if not webrtc_communication_active:
+        print("=" * 60)
+        print("⚠️ [통신 종료] WebRTC 통신이 활성화되지 않은 상태에서 communication_close 이벤트 수신")
+        print("   이벤트를 무시합니다. (WebRTC 통신이 시작되지 않았거나 이미 종료된 상태)")
+        print("=" * 60)
+        return
 
     print("=" * 60)
     print("📞 [통신 종료] WebRTC 오디오 스트리밍 중지 및 STT 목적 음성 수집 재개")
     print("=" * 60)
+    
+    # WebRTC 통신 상태 플래그 해제
+    webrtc_communication_active = False
     
     # WebRTC 오디오 스트리밍 목적 음성 수집 중지
     # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
