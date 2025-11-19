@@ -33,10 +33,7 @@ class OnAirOnDialog() : DialogFragment(
         super.onViewCreated(view, savedInstanceState)
         val gif = binding.aiOnGif
         Glide.with(this)
-            .asGif()
             .load(R.drawable.start_logo)
             .into(gif)
-
-//        binding.aiStatusText.text = statusMessage
     }
 }
