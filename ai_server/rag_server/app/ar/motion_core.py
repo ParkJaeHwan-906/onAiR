@@ -344,7 +344,7 @@ def process_frame(frame_bgr, sid=None):
     )
 
     if reset_condition:
-        print("[RESET] tracking lost → feature reinitialization")
+        # print("[RESET] tracking lost → feature reinitialization")
         pts, method = extract_features(gray)
 
         if pts is None or len(pts) == 0:
