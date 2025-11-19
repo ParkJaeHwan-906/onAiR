@@ -17,6 +17,17 @@ interface ServerToClientEvents {
   pong: (data: { msg: string }) => void;
   video_frame: (data: { timestamp: number; frame: ArrayBuffer }) => void;
   audio_frame: (data: { timestamp: number; frame: ArrayBuffer }) => void;
+  video_overlay: (data: {
+    timestamp: number;
+    boxes: Array<{
+      label: string;
+      confidence: number;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }>;
+  }) => void;
   "marker-created": (data: { msg: string }) => void;
   "ar-info": (
     data: Array<{
