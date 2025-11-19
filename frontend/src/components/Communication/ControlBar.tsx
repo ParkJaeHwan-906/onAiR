@@ -60,7 +60,7 @@ const ControlBar = ({
    */
   const handleToolChange = (tool: string) => {
     const newTool = currentTool === tool ? "" : tool;
-    console.log("🎨 [ControlBar] tool 변경:", newTool);
+    // console.log("🎨 [ControlBar] tool 변경:", newTool);
     setCurrentTool(newTool);
     setOpenMenu("none");
   };
