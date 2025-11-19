@@ -82,7 +82,10 @@ const WorkerHeader = ({ partnerInfo }: WorkerHeaderProps) => {
                   className={`status-text ${
                     status === "대기중" ? "waiting" : "active"
                   }`}
-                  onClick={toggleStatus}
+                  onClick={() => {
+                    if (partnerInfo) return;
+                    toggleStatus();
+                  }}
                 >
                   {status}
                 </span>

@@ -106,7 +106,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     if (!room) return;
     const jsonString = JSON.stringify(data);
     const byteArray = new TextEncoder().encode(jsonString);
-    console.log(">>> [Web] SENDING DATA:", jsonString);
+    // console.log(">>> [Web] SENDING DATA:", jsonString);
     room.localParticipant.publishData(byteArray, {
       reliable: false,
     });
@@ -126,7 +126,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
 
     // ar-info 이벤트 listen
     socket.on("ar-info", (data) => {
-      console.log("[SOCKET] receive ar-info =>", data);
+      // console.log("[SOCKET] receive ar-info =>", data);
 
       const markersData = data as unknown as { markers: ArMarker[] };
 
@@ -219,7 +219,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       );
 
       if (target) {
-        console.log("emit delete-marker -> idx:", target.idx);
+        // console.log("emit delete-marker -> idx:", target.idx);
 
         socket.emit("delete-marker", { idx: target.idx });
       }
@@ -262,9 +262,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
         },
       ]);
 
-      console.log(
-        `ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
-      );
+      // console.log(
+      //   `ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+      // );
 
       // 소켓 이벤트 발신 (서버 있을 경우)
       socket.emit("ar-marker", {

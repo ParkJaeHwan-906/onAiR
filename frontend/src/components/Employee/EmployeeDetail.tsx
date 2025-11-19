@@ -94,7 +94,7 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
     const handleCallResponse = (e: any) => {
       const { acceptConnection, accessToken } = e.detail;
 
-      console.log("SSE 응답:", e.detail);
+      // console.log("SSE 응답:", e.detail);
 
       // 수락됨
       if (acceptConnection && accessToken) {
@@ -120,14 +120,14 @@ function EmployeeDetail({ employee }: EmployeeDetailProps) {
       }
 
       // 거절됨
-      console.log("통신 거절 이벤트:", e.detail);
+      // console.log("통신 거절 이벤트:", e.detail);
       useWebRtcRequestStore.getState().updateSentRequestStatus(false);
       setModalType("rejected");
     };
 
     // 타임아웃
-    const handleTimeout = (e: any) => {
-      console.log("통신 타임아웃", e.detail);
+    const handleTimeout = (_e: any) => {
+      // console.log("통신 타임아웃", e.detail);
 
       // 이미 거절 모달 뜬 상태면 → timeout 무시
       if (modalType === "rejected") return;
