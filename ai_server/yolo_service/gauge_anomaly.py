@@ -151,26 +151,34 @@ def detect_gauge_angle_fast(roi, cfg):
         # -----------------------
         # 6) thermometer 전용 물리 보정
         # -----------------------
-        def cw_delta(a, b): return (a - b) % 360
+        def cw_delta(a, b):
+            return (a - b) % 360
 
+        angle = float(angle)
+
+        # 1) 기본값 계산
         progressed = cw_delta(min_angle, angle)
         ratio = float(np.clip(progressed / sweep, 0, 1))
         value = cfg["min_val"] + ratio * (cfg["max_val"] - cfg["min_val"])
 
+        # 2) 반대각 계산 (항상 계산해둔다)
+        opp_angle = (angle + 180) % 360
+        prog_o = cw_delta(min_angle, opp_angle)
+        ratio_o = float(np.clip(prog_o / sweep, 0, 1))
+        value_o = cfg["min_val"] + ratio_o * (cfg["max_val"] - cfg["min_val"])
+
+        # ------------------------------------------------
+        # 3) 강제 보정(Override) 조건
+        # ------------------------------------------------
+        # thermometer처럼 0~100 범위인 경우만 적용
         if cfg["max_val"] == 100:
-            opp_angle = (angle + 180) % 360
-            prog_o = cw_delta(min_angle, opp_angle)
-            ratio_o = np.clip(prog_o / sweep, 0, 1)
-            value_o = cfg["min_val"] + ratio_o * (cfg["max_val"] - cfg["min_val"])
 
-            if 0 <= value <= 20 and 40 <= value_o <= 100:
-                angle, value = opp_angle, value_o
-
-            if 80 <= value <= 100 and 0 <= value_o <= 30:
-                angle, value = opp_angle, value_o
+            # 누가 봐도 반대인 상황 강제 보정
+            if value <= 20 or value >= 80:
+                angle = opp_angle
+                value = value_o
 
         return angle, value
-
     except:
         return None
 
