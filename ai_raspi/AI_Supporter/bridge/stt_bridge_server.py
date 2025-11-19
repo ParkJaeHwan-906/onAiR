@@ -71,23 +71,6 @@ def handle_stop_buffered_stt(sid, data):
     else:
         logger.warning("⚠️ 버퍼링 STT 세션 종료 콜백이 등록되지 않았습니다")
 
-# Streaming STT 시작 명령 수신 (Python 3.13 → Python 3.10)
-# ========================================
-# [주석처리] 추후 사용을 위한 Streaming STT 로직
-# ========================================
-# @sio.on('start_streaming_stt')
-# def handle_start_streaming_stt(sid, data):
-#     """Python 3.13에서 Streaming STT 시작 명령 수신"""
-#     session_id = data.get("session_id")
-#     
-#     if start_streaming_stt_callback:
-#         try:
-#             start_streaming_stt_callback(session_id)
-#         except Exception as e:
-#             logger.error(f"❌ Streaming STT 시작 명령 처리 실패: {e}")
-#     else:
-#         logger.warning("⚠️ Streaming STT 시작 콜백이 등록되지 않았습니다")
-
 # 서비스 완료 신호 수신 (Python 3.13 → Python 3.10)
 @sio.on('service_completed')
 def handle_service_completed(sid, data):

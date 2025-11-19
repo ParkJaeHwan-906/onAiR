@@ -75,20 +75,20 @@ export const CommunicationPage = () => {
   }
 
   return (
-    <div className="communication-container">
-      <LiveKitRoom
-        token={token}
-        serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
-        connect={true}
-        audio={true}
-      >
+    <LiveKitRoom
+      className="communication-livekit"
+      token={token}
+      serverUrl="wss://onair-tbfd0pr1.livekit.cloud" // LiveKit 서버 URL
+      connect={true}
+      audio={true}
+    >
+      <div className="communication-container">
         <VideoFrame
           handleSerialize={handleSerialize}
           onEndCall={handleEndCall}
         />
-      </LiveKitRoom>
-
-      <WorkerPanel partnerInfo={partnerInfo} />
-    </div>
+        <WorkerPanel partnerInfo={partnerInfo} />
+      </div>
+    </LiveKitRoom>
   );
 };
