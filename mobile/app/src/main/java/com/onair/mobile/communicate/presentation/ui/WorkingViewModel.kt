@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
+import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -20,6 +21,7 @@ class WorkingViewModel(
     val endStatus = _endStatus.asStateFlow()
     private val _liveKitToken = MutableStateFlow("")
     val liveKitToken = _liveKitToken.asStateFlow()
+    val finalAnswer = SocketHolder.socketClient.finalAnswer
 
     fun endTask(taskId: Long, solution: String) {
         viewModelScope.launch {
