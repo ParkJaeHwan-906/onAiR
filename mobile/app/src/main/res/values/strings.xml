@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ON AiR</string>
+    <string name="attribute_tag">audio</string>
 </resources>

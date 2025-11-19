@@ -29,22 +29,10 @@
         </activity>
         <activity android:name=".communicate.presentation.ui.CallActivity"
             android:screenOrientation="landscape"/>
-        <activity android:name=".communicate.presentation.ui.CommunicationActivity" />
         <activity android:name=".communicate.presentation.ui.WorkingActivity"
             android:screenOrientation="landscape"/>
-
-        <!-- 🌐 WebSocket 서버 Activity (라즈베리파이에서 STT 텍스트 수신) -->
-        <!-- 테스트용: MainActivitySttServer를 launcher로 설정 -->
-        <activity
-            android:name=".MainActivitySttServer"
-            android:exported="true"
-            android:label="STT WebSocket Server"
-            android:theme="@style/Theme.Mobile">
-<!--            <intent-filter>-->
-<!--                <action android:name="android.intent.action.MAIN" />-->
-<!--                <category android:name="android.intent.category.LAUNCHER" />-->
-<!--            </intent-filter>-->
-        </activity>
+        <activity android:name=".communicate.presentation.ui.DemonstrateActivity"
+            android:screenOrientation="landscape" />
     </application>
 
 </manifest>

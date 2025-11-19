@@ -41,7 +41,7 @@ export const connectSSE = (
     }
 
     const sseUrl = `${api.defaults.baseURL}/sse/stream`;
-    console.log("SSE 연결 시도 중... (토큰 존재:", !!token, ")");
+    // console.log("SSE 연결 시도 중... (토큰 존재:", !!token, ")");
 
     eventSource = new EventSourcePolyfill(sseUrl, {
       headers: {
@@ -52,7 +52,7 @@ export const connectSSE = (
 
     // 연결 성공
     eventSource.onopen = () => {
-      console.log("SSE 연결 성공 (onopen)");
+      // console.log("SSE 연결 성공 (onopen)");
       reconnectAttempts = 0;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -74,7 +74,7 @@ export const connectSSE = (
 
     eventNames.forEach((name) => {
       eventSource.addEventListener(name, (event: MessageEvent) => {
-        console.log(`SSE 이벤트 수신 [${name}]:`, event.data);
+        // console.log(`SSE 이벤트 수신 [${name}]:`, event.data);
         try {
           // heart beat 이벤트는 JSON이 아닐 수 있으므로 특별 처리
           if (name === "heart beat" || name === "connect") {
@@ -88,7 +88,7 @@ export const connectSSE = (
         } catch (err) {
           // JSON 파싱 실패 시 (heart beat가 아닌 경우에만 에러 로그)
           if (name !== "heart beat") {
-            console.error(`JSON Parse 실패 (${name})`, event.data, err);
+            // console.error(`JSON Parse 실패 (${name})`, event.data, err);
           }
           // 파싱 실패해도 기본 처리 시도
           handleParsedEvent({ type: name, payload: event.data }, name);
@@ -99,7 +99,7 @@ export const connectSSE = (
 
     // event: 없는 기본 메시지 처리
     eventSource.onmessage = (event: MessageEvent) => {
-      console.log("SSE 기본 메시지 수신:", event.data);
+      // console.log("SSE 기본 메시지 수신:", event.data);
 
       try {
         const parsed = JSON.parse(event.data);
@@ -111,9 +111,9 @@ export const connectSSE = (
     };
 
     // 오류 및 재연결 처리
-    eventSource.onerror = (error: any) => {
+    eventSource.onerror = (_e: any) => {
       const readyState = eventSource?.readyState;
-      console.error("SSE 연결 오류 - readyState:", readyState, error);
+      // console.error("SSE 연결 오류 - readyState:", readyState, error);
 
       if (
         !isManualClose &&
@@ -125,7 +125,7 @@ export const connectSSE = (
           INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1),
           MAX_RECONNECT_DELAY
         );
-        console.warn(`재연결 시도 ${reconnectAttempts}회 (delay ${delay}ms)`);
+        // console.warn(`재연결 시도 ${reconnectAttempts}회 (delay ${delay}ms)`);
 
         onReconnect?.(reconnectAttempts);
         reconnectTimer = setTimeout(() => {
@@ -144,51 +144,51 @@ export const connectSSE = (
 
     switch (type) {
       case "connect":
-        console.log("연결 유지 확인");
+        // console.log("연결 유지 확인");
         break;
 
       case "heart beat":
-        console.log("Heartbeat 이벤트 수신:", payload || parsed);
+        // console.log("Heartbeat 이벤트 수신:", payload || parsed);
         break;
 
       case "taskAssign":
-        console.log("작업 할당:", payload);
+        // console.log("작업 할당:", payload);
         window.dispatchEvent(new CustomEvent("refreshTasks"));
         break;
 
       case "taskCancel":
-        console.log("작업 취소:", payload);
+        // console.log("작업 취소:", payload);
         window.dispatchEvent(new CustomEvent("refreshTasks"));
         break;
 
       case "taskEnd":
-        console.log("작업 완료:", payload);
+        // console.log("작업 완료:", payload);
         window.dispatchEvent(new CustomEvent("refreshTasks"));
         break;
 
       case "callRequest":
-        console.log("연결 요청:", payload);
+        // console.log("연결 요청:", payload);
         window.dispatchEvent(
           new CustomEvent("incomingCall", { detail: payload })
         );
         break;
 
       case "callResponse":
-        console.log("연결 응답:", payload);
+        // console.log("연결 응답:", payload);
         window.dispatchEvent(
           new CustomEvent("callResponse", { detail: payload })
         );
         break;
 
       case "rtcCanceled":
-        console.log("통신 취소 이벤트 수신:", payload);
+        // console.log("통신 취소 이벤트 수신:", payload);
         window.dispatchEvent(
           new CustomEvent("rtcCanceled", { detail: payload })
         );
         break;
 
       default:
-        console.log("기타 이벤트 수신:", type, payload);
+        // console.log("기타 이벤트 수신:", type, payload);
         break;
     }
   };

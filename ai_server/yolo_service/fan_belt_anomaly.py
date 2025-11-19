@@ -1,11 +1,8 @@
-"""
-Fan/Belt 이상 탐지 (Optical Flow 기반)
-- 전달된 frame sequence 기반으로 motion magnitude 분석
-"""
 import cv2
 import numpy as np
 from loguru import logger
 from collections import deque, Counter
+
 
 # Hyperparameters
 MAG_THRESH = 0.5
@@ -45,6 +42,7 @@ def classify_state(cur_mag, avg_mag, ratio, delta, prev_state, std_motion):
     else:
         state = "E_NORMAL"
 
+    # 안정화된 상태 유지
     if prev_state == "E_BELT_ACCELERATE" and ratio > 0.95:
         state = "E_BELT_ACCELERATE"
     elif prev_state == "E_BELT_SLOWDOWN" and ratio < 1.05:
@@ -55,54 +53,48 @@ def classify_state(cur_mag, avg_mag, ratio, delta, prev_state, std_motion):
     return state
 
 
-# RAG-friendly 매핑 테이블
+# -----------------------------
+# RAG-friendly 메시지 매핑
+# -----------------------------
 RAG_MAP = {
-    "E_NORMAL": ("normal", "정상 동작"),
-    "E_BELT_STOP": ("belt_stop", "벨트가 정지됨"),
-    "E_BELT_ACCELERATE": ("belt_accelerate", "벨트가 비정상적으로 가속됨"),
-    "E_BELT_SLOWDOWN": ("belt_slowdown", "벨트가 비정상적으로 감속됨"),
-    "E_BELT_VIBRATION": ("belt_vibration", "벨트에서 이상 진동 발생")
+    "E_NORMAL": ("normal", "벨트는 정상적으로 동작하고 있습니다."),
+    "E_BELT_STOP": ("belt_stop", "벨트가 멈춰 있는 것으로 감지되었습니다."),
+    "E_BELT_ACCELERATE": ("belt_accelerate", "벨트가 비정상적으로 빠르게 가속되고 있습니다."),
+    "E_BELT_SLOWDOWN": ("belt_slowdown", "벨트가 비정상적으로 감속되고 있습니다."),
+    "E_BELT_VIBRATION": ("belt_vibration", "벨트에서 이상 진동이 감지되었습니다.")
 }
 
 
-async def analyze_fan_belt(frames, sharpest_frame=None, best_score=None, module_boxes=None):
+# -----------------------------
+# MAIN ENTRY (NEW STRUCTURE)
+# -----------------------------
+async def analyze_fan_belt(frames, belt_boxes):
     try:
         if len(frames) < 5:
             return {
                 "type": "fan_belt",
-                "status": "unknown",
+                "status": "error",
                 "detail": "not_enough_frames",
-                "message": "프레임 부족",
+                "message": "프레임이 충분하지 않아 분석할 수 없습니다.",
                 "results": {}
             }
-
-        if not module_boxes:
-            return {
-                "type": "fan_belt",
-                "status": "not_found",
-                "detail": "no_module_boxes",
-                "message": "YOLO 모듈 박스 없음",
-                "results": {}
-            }
-
-        belt_boxes = [
-            b["xyxy"] for b in module_boxes
-            if "belt" in b["label"].lower() or "fan" in b["label"].lower()
-        ]
 
         if not belt_boxes:
             return {
                 "type": "fan_belt",
                 "status": "not_found",
                 "detail": "no_belt_detected",
-                "message": "belt 또는 fan 박스 없음",
+                "message": "벨트가 탐지되지 않았습니다.",
                 "results": {}
             }
 
         gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
         results = {}
 
-        for idx, (x1, y1, x2, y2) in enumerate(belt_boxes):
+        # 각 벨트 박스마다 분석
+        for idx, box in enumerate(belt_boxes):
+            x1, y1, x2, y2 = box["x1"], box["y1"], box["x2"], box["y2"]
+
             mag_buf = deque(maxlen=SMOOTH_WINDOW)
             trend_buf = deque(maxlen=TREND_WINDOW)
             hist = deque(maxlen=STATE_SMOOTH)
@@ -148,7 +140,7 @@ async def analyze_fan_belt(frames, sharpest_frame=None, best_score=None, module_
                 "states": dict(cnt)
             }
 
-        # 상태 합산: 하나라도 anomaly이면 anomaly
+        # 최종 dominant 상태 선택 (하나라도 anomaly면 anomaly)
         dominants = [belt["dominant"] for belt in results.values()]
         final_state = "E_NORMAL"
         for s in dominants:
@@ -156,7 +148,7 @@ async def analyze_fan_belt(frames, sharpest_frame=None, best_score=None, module_
                 final_state = s
                 break
 
-        detail, message = RAG_MAP[final_state]
+        detail, message = RAG_MAP.get(final_state, ("unknown", "알 수 없는 상태입니다."))
         status = "anomaly" if final_state != "E_NORMAL" else "normal"
 
         return {
@@ -168,7 +160,7 @@ async def analyze_fan_belt(frames, sharpest_frame=None, best_score=None, module_
         }
 
     except Exception as e:
-        logger.exception(f"[fan_belt] 오류: {e}")
+        logger.exception(f"[fan_belt] error: {e}")
         return {
             "type": "fan_belt",
             "status": "error",

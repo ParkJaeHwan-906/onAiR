@@ -92,10 +92,10 @@ export const useWebRtcRequestStore = create<WebRtcRequestState>()(
         );
 
         if (existingRequest) {
-          console.log(
-            "중복 요청 감지, 추가하지 않음:",
-            requestData.senderAccountId
-          );
+          // console.log(
+          //   "중복 요청 감지, 추가하지 않음:",
+          //   requestData.senderAccountId
+          // );
           return;
         }
 
