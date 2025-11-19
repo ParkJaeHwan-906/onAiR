@@ -399,50 +399,37 @@ class CallActivity : ComponentActivity() {
         }
     }
     suspend fun Context.playAssetAudio(fileName: String) = suspendCancellableCoroutine<Unit> { continuation ->
-        // MediaPlayer를 함수 내부에서 생성
         val mediaPlayer = MediaPlayer()
-        Log.d("CallActivity", "MediaPlayer 재생")
 
         try {
-            // assets 폴더에서 파일 열기
             val afd = this.assets.openFd(fileName)
-
-            // 핵심: offset과 length를 같이 넘겨줘야 함
             mediaPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            afd.close() // fd는 설정 후 닫아도 됨
+            afd.close()
 
             mediaPlayer.setOnCompletionListener {
                 it.release()
-                // 재생이 끝나면 코루틴 재개 (finish()가 호출될 수 있게 함)
                 if (continuation.isActive) continuation.resume(Unit)
             }
 
             mediaPlayer.setOnErrorListener { _, _, _ ->
-                // 에러 나면 멈추지 말고 그냥 종료로 넘어가게 처리
                 mediaPlayer.release()
                 if (continuation.isActive) continuation.resume(Unit)
                 true
             }
 
-            mediaPlayer.prepare() // 로컬 파일이므로 동기 prepare 사용
-            mediaPlayer.start()
-
-            // 코루틴이 취소되면(화면 이탈 등) 플레이어도 해제
             continuation.invokeOnCancellation {
                 try {
                     if (mediaPlayer.isPlaying) mediaPlayer.stop()
                     mediaPlayer.release()
-                } catch (e: Exception) { e.printStackTrace() }
+                } catch (e: Exception) { }
             }
 
-            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
-            mediaPlayer.setOnCompletionListener { mp ->
-                mp.release()
-            }
+            mediaPlayer.prepare()
+            mediaPlayer.start()
 
         } catch (e: Exception) {
-            Log.e("AudioPlayer", "재생 실패: $fileName", e)
-            mediaPlayer.release() // 에러 발생 시에도 해제
+            mediaPlayer.release()
+            if (continuation.isActive) continuation.resume(Unit)
         }
     }
 }
