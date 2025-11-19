@@ -190,9 +190,9 @@ def judge_abnormal(gauge_type, value):
     gauge_type = gauge_type.lower()
 
     if "thermometer" in gauge_type or "thermo" in gauge_type:
-        if value > 80:
+        if value > 40:
             return "온도 과열", "thermo_high"
-        if value < 5:
+        if value < 20:
             return "온도 너무 낮음", "thermo_low"
         return "정상", "normal"
 
