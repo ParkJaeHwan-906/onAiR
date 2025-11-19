@@ -44,7 +44,7 @@ async def device_detector_loop():
             for d in detections:
                 # return_boxes=True일 때 x1, y1, x2, y2가 직접 포함됨
                 if "x1" in d and "y1" in d and "x2" in d and "y2" in d:
-                    is_anomaly = False if d["label"] == "thermometer" else True
+                    is_anomaly = True if d["label"] == "thermometer" else False
                     all_boxes.append({
                         "label": d["label"],
                         "confidence": float(d["confidence"]),
