@@ -12,10 +12,10 @@ data class ArMarker(
     val type: String,
     val idx: Int,
     val info: MarkerInfo,
-    val color : String,
-    val pulseScale: Float,
-    val pulseOpacity: Float,
-    val opacity: Float
+    val color : String?,
+    val pulseScale: Float?,
+    val pulseOpacity: Float?,
+    val opacity: Float?
 )
 
 @Serializable

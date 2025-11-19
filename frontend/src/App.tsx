@@ -8,7 +8,7 @@ import EquipmentPage from "./pages/EquipmentPage";
 import { CommunicationPage } from "./pages/CommunicationPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import BackdoorPage from "./pages/BackdoorPage"
+import BackdoorPage from "./pages/BackdoorPage";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { SocketProvider } from "./utils/socketContext";
@@ -61,6 +61,7 @@ function App() {
         <Route path="backdoor" element={<BackdoorPage />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
         <Route path="cctv" element={<CCTVPage />} />
+        <Route path="anomaly" element={<BackdoorPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

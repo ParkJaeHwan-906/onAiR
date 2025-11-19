@@ -13,10 +13,11 @@ CHANNELS = 1            # 마이크 채널 (모노)
 DEVICE_INDEX = None     # 기본 마이크 자동 선택
 
 # === STT 버퍼링 설정 ===
-STT_BUFFER_DURATION_SEC = 4.0  # 3~5초 사이 추천
+# 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초)을 고려하여 7초로 설정
+STT_BUFFER_DURATION_SEC = 5.0
 
 # === STT 스트리밍 설정 ===
-SILENCE_TIMEOUT_SEC = 1.5  # 침묵 타임아웃 (초) - 한 문장이 끝났음을 감지하기 위한 대기 시간
+# SILENCE_TIMEOUT_SEC = 1.5  # 침묵 타임아웃 (초) - 한 문장이 끝났음을 감지하기 위한 대기 시간
 
 # === FastAPI 서버 설정 ===
 # FastAPI 서버 URL (Socket.IO 서버도 통합되어 있음)
@@ -26,8 +27,6 @@ FASTAPI_SERVER_URL = "https://onair.ai.kr"
 
 # === 디버그 모드 (단계별 수동 실행) ===
 DEBUG_STEP_BY_STEP = True  # True: 각 단계마다 Enter 키 입력 대기, False: 자동 진행
-DEBUG_STEP_TRIGGER_FILE = "/tmp/next_step_raspi"  # (사용 안 함) 레거시 설정, 키보드 입력 방식 사용
-DEBUG_STEP_WAIT_TIMEOUT = 300  # (사용 안 함) 레거시 설정, 키보드 입력 방식 사용
 
 # === Wakeword 재활성화 제어 ===
 # 서비스 완료 후 wakeword 감지기를 자동 재활성화할지 여부

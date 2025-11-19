@@ -17,6 +17,27 @@ data class CvDetectionNormalDto(
 )
 
 /**
+ * CV 모델 이상 탐지 이벤트 DTO
+ * FastAPI 서버에서 CV 모델이 이상을 탐지했을 때 전송 (1단계: 간단한 알림)
+ */
+data class CvDetectionAnomalyDto(
+    val message: String,  // 간단한 탐지 알림 메시지
+    val audio_content: String? = null,  // TTS 음성 파일 (base64)
+    val audio_encoding: String? = null,  // TTS 음성 인코딩 (예: "audio/mpeg")
+    val cv_detection_result: CvDetectionResultDto? = null
+)
+
+/**
+ * CV 탐지 결과 DTO
+ */
+data class CvDetectionResultDto(
+    val device_type: String,
+    val modules: List<Any>? = null,
+    val anomalies: Map<String, Any>? = null,
+    val message: String? = null
+)
+
+/**
  * Clarify 질문/답변 턴 DTO (작업자 질문 + LLM 답변)
  * Streaming STT 세션 중 Clarify 루프에서 사용
  */
