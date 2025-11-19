@@ -31,6 +31,8 @@
             android:screenOrientation="landscape"/>
         <activity android:name=".communicate.presentation.ui.WorkingActivity"
             android:screenOrientation="landscape"/>
+        <activity android:name=".communicate.presentation.ui.DemonstrateActivity"
+            android:screenOrientation="landscape" />
     </application>
 
 </manifest>
