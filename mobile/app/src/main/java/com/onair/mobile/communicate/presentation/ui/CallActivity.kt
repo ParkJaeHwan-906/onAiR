@@ -6,7 +6,7 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
@@ -83,7 +83,7 @@ data class TimedPath(
     val timestamp: Long = System.currentTimeMillis()
 )
 //lateinit var description : String
-class CallActivity : ComponentActivity() {
+class CallActivity : FragmentActivity() {
     private lateinit var description : String
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
@@ -118,14 +118,14 @@ class CallActivity : ComponentActivity() {
     }
     @Composable
     fun CallScreen(viewModel: CallViewModel) {
-    //    val activity = (LocalContext.current as? Activity)
+        //    val activity = (LocalContext.current as? Activity)
         val blueprintTrack by viewModel.blueprintTrack.collectAsState()
         Log.d("Call Activity", "blue: $blueprintTrack")
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-    //            .background(Color.Black)
+            //            .background(Color.Black)
         ) {
             WhiteboardCanvas(
                 viewModel = viewModel,
@@ -182,13 +182,13 @@ class CallActivity : ComponentActivity() {
             var currentColor by remember { mutableStateOf(Color.White) }
             var pathTrigger by remember { mutableIntStateOf(0) }
 
-        //    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
+            //    var markers by remember { mutableStateOf<List<MarkerInfo>>(emptyList()) }
             val markers by viewModel.arMarkers.collectAsState(initial = emptyList<ArMarker>())
             var pulseMarkers: List<ArMarker>? = null
 
             val context = LocalContext.current
-            val activity = context as? ComponentActivity
-            
+            val activity = context as? FragmentActivity
+
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
                     activity?.runOnUiThread {
@@ -200,20 +200,20 @@ class CallActivity : ComponentActivity() {
                 }
             }
 
-    //        LaunchedEffect(Unit) {
-    //            while (true) {
-    //                delay(100)
-    //                pulseMarkers = markers.map { marker ->
-    //                    val newScale = marker.pulseScale + 0.03f
-    //                    val newOpacity = marker.pulseOpacity - 0.2f
-    //                    if (newScale > 1.6f) {
-    //                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
-    //                    } else {
-    //                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
-    //                    }
-    //                }
-    //            }
-    //        }
+            //        LaunchedEffect(Unit) {
+            //            while (true) {
+            //                delay(100)
+            //                pulseMarkers = markers.map { marker ->
+            //                    val newScale = marker.pulseScale + 0.03f
+            //                    val newOpacity = marker.pulseOpacity - 0.2f
+            //                    if (newScale > 1.6f) {
+            //                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+            //                    } else {
+            //                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+            //                    }
+            //                }
+            //            }
+            //        }
 
             LaunchedEffect(viewModel) {
                 viewModel.dataReceived.collect { jsonString ->
@@ -310,15 +310,15 @@ class CallActivity : ComponentActivity() {
                             canvas.drawPath(it, linePaint)
                         }
                     }
-        //            markers.forEach { marker ->
-        //                ArMarker(marker = marker)
-        ////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
-        ////                drawCircle(
-        ////                    color = marker.color.copy(alpha = alpha),
-        ////                    radius = 100 * marker.pulseOpacity,
-        ////                    center = Offset(marker.x, marker.y)
-        ////                )
-        //            }
+                    //            markers.forEach { marker ->
+                    //                ArMarker(marker = marker)
+                    ////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
+                    ////                drawCircle(
+                    ////                    color = marker.color.copy(alpha = alpha),
+                    ////                    radius = 100 * marker.pulseOpacity,
+                    ////                    center = Offset(marker.x, marker.y)
+                    ////                )
+                    //            }
                 }
                 Log.d("CallActivity marker", markers.toString())
                 markers.forEach { marker ->
@@ -331,7 +331,7 @@ class CallActivity : ComponentActivity() {
                 }
             }
         }
-    //    val points = remember { mutableStateListOf<Points>() }
+        //    val points = remember { mutableStateListOf<Points>() }
         // 웹이랑 똑같게
     }
     private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<Float, Float, Float> {
