@@ -8,10 +8,12 @@ import json
 
 # ✅ GMS API 키 확인
 if settings.GMS_API_KEY:
-    print(f"✅ [Generator] GMS_API_KEY 설정 완료: {settings.GMS_API_KEY[:10]}...")
+    key_preview = settings.GMS_API_KEY[:10] + "..." if len(settings.GMS_API_KEY) > 10 else settings.GMS_API_KEY
+    print(f"✅ [Generator] GMS_API_KEY 설정 완료: {key_preview} (길이: {len(settings.GMS_API_KEY)})")
     gms_api_key = settings.GMS_API_KEY
 else:
     print("⚠️ [Generator] GMS_API_KEY가 설정되지 않았습니다.")
+    print("   환경 변수 GMS_API_KEY를 확인하세요.")
     gms_api_key = None
 
 
@@ -115,6 +117,85 @@ def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Di
             return f"{device_type}에서 {detected_items[0]} 오류가 탐지되었습니다."
         else:
             return f"{device_type}에서 {len(detected_items)}개의 오류가 탐지되었습니다."
+
+def _generate_fallback_answer(
+    error_code: str,
+    snippets: List[str],
+    citations: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    GPT-4o 호출 실패 시 RAG snippets 기반 간단한 Fallback 답변 생성
+    """
+    if not snippets:
+        return None
+    
+    # snippets에서 핵심 정보 추출
+    combined_text = "\n\n".join(snippets[:3])
+    
+    # 간단한 원인 추출 (키워드 기반)
+    causes = []
+    if "필터" in combined_text or "차압" in combined_text:
+        causes.append("필터 막힘 또는 차압 증가")
+    if "댐퍼" in combined_text or "개도" in combined_text:
+        causes.append("댐퍼 개도 상태 이상")
+    if "인버터" in combined_text or "주파수" in combined_text:
+        causes.append("인버터 출력 주파수 이상")
+    if "압력" in combined_text or "압력계" in combined_text:
+        causes.append("압력계 측정 오차 가능성")
+    if not causes:
+        causes.append("설비 점검이 필요합니다")
+    
+    # 간단한 조치 추출
+    actions = []
+    if "필터" in combined_text:
+        actions.append("프리필터 및 헤파필터 차압 측정 후 기준 초과 시 교체")
+    if "댐퍼" in combined_text:
+        actions.append("송풍기 댐퍼 개도 상태 확인 및 70% 이하로 조정")
+    if "인버터" in combined_text:
+        actions.append("팬 인버터 출력 주파수 확인 (정상 범위: 40~60Hz)")
+    if "밸브" in combined_text:
+        actions.append("코일 입출구 배관의 밸브 개도, 손상, 막힘 여부 확인")
+    if not actions:
+        actions.append("설비 점검표에 따라 순차적으로 점검하세요")
+    
+    # 간단한 주의사항
+    warnings = []
+    if "압력" in combined_text:
+        warnings.append("압력이 1.5bar 이상 지속 시 팬 과부하 위험이 있습니다")
+    if "온도" in combined_text:
+        warnings.append("고온 상태에서 작업 시 화상 주의하세요")
+    if not warnings:
+        warnings.append("안전장비를 착용하고 점검하세요")
+    
+    # 마크다운 생성
+    causes_markdown = "## 🟥 원인\n\n" + "\n".join([f"- {c}" for c in causes])
+    actions_markdown = "## 🛠 조치\n\n" + "\n".join([f"{i+1}. {a}" for i, a in enumerate(actions)])
+    warnings_markdown = "## ⚠ 주의사항\n\n" + "\n".join([f"- {w}" for w in warnings])
+    
+    markdown_text = f"# 🔧 {error_code}\n\n{causes_markdown}\n\n{actions_markdown}\n\n{warnings_markdown}"
+    
+    # TTS 텍스트 생성
+    tts_text = f"{error_code}에 대한 정비 가이드입니다. 원인은 {', '.join(causes[:3])} 등이 있습니다. 조치 단계는 {', '.join(actions[:3])} 입니다. 주의사항으로는 {', '.join(warnings[:2])}가 있습니다."
+    
+    return {
+        "error_code": error_code,
+        "markdown_text": markdown_text,
+        "possible_causes": causes,
+        "recommended_actions": [{"action": a, "priority": "medium"} for a in actions],
+        "safety_warnings": warnings,
+        "possible_causes_markdown": causes_markdown,
+        "recommended_actions_markdown": actions_markdown,
+        "safety_warnings_markdown": warnings_markdown,
+        "possible_causes_audio": None,  # Fallback에서는 TTS 생성 안 함
+        "possible_causes_audio_encoding": None,
+        "recommended_actions_audio": None,
+        "recommended_actions_audio_encoding": None,
+        "safety_warnings_audio": None,
+        "safety_warnings_audio_encoding": None,
+        "tts_text": tts_text,
+        "query": error_code,
+        "citations": citations
+    }
 
 def format_for_tts(text: str) -> str:
     """
@@ -232,17 +313,25 @@ def llm_generate_answer(
 """
 
     if not gms_api_key:
+        print(f"❌ [Generator] GMS_API_KEY가 설정되지 않았습니다.")
         raise ValueError("GMS_API_KEY가 설정되지 않았습니다. 환경 변수를 확인하세요.")
     
     try:
         print(f"🔵 [Generator] GPT-4o 호출 시작 (모델: {settings.GMS_MODEL_GENERATOR})")
+        print(f"   Query: {query}")
+        print(f"   Error Code: {error_code}")
+        print(f"   Snippets 개수: {len(snippets)}")
+        print(f"   Snippets 총 길이: {sum(len(s) for s in snippets)} bytes")
         text = call_openai_via_gms(
             model=settings.GMS_MODEL_GENERATOR,
             prompt=user_prompt,
             system_prompt=SYSTEM_PROMPT,
             api_key=gms_api_key
         )
-        print(f"✅ [Generator] GPT-4o 응답 수신")
+        print(f"✅ [Generator] GPT-4o 응답 수신 (길이: {len(text) if text else 0} bytes)")
+        
+        if not text or len(text.strip()) == 0:
+            raise ValueError("GPT-4o가 빈 응답을 반환했습니다.")
         
         # 코드블록(```markdown`) 제거
         if "```" in text:
@@ -428,7 +517,24 @@ def llm_generate_answer(
         
         return result
     except Exception as e:
-        print(f"❌ GPT 호출 오류: {e}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ [Generator] GPT 호출 오류: {type(e).__name__}: {str(e)}")
+        print(f"   상세 오류:\n{error_trace}")
+        print(f"   Query: {query}")
+        print(f"   Error Code: {error_code}")
+        print(f"   Snippets 개수: {len(snippets) if snippets else 0}")
+        
+        # Fallback: RAG snippets 기반 간단한 답변 생성
+        print(f"⚠️ [Generator] Fallback 모드: RAG snippets 기반 간단한 답변 생성 시도")
+        try:
+            fallback_result = _generate_fallback_answer(error_code, snippets, citations)
+            if fallback_result:
+                print(f"✅ [Generator] Fallback 답변 생성 성공")
+                return fallback_result
+        except Exception as fallback_error:
+            print(f"❌ [Generator] Fallback 답변 생성도 실패: {fallback_error}")
+        
         return {
             "error_code": error_code,
             "markdown_text": "",
