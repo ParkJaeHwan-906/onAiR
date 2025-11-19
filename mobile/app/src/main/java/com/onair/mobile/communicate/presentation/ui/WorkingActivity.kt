@@ -103,7 +103,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
         private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
-        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
+        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
         private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
     }
@@ -578,18 +578,16 @@ class WorkingActivity : AppCompatActivity() {
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
 
+                // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
+                runOnUiThread {
+                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                
                 // CV 탐지 실패 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
-                // 기존 모달 유지 (텍스트는 그대로 "AI 서포터가 오류 탐지 중...")
-                // 모달을 새로 표시하지 않고 기존 모달 유지
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
-                    
-                    // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경
-                    runOnUiThread {
-                        aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                    }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
@@ -655,18 +653,16 @@ class WorkingActivity : AppCompatActivity() {
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
+                // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
+                runOnUiThread {
+                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
-                // 기존 모달 유지 (텍스트는 그대로 "AI 서포터가 오류 탐지 중...")
-                // 모달을 새로 표시하지 않고 기존 모달 유지
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
-                    
-                    // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경
-                    runOnUiThread {
-                        aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                    }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendCvDetectionNormalAudioCompleted()
