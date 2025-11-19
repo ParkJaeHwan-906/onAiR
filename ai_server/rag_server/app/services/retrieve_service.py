@@ -188,14 +188,18 @@ def rerank(query: str, candidates: List[Dict[str, Any]], top_k: int = None):
             c["rerank_score"] = rw * float(ce) + (1 - rw) * float(c["hybrid_score"])
         return sorted(cands, key=lambda x: x["rerank_score"], reverse=True)
 
-    # 2) Fallback: cosine 유사도 (임베딩 재계산)
+    # 2) Fallback: cosine 유사도 (임베딩 재계산) - 배치 처리로 최적화
     q_emb = embed_texts([query], is_query=True)
     q = q_emb[0] if q_emb.ndim == 2 else q_emb
     
-    for c in cands:
-        v_emb = embed_texts([c["source"]["content"]], is_query=False)
-        v = v_emb[0] if v_emb.ndim == 2 else v_emb
+    # ⚡ 배치 처리: 모든 candidate를 한 번에 임베딩 (CPU 사용량 최적화)
+    candidate_contents = [c["source"]["content"] for c in cands]
+    v_embs = embed_texts(candidate_contents, is_query=False)
+    
+    # 각 candidate에 대해 코사인 유사도 계산
+    rw = settings.RERANK_WEIGHT
+    for i, c in enumerate(cands):
+        v = v_embs[i] if v_embs.ndim == 2 else v_embs
         cos = float(np.dot(q, v))  # 이미 normalize된 벡터
-        rw = settings.RERANK_WEIGHT
         c["rerank_score"] = rw * cos + (1 - rw) * float(c["hybrid_score"])
     return sorted(cands, key=lambda x: x["rerank_score"], reverse=True)
