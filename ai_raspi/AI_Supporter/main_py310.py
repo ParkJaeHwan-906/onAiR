@@ -159,16 +159,19 @@ def run_stt_loop():
         except Exception as e:
             if mic_attempt < max_mic_retries - 1:
                 logger.warning(f"⚠️ 마이크 시작 실패, 재시도 중... ({mic_attempt + 1}/{max_mic_retries}): {e}")
-                time.sleep(mic_retry_delay)
+                time.sleep(mic_retry_delay)     # TODO: 실패했으면 바로 stop() 호출하고, 재시작하는게 낫지 않을까요?
                 # 마이크 재초기화 시도
                 try:
                     mic.stop()
                 except Exception:
                     pass
-                mic = MicStream()
+                # ---------------------------------------------------------------------------------------
+                # TODO: 해당 부분 전체가 필요하다고 느껴지지 않아요
+                mic = MicStream()        # TODO: 계속해서 인스턴스를 생성하는 것은 Singleton 위배 -> 제거 필요
                 if wakeword_detector and wakeword_detector.interpreter is not None:
                     mic.set_wakeword_callback(wakeword_detector.process_audio_chunk)
                 continue
+                # ---------------------------------------------------------------------------------------
             else:
                 logger.error(f"❌ 마이크 시작 실패 (최종): {e}")
                 raise RuntimeError("마이크를 사용할 수 없습니다.") from e
