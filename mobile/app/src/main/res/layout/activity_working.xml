@@ -44,6 +44,82 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
     <com.google.android.material.card.MaterialCardView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="300dp"
+        android:backgroundTint="#80FF445D"
+        android:layout_marginBottom="15dp"
+        android:id="@+id/ai_result_cause"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ai_result_cause_text"
+            android:scrollHorizontally="false"
+            android:ellipsize="none"
+            android:singleLine="false"
+            android:breakStrategy="simple"
+            android:lineSpacingExtra="2dp"
+            android:scrollbars="none"
+            android:paddingVertical="8dp"
+            android:paddingHorizontal="10dp"
+            android:textColor="@color/white">
+        </TextView>
+    </com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="300dp"
+        android:backgroundTint="#8055C264"
+        android:layout_marginBottom="15dp"
+        android:id="@+id/ai_result_action"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ai_result_action_text"
+            android:scrollHorizontally="false"
+            android:ellipsize="none"
+            android:singleLine="false"
+            android:breakStrategy="simple"
+            android:lineSpacingExtra="2dp"
+            android:scrollbars="none"
+            android:paddingVertical="8dp"
+            android:paddingHorizontal="10dp"
+            android:textColor="@color/white">
+        </TextView>
+    </com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="300dp"
+        android:backgroundTint="#80FFC635"
+        android:layout_marginBottom="15dp"
+        android:visibility="gone"
+        android:id="@+id/ai_result_warning"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ai_result_warning_text"
+            android:scrollHorizontally="false"
+            android:ellipsize="none"
+            android:singleLine="false"
+            android:breakStrategy="simple"
+            android:lineSpacingExtra="2dp"
+            android:scrollbars="none"
+            android:paddingVertical="8dp"
+            android:paddingHorizontal="10dp"
+            android:textColor="@color/white">
+        </TextView>
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/call_request_card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -69,6 +145,12 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:scrollHorizontally="false"
+                android:ellipsize="none"
+                android:singleLine="false"
+                android:breakStrategy="simple"
+                android:lineSpacingExtra="2dp"
+                android:scrollbars="none"
                 android:text="통신을 요청했습니다: 사유사유사유사유사유"
                 android:id="@+id/description"
                 android:textAppearance="?attr/textAppearanceBodySmall"
