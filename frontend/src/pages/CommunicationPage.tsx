@@ -13,9 +13,9 @@ export const CommunicationPage = () => {
   const { token, partnerInfo } = location.state || {};
   const { completeRequest, completeSentRequest } = useWebRtcRequestStore();
 
-  const handleSerialize = (lines: DrawingLine[]) => {
-    const json = JSON.stringify(lines);
-    console.log(json);
+  const handleSerialize = (_lines: DrawingLine[]) => {
+    // const json = JSON.stringify(lines);
+    // console.log(json);
   };
 
   // 통신 종료 핸들러

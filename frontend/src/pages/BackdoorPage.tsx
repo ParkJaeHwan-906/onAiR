@@ -11,6 +11,9 @@ function BackdoorPage() {
   const ORI_W = 360;
   const ORI_H = 480;
 
+  /* ------------------------------------------
+   * 색상 함수
+   * ------------------------------------------ */
   const getClassColor = (label: string) => {
     if (["AHU", "Boiler", "Chiler"].includes(label)) return "#2563eb";
     if (
@@ -19,29 +22,30 @@ function BackdoorPage() {
         "control_panel",
         "pressure_gauge",
         "thermometer",
-        "temperature_FND",
         "AHU_pannel",
       ].includes(label)
     )
       return "#16a34a";
+    if (["button_on", "button_off", "button_right"].includes(label))
+      return "#f97316";
     if (
       [
         "run_light",
         "power_light",
         "overheat_light",
-        "button_on",
-        "button_off",
         "temperature_FND",
+        "power_lamp",
+        "drive_lamp",
+        "overheat_lamp",
       ].includes(label)
     )
       return "#eab308";
-
     return "#9333ea";
   };
 
-  /* -----------------------------------------------------
-   * 1) 영상 그대로 그리기 (cover 제거)
-   * -----------------------------------------------------*/
+  /* ------------------------------------------
+   * 비디오 그리기
+   * ------------------------------------------ */
   const drawVideo = (img: HTMLImageElement, canvas: HTMLCanvasElement) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -50,9 +54,9 @@ function BackdoorPage() {
     ctx.drawImage(img, 0, 0, ORI_W, ORI_H);
   };
 
-  /* -----------------------------------------------------
-   * 2) Overlay 그대로 원본 좌표로 렌더링
-   * -----------------------------------------------------*/
+  /* ------------------------------------------
+   * 오버레이 그리기
+   * ------------------------------------------ */
   const drawOverlay = (overlay: any) => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
@@ -65,10 +69,10 @@ function BackdoorPage() {
     ctx.lineWidth = 1.6;
     ctx.font = "12px Arial";
 
-    overlay.boxes?.forEach((b: any) => {
-      if (b.confidence < 0.4) return;
+    overlay?.boxes?.forEach((b: any) => {
+      if (b.confidence < 0.2) return;
 
-      const color = getClassColor(b.label);
+      const color = overlay.anomaly ? "#ff3333" : getClassColor(b.label);
 
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
@@ -82,9 +86,55 @@ function BackdoorPage() {
     });
   };
 
-  /* -----------------------------------------------------
-   * 3) 영상 수신
-   * -----------------------------------------------------*/
+  /* ------------------------------------------
+   * 싱크용 버퍼
+   * ------------------------------------------ */
+  const frameBuffer = useRef<any[]>([]);
+  const overlayBuffer = useRef<any[]>([]);
+  const MAX_BUFFER = 10;
+
+  /* ------------------------------------------
+   * 랜더 루프
+   * ------------------------------------------ */
+  const startRenderLoop = () => {
+    const loop = () => {
+      const canvas = videoCanvasRef.current;
+      if (!canvas) {
+        requestAnimationFrame(loop);
+        return;
+      }
+
+      if (frameBuffer.current.length > 0) {
+        const { img, timestamp } = frameBuffer.current.shift();
+
+        drawVideo(img, canvas);
+
+        // timestamp 기준 가장 가까운 overlay 찾기
+        let bestOverlay = null;
+        let smallestDiff = Infinity;
+
+        overlayBuffer.current.forEach((ov) => {
+          const diff = Math.abs(ov.timestamp - timestamp);
+          if (diff < smallestDiff) {
+            smallestDiff = diff;
+            bestOverlay = ov;
+          }
+        });
+
+        if (bestOverlay) {
+          drawOverlay(bestOverlay);
+        }
+      }
+
+      requestAnimationFrame(loop);
+    };
+
+    requestAnimationFrame(loop);
+  };
+
+  /* ------------------------------------------
+   * 영상 수신 → buffer push
+   * ------------------------------------------ */
   useEffect(() => {
     if (!socket) return;
 
@@ -92,9 +142,14 @@ function BackdoorPage() {
       const canvas = videoCanvasRef.current;
       if (!canvas) return;
 
+      const timestamp = Date.now();
+
       const img = new Image();
       img.onload = () => {
-        drawVideo(img, canvas);
+        frameBuffer.current.push({ img, timestamp });
+        if (frameBuffer.current.length > MAX_BUFFER) {
+          frameBuffer.current.shift();
+        }
       };
 
       img.src = URL.createObjectURL(new Blob([data.frame]));
@@ -106,14 +161,36 @@ function BackdoorPage() {
     };
   }, [socket]);
 
-  /* -----------------------------------------------------
-   * 4) Overlay 수신
-   * -----------------------------------------------------*/
+  /* ------------------------------------------
+   * Overlay 수신 → buffer push (+ YOLO 좌표 로그 출력)
+   * ------------------------------------------ */
   useEffect(() => {
     if (!socket) return;
 
     const handleOverlay = (data: any) => {
-      drawOverlay(data);
+      const timestamp = data.timestamp;
+      /* ---- YOLO 좌표 + anomaly + confidence 로그 ---- */
+      console.group("🟦 YOLO Overlay 수신됨");
+      console.log("📌 timestamp:", data.timestamp);
+      console.log("📌 anomaly:", data.anomaly);
+      console.log("📌 total boxes:", data.boxes?.length || 0);
+
+      data.boxes?.forEach((b: any, idx: number) => {
+        console.group(`▶ Box ${idx + 1}`);
+        console.log("label:", b.label);
+        console.log("confidence:", b.confidence.toFixed(3));
+        console.log("x1:", b.x1, "y1:", b.y1);
+        console.log("x2:", b.x2, "y2:", b.y2);
+        console.groupEnd();
+      });
+
+      console.groupEnd();
+
+      /* ---- 싱크 버퍼에 저장 ---- */
+      overlayBuffer.current.push({ ...data, timestamp });
+      if (overlayBuffer.current.length > MAX_BUFFER) {
+        overlayBuffer.current.shift();
+      }
     };
 
     socket.on("video_overlay", handleOverlay);
@@ -121,6 +198,13 @@ function BackdoorPage() {
       socket.off("video_overlay", handleOverlay);
     };
   }, [socket]);
+
+  /* ------------------------------------------
+   * 렌더 루프 시작
+   * ------------------------------------------ */
+  useEffect(() => {
+    startRenderLoop();
+  }, []);
 
   return (
     <div className="backdoor-canvas">
