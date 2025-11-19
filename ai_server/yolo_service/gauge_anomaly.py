@@ -193,7 +193,7 @@ def judge_abnormal(gauge_type, value):
         if value > 40:
             return "온도 과열", "thermo_high"
         if value < 20:
-            return "온도 너무 낮음", "thermo_low"
+            return "온도 과열", "thermo_high"
         return "정상", "normal"
 
     if "pressure" in gauge_type:
