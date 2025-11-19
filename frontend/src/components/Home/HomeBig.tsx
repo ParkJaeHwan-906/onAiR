@@ -6,6 +6,7 @@ import { sendConnectionResponse } from "../../api/webrtc";
 import { useNavigate } from "react-router-dom";
 import type { Work } from "../../types/work";
 import { useSocket } from "../../utils/socketContext";
+import { useAuthStore } from "../../store/useAuthStore";
 
 const backColors = ["#F4C0C0", "#F9E9B5", "#B5BFE0", "#B6E7C8"];
 const fontColors = ["#EF4444", "#FFBC11", "#1E40AF", "#22C55E"];
@@ -27,8 +28,8 @@ function HomeBig({
 }: HomeBigProps) {
   const navigate = useNavigate();
   const socket = useSocket(); // 컴포넌트 최상위에서 Hook 호출
+  const { isAuthenticated } = useAuthStore();
 
-  // Zustand store 구독 - requests만 구독하여 리렌더링 트리거
   const allRequests = useWebRtcRequestStore((state) => state.requests);
   const { updateRequestStatus } = useWebRtcRequestStore();
 
@@ -192,12 +193,16 @@ function HomeBig({
   };
 
   // 요청 시간 포맷팅
-  const formatRequestTime = (timeString: string) => {
-    if (!timeString) return "-";
-    const date = new Date(timeString);
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
+  const formatRequestTime = (dateTimeString: string) => {
+    if (!dateTimeString) return "-";
+
+    const utcDate = new Date(dateTimeString); // 백엔드에서 UTC 기준으로 전달됨
+    const kstDate = new Date(utcDate.getTime());
+
+    const hours = String(kstDate.getHours()).padStart(2, "0");
+    const minutes = String(kstDate.getMinutes()).padStart(2, "0");
+
+    return `${hours}시 ${minutes}분`;
   };
 
   return (
@@ -227,10 +232,18 @@ function HomeBig({
           )}
         </div>
         <div className="list-body">
+          {/* 1) 요청 목록일 경우 */}
           {isRequestList ? (
+            // 2) 로그인 안 했을 때
+            !isAuthenticated ? (
+              <p className="no-data">
+                로그인 후 요청 목록을 확인할 수 있습니다.
+              </p>
+            ) : // 3) 로그인 했는데 요청이 없을 때
             requests.length === 0 ? (
               <p className="no-data">오늘의 요청이 없습니다.</p>
             ) : (
+              // 4) 로그인 + 요청 있을 때 → 실제 렌더링
               requests.map((request) => {
                 const statusColor = getRequestStatusColor(request.status);
                 const isPending = request.status === "pending";
@@ -238,12 +251,10 @@ function HomeBig({
                   <div key={request.id} className="work-row">
                     <div className="col-worker">{request.name}</div>
                     <div className="col-content">
-                      {request.equipmentName || "-"}
+                      {request.equipmentName || "관리자"}
                     </div>
                     <div className="col-description">
-                      {request.description && request.description.trim()
-                        ? request.description
-                        : "-"}
+                      {request.description?.trim() || "-"}
                     </div>
                     <div className="col-status">
                       <span
@@ -259,6 +270,7 @@ function HomeBig({
                     <div className="col-time">
                       {formatRequestTime(request.requestTime)}
                     </div>
+
                     <div className="col-actions">
                       {isPending ? (
                         <>
@@ -295,14 +307,16 @@ function HomeBig({
                 );
               })
             )
+          ) : /* ===================== 작업 목록 ===================== */
+          !isAuthenticated ? (
+            <p className="no-data">로그인 후 작업 목록을 확인할 수 있습니다.</p>
           ) : sortedTasks.length === 0 ? (
             <p className="no-data">오늘의 작업이 없습니다.</p>
           ) : (
             sortedTasks.map((task) => {
               const actionStatus =
-                task.actionStatus && task.actionStatus.trim()
-                  ? task.actionStatus
-                  : getActionStatus(task.action);
+                task.actionStatus?.trim() || getActionStatus(task.action);
+
               const formattedTime = formatTime
                 ? formatTime(task.lastUpdateTime)
                 : task.lastUpdateTime;
@@ -310,7 +324,9 @@ function HomeBig({
               return (
                 <div key={task.id} className="work-row">
                   <div className="col-worker">{task.userName || "미할당"}</div>
+
                   <div className="col-content">{task.request}</div>
+
                   <div className="col-status">
                     <span
                       className="status-badge"
@@ -332,6 +348,7 @@ function HomeBig({
                       {actionStatus}
                     </span>
                   </div>
+
                   <div className="col-time">{formattedTime}</div>
                 </div>
               );

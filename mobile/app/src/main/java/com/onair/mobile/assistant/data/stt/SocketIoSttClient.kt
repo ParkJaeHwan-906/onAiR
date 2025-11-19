@@ -5,12 +5,14 @@ import android.util.Base64
 import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.core.model.dto.RagResponse
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
+import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
 import com.onair.mobile.communicate.data.socket.dto.VideoFrameResponse
@@ -56,6 +58,8 @@ class SocketIoSttClient(
     private var onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
+    private var onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
+    private var onPlayServiceEndAudio: ((String) -> Unit)? = null,  // 서비스 종료 오디오 재생 요청 콜백
     private var onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
     private var onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
     private var onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -66,10 +70,10 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-//    private val _callEnd = MutableSharedFlow<Boolean>(replay = 0)
-//    val callEnd = _callEnd.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
+    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
+    val finalAnswer = _finalAnswer.asSharedFlow()
 
     private val _videoFrames = MutableSharedFlow<ByteArray>(extraBufferCapacity = 10)
     val videoFrames = _videoFrames.asSharedFlow()
@@ -230,24 +234,24 @@ class SocketIoSttClient(
             }
             
             // final_answer 이벤트 수신 (최종 답변)
-            socket?.on("final_answer") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val jsonString = data.toString()
-                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
-                        
-                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
-                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
-                        onFinalAnswer?.invoke(finalAnswer)
-                    } else {
-                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
+//            socket?.on("final_answer") { args ->
+//                try {
+//                    val data = args[0] as? JSONObject
+//                    if (data != null) {
+//                        val jsonString = data.toString()
+//                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
+//
+//                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
+//                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
+//                        onFinalAnswer?.invoke(finalAnswer)
+//                    } else {
+//                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
+//                    }
+//                } catch (e: Exception) {
+//                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
+//                    e.printStackTrace()
+//                }
+//            }
             
             // cv_detection_failed 이벤트 수신 (CV 모델 오류 탐지 실패)
             socket?.on("cv_detection_failed") { args ->
@@ -291,6 +295,27 @@ class SocketIoSttClient(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ CV 탐지 정상 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+
+            // cv_detection_anomaly 이벤트 수신 (CV 모델 이상 탐지 - 1단계: 간단한 알림)
+            socket?.on("cv_detection_anomaly") { args ->
+                Log.i(TAG, "🔔 [이벤트 수신] cv_detection_anomaly 이벤트 도착!")
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val jsonString = data.toString()
+                        Log.i(TAG, "📩 CV 탐지 이상 수신: $jsonString")
+
+                        val cvAnomaly = gson.fromJson(jsonString, CvDetectionAnomalyDto::class.java)
+                        Log.i(TAG, "   → Message: ${cvAnomaly.message}")
+                        onCvDetectionAnomaly?.invoke(cvAnomaly)
+                    } else {
+                        Log.w(TAG, "⚠️ CV 탐지 이상 수신: 데이터가 null입니다")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ CV 탐지 이상 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
             }
@@ -360,6 +385,25 @@ class SocketIoSttClient(
 //                _callEnd.tryEmit(true)
                 _callEnd.trySend(Unit)
             }
+
+            socket?.on("final_answer") { args ->
+                Log.d(TAG, "AI 답변 이벤트 수신")
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val answerStr = data.getJSONObject("structured_answer").toString()
+                        val answer = Json.decodeFromString<StructuredAnswer>(answerStr)
+                        Log.d(TAG, "답변 파싱 성공 ${answer.markdown_text}")
+                        _finalAnswer.tryEmit(answer)
+                    } else {
+                        Log.e(TAG, "답변 data가 없습니다.")
+                    }
+                } catch (e: Exception) {
+                Log.e(TAG, "❌ AI 답변 응답 처리 오류: ${e.message}")
+            }
+
+
+            }
             socket?.on("video_frame") { args ->
                 try {
                     val data = args[0].toString()
@@ -373,7 +417,25 @@ class SocketIoSttClient(
                     Log.e(TAG, "Frame decode error: ${e.message}")
                 }
             }
-            
+
+            // play_service_end_audio 이벤트 수신 (서비스 종료 오디오 재생 요청)
+            socket?.on("play_service_end_audio") { args ->
+                Log.i(TAG, "🔔 [이벤트 수신] play_service_end_audio 이벤트 도착!")
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val audioFile = data.optString("audio_file", "")
+                        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신: $audioFile")
+                        onPlayServiceEndAudio?.invoke(audioFile)
+                    } else {
+                        Log.w(TAG, "⚠️ 서비스 종료 오디오 재생 요청 수신: 데이터가 null입니다")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ 서비스 종료 오디오 재생 요청 처리 오류: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+
             // 서버 메시지 수신 (디버깅용)
             socket?.on("server_message") { args ->
                 val data = args[0] as? JSONObject
@@ -663,6 +725,33 @@ class SocketIoSttClient(
     }
 
     /**
+     * CV 탐지 이상 음성 파일 재생 완료 이벤트 전송
+     *
+     * @return 전송 성공 여부
+     */
+    fun sendCvDetectionAnomalyAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "cv_detection_anomaly")
+                put("timestamp", System.currentTimeMillis())
+            }
+
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
      * Clarify Q&A 턴 TTS 재생 완료 이벤트 전송
      * 
      * @param sessionId Clarify 세션 ID
@@ -721,6 +810,33 @@ class SocketIoSttClient(
     }
     
     /**
+     * 서비스 종료 오디오 재생 완료 이벤트 전송
+     *
+     * @return 전송 성공 여부
+     */
+    fun sendServiceCompletedAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "service_completed")
+                put("timestamp", System.currentTimeMillis())
+            }
+
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 서비스 종료 오디오 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 서비스 종료 오디오 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
      * 통신 종료 이벤트 전송 (WorkingActivity 비정상 종료 시 wakeword 대기 상태로 복귀)
      * 
      * @return 전송 성공 여부
@@ -769,8 +885,10 @@ class SocketIoSttClient(
         onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
         onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
+        onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
         onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
+        onPlayServiceEndAudio: ((String) -> Unit)? = null,  // 서비스 종료 오디오 재생 요청 콜백
         onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
         onDisconnect: (() -> Unit)? = null,  // 연결 종료 콜백
         onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
@@ -783,8 +901,10 @@ class SocketIoSttClient(
         if (onStartSseConnection != null) this.onStartSseConnection = onStartSseConnection
         if (onCvDetectionNormal != null) this.onCvDetectionNormal = onCvDetectionNormal
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
+        if (onCvDetectionAnomaly != null) this.onCvDetectionAnomaly = onCvDetectionAnomaly
         if (onClarifyQaTurn != null) this.onClarifyQaTurn = onClarifyQaTurn
         if (onWakewordDetected != null) this.onWakewordDetected = onWakewordDetected
+        if (onPlayServiceEndAudio != null) this.onPlayServiceEndAudio = onPlayServiceEndAudio
         if (onConnect != null) this.onConnect = onConnect
         if (onDisconnect != null) this.onDisconnect = onDisconnect
         if (onConnectError != null) this.onConnectError = onConnectError

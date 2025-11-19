@@ -1,7 +1,6 @@
 import "../../styles/TopBar.css";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useNavigate } from "react-router-dom";
-// import { Bell } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
 function TopBar() {

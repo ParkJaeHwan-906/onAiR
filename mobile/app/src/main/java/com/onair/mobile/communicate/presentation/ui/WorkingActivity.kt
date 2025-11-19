@@ -1,10 +1,13 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.content.Intent
+import android.media.MediaPlayer
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -12,6 +15,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
 import com.onair.mobile.communicate.data.SseEvent
@@ -23,6 +27,7 @@ import com.onair.mobile.communicate.utils.viewModelByFactory
 import com.onair.mobile.databinding.ActivityWorkingBinding
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
@@ -41,10 +46,17 @@ import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import io.noties.markwon.Markwon
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -88,6 +100,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
+        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -117,6 +130,7 @@ class WorkingActivity : AppCompatActivity() {
         goCall()
         // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
+        showAiAnswer()
     }
 
     override fun onStart() {
@@ -170,19 +184,7 @@ class WorkingActivity : AppCompatActivity() {
         
         if (::socketIoSttClient.isInitialized) {
             removeCallback()
-            // 비정상 종료 시 wakeword 대기 상태로 복귀
-            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
-            if (!hasSentCommunicationClose) {
-                sendCommunicationCloseForRecovery()
-                hasSentCommunicationClose = true
-            } else {
-                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
-            }
         }
-//        if (::socketIoSttClient.isInitialized) {
-//            socketIoSttClient.disconnect()
-//            Log.i(TAG, "🔌 Socket.IO 연결 종료")
-//        }
     }
 
     override fun onDestroy() {
@@ -227,37 +229,32 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun observeViewModel() {
         lifecycleScope.launch {
-//            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    sseViewModel.eventFlow.collectLatest { event ->
-                        Log.d("SSE_working", event.toString())
-                        when (event) {
-                            is SseEvent.CallRequest -> showCallRequestCard(event.data)
-                            is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
-                            else -> Unit
-                        }
+            launch {
+                sseViewModel.eventFlow.collectLatest { event ->
+                    Log.d("SSE_working", event.toString())
+                    when (event) {
+                        is SseEvent.CallRequest -> showCallRequestCard(event.data)
+                        is SseEvent.CallResponse -> workingViewModel.getLiveKitToken(event.data)
+                        else -> Unit
                     }
                 }
-                launch {
-                    workingViewModel.endStatus.collect { success ->
-                        if (success) {
-                            setResult(RESULT_OK)
-                            finish()
-                        } else {
-                            Toast.makeText(
-                                this@WorkingActivity,
-                                "작업 완료 처리 실패",
-                                Toast.LENGTH_SHORT).show()
-                        }
+            }
+            launch {
+                workingViewModel.endStatus.collect { success ->
+                    if (success) {
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        Toast.makeText(
+                            this@WorkingActivity,
+                            "작업 완료 처리 실패",
+                            Toast.LENGTH_SHORT).show()
                     }
                 }
-
-
+            }
         }
     }
     private fun showCallRequestCard(data: JSONObject) {
-        println(data)
-        println(data.getString("name"))
         Log.d("SSE_show card", data.toString())
         binding.senderInfo.text = data.getString("name")
         binding.description.text = "통신을 요청합니다: ${data.getString("description")}"
@@ -279,11 +276,11 @@ class WorkingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
-                if (!token.isNullOrBlank()) {
-//                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
-                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
+                if (token.isNotBlank()) {
+                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
+                        putExtra("description", binding.description.text)
                     }
                     startActivity(intent)
                     binding.callRequestCard.visibility = View.GONE
@@ -586,6 +583,59 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
+    private fun handleCvDetectionAnomaly(cvAnomaly: CvDetectionAnomalyDto) {
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (1단계: 간단한 알림)")
+        Log.i(TAG, "   메시지: ${cvAnomaly.message}")
+        Log.i(TAG, "============================================================")
+
+        lifecycleScope.launch {
+            try {
+                // UI 업데이트
+                runOnUiThread {
+                    binding.taskName.text = cvAnomaly.message
+                }
+
+                // TTS 재생
+                if (cvAnomaly.audio_content != null && cvAnomaly.audio_content.isNotBlank()) {
+                    Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
+                    ttsRepository.playAudio(cvAnomaly.audio_content, cvAnomaly.audio_encoding) {
+                        // 재생 완료 콜백
+                        Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
+
+                        // 모달 표시 ("답변 생성 중...")
+                        runOnUiThread {
+                            showModal("답변 생성 중...")
+                        }
+
+                        // FastAPI 서버로 재생 완료 이벤트 전송
+                        val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
+                        if (success) {
+                            Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료")
+                            Log.i(TAG, "   💡 모달 표시 중: '답변 생성 중...'")
+                            Log.i(TAG, "   💡 final_answer 수신 시 모달 자동 숨김")
+                        } else {
+                            Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패")
+                            // 전송 실패해도 모달은 유지 (final_answer 수신 시 숨김)
+                        }
+                    }
+                } else {
+                    // 오디오가 없어도 모달 표시 및 이벤트 전송
+                    runOnUiThread {
+                        showModal("답변 생성 중...")
+                    }
+                    val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료 (오디오 없음)")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ CV 탐지 이상 처리 오류: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+
     private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
         Log.i(TAG, "📩 CV 탐지 정상 수신: ${cvNormal.message}")
 
@@ -750,28 +800,161 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "   답변: ${finalAnswer.answer.take(100)}...")
         Log.i(TAG, "============================================================")
 
+        // 모달 숨기기 ("답변 생성 중..." 모달)
+        runOnUiThread {
+            hideModal()
+        }
+
         runOnUiThread {
             binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
         }
 
-        handleFinalAnswer(
-            answer = finalAnswer.answer,
-            audioContent = finalAnswer.audio_content,
-            mimeType = finalAnswer.audio_encoding
-        )
-
-        if (finalAnswer.audio_content != null && finalAnswer.audio_content.isNotBlank()) {
-            Log.i(TAG, "============================================================")
-            Log.i(TAG, "🔊 [모바일] 최종 답변 TTS 재생 시작")
-            Log.i(TAG, "   Session ID: ${finalAnswer.session_id}, Turn ID: ${finalAnswer.turn_id}")
-            Log.i(TAG, "   오디오 인코딩: ${finalAnswer.audio_encoding}")
-            Log.i(TAG, "============================================================")
+        // 각 섹션별 말풍선 표시 및 오디오 재생
+        val structuredAnswer = finalAnswer.structured_answer
+        if (structuredAnswer != null) {
+            handleStructuredAnswerSections(structuredAnswer)
+        } else {
+            // Fallback: 기존 방식 (전체 오디오 재생)
+            handleFinalAnswer(
+                answer = finalAnswer.answer,
+                audioContent = finalAnswer.audio_content,
+                mimeType = finalAnswer.audio_encoding
+            )
         }
 
         isWaitingForClarification = false
         sessionManager.resetSession()
         currentSessionId = null
         currentTurnId = 1
+    }
+
+    /**
+     * 각 섹션별(possible_causes, recommended_actions, safety_warnings) 말풍선 표시 및 오디오 재생
+     * 마지막 섹션의 오디오 재생 완료 후 서비스 종료 처리
+     */
+    private fun handleStructuredAnswerSections(structuredAnswer: Map<String, Any>) {
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📋 [모바일] 각 섹션별 말풍선 표시 및 오디오 재생 시작")
+        Log.i(TAG, "============================================================")
+
+        lifecycleScope.launch {
+            try {
+                // 1. possible_causes (원인) - 마크다운 텍스트 + 오디오
+                val possibleCausesMarkdown = structuredAnswer["possible_causes_markdown"] as? String
+                val possibleCausesAudio = structuredAnswer["possible_causes_audio"] as? String
+                val possibleCausesAudioEncoding = structuredAnswer["possible_causes_audio_encoding"] as? String
+
+                // 2. recommended_actions (조치) - 마크다운 텍스트 + 오디오
+                val recommendedActionsMarkdown = structuredAnswer["recommended_actions_markdown"] as? String
+                val recommendedActionsAudio = structuredAnswer["recommended_actions_audio"] as? String
+                val recommendedActionsAudioEncoding = structuredAnswer["recommended_actions_audio_encoding"] as? String
+
+                // 3. safety_warnings (주의사항) - 마크다운 텍스트 + 오디오
+                val safetyWarningsMarkdown = structuredAnswer["safety_warnings_markdown"] as? String
+                val safetyWarningsAudio = structuredAnswer["safety_warnings_audio"] as? String
+                val safetyWarningsAudioEncoding = structuredAnswer["safety_warnings_audio_encoding"] as? String
+
+                // 각 섹션별 처리 (순차적으로)
+                processSection(
+                    sectionName = "원인",
+                    markdownText = possibleCausesMarkdown,
+                    audioContent = possibleCausesAudio,
+                    audioEncoding = possibleCausesAudioEncoding,
+                    isLastSection = false
+                ) {
+                    // possible_causes 완료 후 2초 대기
+                    kotlinx.coroutines.delay(2000)
+
+                    processSection(
+                        sectionName = "조치",
+                        markdownText = recommendedActionsMarkdown,
+                        audioContent = recommendedActionsAudio,
+                        audioEncoding = recommendedActionsAudioEncoding,
+                        isLastSection = false
+                    ) {
+                        // recommended_actions 완료 후 2초 대기
+                        kotlinx.coroutines.delay(2000)
+
+                        processSection(
+                            sectionName = "주의사항",
+                            markdownText = safetyWarningsMarkdown,
+                            audioContent = safetyWarningsAudio,
+                            audioEncoding = safetyWarningsAudioEncoding,
+                            isLastSection = true
+                        ) {
+                            // 마지막 섹션 완료 → 서비스 종료 처리
+                            Log.i(TAG, "============================================================")
+                            Log.i(TAG, "✅ [모바일] 모든 섹션 처리 완료")
+                            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
+                            Log.i(TAG, "   Type: final_answer")
+                            Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+                            Log.i(TAG, "============================================================")
+
+                            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+                            if (success) {
+                                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
+                            } else {
+                                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 섹션별 처리 오류: ${e.message}")
+                e.printStackTrace()
+                // 오류 발생 시에도 서비스 종료 처리
+                socketIoSttClient.sendFinalAnswerAudioCompleted()
+            }
+        }
+    }
+
+    /**
+     * 각 섹션 처리 (마크다운 말풍선 표시 + 오디오 재생)
+     */
+    private suspend fun processSection(
+        sectionName: String,
+        markdownText: String?,
+        audioContent: String?,
+        audioEncoding: String?,
+        isLastSection: Boolean,
+        onComplete: suspend () -> Unit
+    ) {
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📋 [모바일] 섹션 처리 시작: $sectionName")
+        Log.i(TAG, "============================================================")
+
+        // 마크다운 말풍선 표시 (코틀린 팀원이 구현할 부분)
+        runOnUiThread {
+            // TODO: 코틀린 팀원이 각 섹션별 마크다운 말풍선 UI 구현
+            // markdownText를 Markwon 라이브러리로 렌더링하여 말풍선에 표시
+            // 예시: showSectionBubbleWithMarkdown(sectionName, markdownText)
+            if (markdownText != null && markdownText.isNotBlank()) {
+                Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시")
+                Log.i(TAG, "   마크다운 텍스트: ${markdownText.take(100)}...")
+            } else {
+                Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다")
+            }
+        }
+
+        // 오디오 재생
+        if (audioContent != null && audioContent.isNotBlank()) {
+            Log.i(TAG, "🔊 [모바일] $sectionName 오디오 재생 시작")
+            ttsRepository.playAudio(audioContent, audioEncoding) {
+                // 재생 완료 콜백
+                Log.i(TAG, "✅ [모바일] $sectionName 오디오 재생 완료")
+                // suspend 함수이므로 lifecycleScope에서 호출
+                lifecycleScope.launch {
+                    onComplete()
+                }
+            }
+        } else {
+            // 오디오가 없으면 바로 완료 처리
+            Log.i(TAG, "⚠️ [모바일] $sectionName 오디오 없음, 바로 완료 처리")
+            // suspend 함수이므로 lifecycleScope에서 호출
+            lifecycleScope.launch {
+                onComplete()
+            }
+        }
     }
 
     private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
@@ -889,6 +1072,41 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
+    private fun handlePlayServiceEndAudio(audioFile: String) {
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신")
+        Log.i(TAG, "   파일: $audioFile")
+        Log.i(TAG, "============================================================")
+
+        lifecycleScope.launch {
+            try {
+                // 파일명이 제공되지 않으면 기본 파일 사용
+                val fileToPlay = if (audioFile.isNotBlank()) audioFile else SERVICE_END_AUDIO_FILE
+                Log.i(TAG, "🔊 서비스 종료 오디오 재생 시작: $fileToPlay")
+
+                mediaPlayerController.playLocalAudio(fileToPlay) {
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "✅ 서비스 종료 오디오 재생 완료")
+                    Log.i(TAG, "📤 FastAPI로 audio_playback_completed (type: service_completed) 이벤트 전송 시작")
+                    Log.i(TAG, "============================================================")
+
+                    val success = socketIoSttClient.sendServiceCompletedAudioCompleted()
+                    if (success) {
+                        Log.i(TAG, "✅ [모바일] FastAPI로 service_completed 이벤트 전송 완료")
+                        Log.i(TAG, "   💡 Wakeword 감지 대기 상태로 복귀")
+                    } else {
+                        Log.e(TAG, "❌ [모바일] FastAPI로 service_completed 이벤트 전송 실패")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 서비스 종료 오디오 재생 오류: ${e.message}")
+                e.printStackTrace()
+                // 오류 발생 시에도 이벤트 전송
+                socketIoSttClient.sendServiceCompletedAudioCompleted()
+            }
+        }
+    }
+
     private fun showModal(statusMessage: String) {
         if (aiOnDialog?.isVisible == true) return
         aiOnDialog = AiOnDialog(statusMessage)
@@ -898,6 +1116,101 @@ class WorkingActivity : AppCompatActivity() {
     private fun hideModal() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
+    }
+    private fun showAiAnswer() {
+        lifecycleScope.launch {
+            workingViewModel.finalAnswer.collect { answer ->
+                Log.d(TAG, answer.markdown_text)
+                runSection(
+                    binding.aiResultCause,
+                    binding.aiResultCauseText,
+                    answer.possible_causes_markdown,
+                    answer.possible_causes_audio
+                )
+                runSection(
+                    binding.aiResultAction,
+                    binding.aiResultActionText,
+                    answer.recommended_actions_markdown,
+                    answer.recommended_actions_audio
+                )
+                runSection(
+                    binding.aiResultWarning,
+                    binding.aiResultWarningText,
+                    answer.safety_warnings_markdown,
+                    answer.safety_warnings_audio
+                )
+            }
+        }
+    }
+    suspend fun runSection(
+        cardView: MaterialCardView,
+        textView: TextView,
+        text: String,
+        audioBase64: String?
+    ) {
+        cardView.visibility = View.VISIBLE
+        withContext(Dispatchers.Main) {
+            cardView.slideIn()
+        }
+        withContext(Dispatchers.Main) {
+            showTypingEffect(textView, text)
+        }
+        playAudio(audioBase64)
+        delay(2000)
+        withContext(Dispatchers.Main) {
+            cardView.fadeOut()
+        }
+    }
+    suspend fun showTypingEffect(textView: TextView, text: String) {
+        val markwon = Markwon.create(textView.context)
+
+        for (i in 1..text.length) {
+            val sub = text.substring(0, i)
+            markwon.setMarkdown(textView, sub)
+            delay(15)
+        }
+    }
+    suspend fun playAudio(base64: String?) {
+        Log.d(TAG, "오디오 base64: $base64")
+        if (base64 == null) return
+
+        val audioBytes = Base64.decode(base64, Base64.DEFAULT)
+        val tempFile = File.createTempFile("tts", ".mp3")
+
+        tempFile.writeBytes(audioBytes)
+
+        val player = MediaPlayer().apply {
+            setDataSource(tempFile.path)
+        }
+        val completion = CompletableDeferred<Unit>()
+        player.setOnCompletionListener {
+            completion.complete(Unit)
+            player.release()
+        }
+        player.prepare()
+        player.start()
+
+        completion.await()
+    }
+
+    fun View.slideIn(duration:Long = 400) {
+        this.translationX = -300f
+        this.alpha = 0f
+        this.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(duration)
+            .start()
+    }
+
+    suspend fun View.fadeOut(duration: Long = 400) {
+        val job = CompletableDeferred<Unit>()
+        this.animate()
+            .alpha(0f)
+            .setDuration(duration)
+            .withEndAction { job.complete(Unit) }
+            .start()
+        job.await()
     }
 
 
@@ -925,11 +1238,17 @@ class WorkingActivity : AppCompatActivity() {
             onCvDetectionFailed = { cv ->
                 handleCvDetectionFailed(cv)
             },
+            onCvDetectionAnomaly = { cvAnomaly ->
+                handleCvDetectionAnomaly(cvAnomaly)
+            },
             onClarifyQaTurn = { qa ->
                 handleClarifyQaTurn(qa)
             },
             onWakewordDetected = {
                 handleWakewordDetected()
+            },
+            onPlayServiceEndAudio = { audioFile ->
+                handlePlayServiceEndAudio(audioFile)
             },
             onConnect = {
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
@@ -953,8 +1272,10 @@ class WorkingActivity : AppCompatActivity() {
             onStartSseConnection = null,
             onCvDetectionNormal = null,
             onCvDetectionFailed = null,
+            onCvDetectionAnomaly = null,
             onClarifyQaTurn = null,
             onWakewordDetected = null,
+            onPlayServiceEndAudio = null,
         )
     }
     

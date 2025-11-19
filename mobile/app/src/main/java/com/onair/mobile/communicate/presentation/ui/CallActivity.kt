@@ -17,9 +17,19 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -43,11 +54,16 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toColorLong
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.utils.viewModelByFactory
+import io.livekit.android.compose.ui.RendererType
+import io.livekit.android.compose.ui.ScaleType
+import io.livekit.android.compose.ui.VideoTrackView
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.collections.emptyList
@@ -61,12 +77,15 @@ data class TimedPath(
     val color: Color,
     val timestamp: Long = System.currentTimeMillis()
 )
+lateinit var description : String
 class CallActivity : ComponentActivity() {
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
         val token = intent.getStringExtra("token")
             ?: throw NullPointerException("token is null")
+        description = intent.getStringExtra("description")
+            ?: throw java.lang.NullPointerException("description is null")
         CallViewModel(
             url = url,
             token = token,
@@ -83,7 +102,6 @@ class CallActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-
         val socketClient = SocketHolder.socketClient
         Log.i("CallActivity", "📡 CallActivity에서 Socket 연결 상태 확인: isActive=${socketClient.isConnected()}")
         setContent {
@@ -97,6 +115,7 @@ class CallActivity : ComponentActivity() {
 @Composable
 fun CallScreen(viewModel: CallViewModel) {
 //    val activity = (LocalContext.current as? Activity)
+    val blueprintTrack by viewModel.blueprintTrack.collectAsState()
 
     Box(
         modifier = Modifier
@@ -106,8 +125,27 @@ fun CallScreen(viewModel: CallViewModel) {
         WhiteboardCanvas(
             viewModel = viewModel,
             modifier = Modifier.fillMaxSize(),
-
         )
+
+        blueprintTrack?.let {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .size(width = 220.dp, height = 160.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.6f))
+            ) {
+                VideoTrackView(
+                    videoTrack = it,
+                    modifier = Modifier.fillMaxSize(),
+                    passedRoom = viewModel.room,
+                    mirror = false,
+                    scaleType = ScaleType.Fill,
+                    rendererType = RendererType.Texture,
+                )
+            }
+        }
     }
 }
 private const val REMOTE_WIDTH = 480f
@@ -116,7 +154,7 @@ private const val REMOTE_HEIGHT = 360f
 @Composable
 fun WhiteboardCanvas(
     viewModel: CallViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ){
     BoxWithConstraints(modifier) {
         val screenWidth = constraints.maxWidth.toFloat()
@@ -150,20 +188,20 @@ fun WhiteboardCanvas(
             }
         }
 
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(100)
-                pulseMarkers = markers.map { marker ->
-                    val newScale = marker.pulseScale + 0.03f
-                    val newOpacity = marker.pulseOpacity - 0.2f
-                    if (newScale > 1.6f) {
-                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
-                    } else {
-                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
-                    }
-                }
-            }
-        }
+//        LaunchedEffect(Unit) {
+//            while (true) {
+//                delay(100)
+//                pulseMarkers = markers.map { marker ->
+//                    val newScale = marker.pulseScale + 0.03f
+//                    val newOpacity = marker.pulseOpacity - 0.2f
+//                    if (newScale > 1.6f) {
+//                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+//                    } else {
+//                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+//                    }
+//                }
+//            }
+//        }
 
         LaunchedEffect(viewModel) {
             viewModel.dataReceived.collect { jsonString ->
@@ -275,15 +313,12 @@ fun WhiteboardCanvas(
             Log.d("CallActivity marker", markers.toString())
             markers.forEach { marker ->
                 val p = transform(marker.info.x, marker.info.y)
-                ArMarker(marker = marker, p.x, p.y)
+                if (marker.type == "description") {
+                    DescriptionMarker(marker = marker, p.x, p.y)
+                } else {
+                    ArMarker(marker = marker, p.x, p.y)
+                }
             }
-    //        SmallFloatingActionButton(
-    //            onClick = { (context as? Activity)?.finish() },
-    //            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-    //            contentColor = MaterialTheme.colorScheme.secondary
-    //        ) {
-    //            Icon(painterResource(R.drawable.ic_call_end), "통신 끊기")
-    //        }
         }
     }
 //    val points = remember { mutableStateListOf<Points>() }
@@ -297,6 +332,7 @@ private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<
 
     return Triple(scale, offsetX, offsetY)
 }
+
 @Composable
 fun ArMarker(marker: ArMarker, x: Float, y: Float) {
     val transition = rememberInfiniteTransition()
@@ -317,19 +353,44 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
             repeatMode = RepeatMode.Restart
         )
     )
+    var currentColor = "#ffffff"
+    if (marker.color != null) {
+        currentColor = marker.color
+    }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         drawCircle(
-            color = Color(marker.color.toColorInt()),
+            color = Color(currentColor.toColorInt()),
             radius = marker.info.size,
             center = Offset(x, y)
         )
 
         drawCircle(
-            color = Color(marker.color.toColorInt()).copy(alpha = pulseAlpha),
+            color = Color(currentColor.toColorInt()).copy(alpha = pulseAlpha),
             radius = scale,
             center = Offset(x, y),
             style = Stroke(width = 4f)
+        )
+    }
+}
+@Composable
+fun DescriptionMarker(marker: ArMarker, x: Float, y: Float) {
+    // MaterialCardView -> Card
+    Card(
+        modifier = Modifier
+            .wrapContentSize()
+            // XML의 layout_constraintTop... 등은 부모 레이아웃(Column 등)에서 처리
+            .padding(4.dp), // 카드 자체의 외곽 여백 (선택사항)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant // FilledStyle과 유사한 색상
+        )
+    ) {
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium, // textAppearanceBodyMedium
+            modifier = Modifier
+                .padding(end = 10.dp) // layout_marginEnd="10dp"
+                .weight(1f, fill = false) // 텍스트가 길어질 경우 처리
         )
     }
 }
