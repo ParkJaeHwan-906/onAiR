@@ -13,15 +13,8 @@ import io.livekit.android.LiveKitOverrides
 import io.livekit.android.RoomOptions
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
-import io.livekit.android.room.Room
-import io.livekit.android.room.datastream.incoming.TextStreamReceiver
-import io.livekit.android.room.participant.Participant
-import io.livekit.android.room.track.LocalScreencastVideoTrack
 import io.livekit.android.room.track.RemoteVideoTrack
 import io.livekit.android.room.track.TrackPublication
-import io.livekit.android.room.track.video.CameraCapturerUtils
-import io.livekit.android.util.flow
-import io.livekit.android.room.track.LocalAudioTrackOptions
 import io.livekit.android.room.track.RemoteAudioTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,7 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import io.livekit.android.room.track.Track
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 
 class CallViewModel(
@@ -56,9 +49,8 @@ class CallViewModel(
     val dataReceived = _dataReceived
     val arMarkers = SocketHolder.socketClient.arMarkers
     val finishEvent = SocketHolder.socketClient.callEnd
-    private val _frameState = MutableStateFlow<ByteArray?>(null)
-    val frameState = _frameState.asStateFlow()
-
+    private val _frameState = MutableSharedFlow<ByteArray?>()
+    val frameState = _frameState.asSharedFlow()
     // blueprint-canvas 영상 트랙
     private val _blueprintTrack = MutableStateFlow<RemoteVideoTrack?>(null)
     val blueprintTrack: StateFlow<RemoteVideoTrack?> = _blueprintTrack.asStateFlow()
@@ -123,7 +115,7 @@ class CallViewModel(
     private fun collectFrames() {
         viewModelScope.launch {
             SocketHolder.socketClient.videoFrames.collect { frame ->
-                _frameState.value = frame
+                _frameState.emit(frame)
                 Log.d("Call view model", frame.toString())
             }
         }
@@ -134,7 +126,7 @@ class CallViewModel(
         room.release()
     }
 
-    private fun handleBlueprintTrackSubscribed(track: io.livekit.android.room.track.Track?, publication: TrackPublication) {
+    private fun handleBlueprintTrackSubscribed(track: Track?, publication: TrackPublication) {
         if (publication.name != BLUEPRINT_TRACK_NAME || publication.source != Track.Source.SCREEN_SHARE) {
             return
         }

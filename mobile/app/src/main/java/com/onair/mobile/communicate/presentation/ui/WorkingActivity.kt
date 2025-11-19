@@ -1,6 +1,8 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Base64
@@ -14,7 +16,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewModelScope
 import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
@@ -69,8 +74,6 @@ class WorkingActivity : AppCompatActivity() {
     private val sseViewModel: CommunicationViewModel by lazy {
         (application as OnairApp).sseViewModel
     }
-
-
     // Socket.IO 클라이언트 및 Assistant 로직
     private lateinit var socketIoSttClient: SocketIoSttClient
     private lateinit var sttRepository: SttRepositoryImpl
@@ -84,6 +87,7 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
+    private lateinit var description : String
 
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
@@ -225,6 +229,22 @@ class WorkingActivity : AppCompatActivity() {
         binding.endButton.setOnClickListener {
             workingViewModel.endTask(taskId, "")
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                socketIoSttClient.videoFrames.collect { value ->
+                    value.let {
+                        val bitmap = it.toBitmap()
+                        Log.d("Demonstrate Activity", bitmap.toString())
+                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
+                        binding.videoView.setImageBitmap(bitmap)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun ByteArray.toBitmap(): Bitmap? {
+        return BitmapFactory.decodeByteArray(this, 0, this.size)
     }
 
     private fun observeViewModel() {
@@ -257,7 +277,8 @@ class WorkingActivity : AppCompatActivity() {
     private fun showCallRequestCard(data: JSONObject) {
         Log.d("SSE_show card", data.toString())
         binding.senderInfo.text = data.getString("name")
-        binding.description.text = "통신을 요청합니다: ${data.getString("description")}"
+        description = data.getString("description")
+        binding.description.text = "통신을 요청합니다: ${description}"
 
         binding.callRequestCard.visibility = View.VISIBLE
         val anim = AnimationUtils.loadAnimation(this, R.anim.cardview_slide)
@@ -277,12 +298,15 @@ class WorkingActivity : AppCompatActivity() {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", token)
                 if (token.isNotBlank()) {
-                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java). apply {
+//                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
-                        putExtra("description", binding.description.text)
+                        putExtra("description", description)
                     }
+                    socketIoSttClient.sendAcceptCommunication()
                     startActivity(intent)
+
                     binding.callRequestCard.visibility = View.GONE
                 }
             }
