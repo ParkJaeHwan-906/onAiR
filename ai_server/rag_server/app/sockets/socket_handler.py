@@ -190,47 +190,55 @@ async def broadcast_to(device_types, event: str, payload: dict):
     targets = list(device_map.items())
     sent_count = 0
     
-    # 디버깅: 현재 device_map 상태 출력
-    # print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
-    # print(f"   현재 device_map: {dict(device_map)}")
-    # print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
+    # 디버깅: 현재 device_map 상태 출력 (cv_detection_anomaly 이벤트 전송 시에만)
+    if event == "cv_detection_anomaly":
+        print(f"🔍 [broadcast_to] 디버깅: 요청 디바이스={device_types}, 이벤트={event}")
+        print(f"   현재 device_map: {dict(device_map)}")
+        print(f"   현재 연결된 디바이스 타입: {list(set(device_map.values()))}")
     
     # 연결된 디바이스 확인
     available_devices = [dev for sid, dev in targets if dev in device_types]
     if not available_devices:
-        # print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
-        # print(f"   요청 디바이스: {device_types}")
-        # print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
-        # print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
+        if event == "cv_detection_anomaly":
+            print(f"⚠️ [broadcast_to] 연결된 디바이스가 없습니다.")
+            print(f"   요청 디바이스: {device_types}")
+            print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+            print(f"   device_map 상세: {[(sid[:10] + '...', dev) for sid, dev in targets]}")
         return
 
-    # print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
+    if event == "cv_detection_anomaly":
+        print(f"✅ [broadcast_to] 찾은 디바이스: {available_devices}")
     
     for sid, dev in targets:
         if dev in device_types:
             try:
-                # print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
-                # print(f"   Payload: {str(payload)[:100]}...")
+                if event == "cv_detection_anomaly":
+                    print(f"📤 [broadcast_to] 이벤트 전송 시도: {event} → {dev} (sid={sid[:15]}...)")
+                    print(f"   Payload 크기: {len(str(payload))} bytes")
                 await sio.emit(event, payload, to=sid)
                 sent_count += 1
-                # print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
+                if event == "cv_detection_anomaly":
+                    print(f"✅ [broadcast_to] 이벤트 전송 성공: {event} → {dev} (sid={sid[:15]}...)")
             except Exception as e:
                 # 연결 끊긴 클라이언트가 있을 수 있으므로 예외 무시하고 다음으로 진행
-                # print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
+                if event == "cv_detection_anomaly":
+                    print(f"⚠️ [broadcast_to] Failed to emit to {sid}: {e}")
                 import traceback
                 traceback.print_exc()
                 # 안전하게 제거 시도 (이미 끊겼을 수도 있음)
                 try:
                     if sid in device_map:
                         del device_map[sid]
-                        # print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
+                        if event == "cv_detection_anomaly":
+                            print(f"🧹 [broadcast_to] 디바이스 제거: {dev} (sid={sid[:15]}...)")
                 except Exception:
                     pass
     
-    # if sent_count == 0:
-    #     print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
-    # else:
-    #     print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
+    if event == "cv_detection_anomaly":
+        if sent_count == 0:
+            print(f"⚠️ [broadcast_to] 이벤트 전송 실패: {event} → {device_types} (연결된 디바이스 없음)")
+        else:
+            print(f"✅ [broadcast_to] 총 {sent_count}개 디바이스에 이벤트 전송 완료: {event} → {device_types}")
 
 
 # ========================================
@@ -707,9 +715,33 @@ async def handle_intent_audio_completed(sid, data):
                     print(f"   ⚠️ 연결된 모바일이 없습니다!")
                 print("=" * 60)
                 
-                await broadcast_to("mobile", "cv_detection_anomaly", payload)
-                print("✅ 모바일로 CV 탐지 알림 전송 완료")
+                # 이벤트 전송 전 최종 확인
+                print(f"🔍 [디버깅] 이벤트 전송 전 최종 확인:")
+                print(f"   이벤트명: cv_detection_anomaly")
+                print(f"   payload 크기: {len(str(payload))} bytes")
+                print(f"   audio_content 존재: {notification_audio is not None}")
+                if notification_audio:
+                    print(f"   audio_content 길이: {len(notification_audio)} bytes")
                 print("=" * 60)
+                
+                # 이벤트 전송 시도
+                try:
+                    await broadcast_to("mobile", "cv_detection_anomaly", payload)
+                    print("✅ 모바일로 CV 탐지 알림 전송 완료")
+                    
+                    # 전송 후 확인: 실제로 전송되었는지 확인
+                    mobile_sids_after = [s for s, d in device_map.items() if d == "mobile"]
+                    print(f"🔍 [디버깅] 이벤트 전송 후 모바일 연결 상태:")
+                    print(f"   연결된 모바일 수: {len(mobile_sids_after)}")
+                    if mobile_sids_after:
+                        print(f"   모바일 SID: {[s[:15] + '...' for s in mobile_sids_after]}")
+                    print("=" * 60)
+                except Exception as e:
+                    print(f"❌ [오류] 모바일로 CV 탐지 알림 전송 실패: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print("=" * 60)
+                    # 전송 실패 시에도 타임아웃 로직으로 전체 정비 가이드 생성
                 
                 # ⚠️ 중요: audio_content가 None이면 모바일에서 TTS 재생을 하지 않으므로
                 # audio_playback_completed 이벤트를 기다리지 않고 바로 전체 정비 가이드 생성을 시작
@@ -726,7 +758,38 @@ async def handle_intent_audio_completed(sid, data):
                     print("   💡 모바일에서 audio_playback_completed (type: cv_detection_anomaly) 이벤트 수신 대기 중...")
                     print("   ⚠️ 만약 이벤트가 오지 않으면 모바일 앱 로그를 확인하세요!")
                     print("=" * 60)
-                    await wait_for_next_step("모바일로 CV 탐지 알림 전송 완료", "11")
+                    
+                    # ⚠️ 타임아웃 설정: 10초 내에 audio_playback_completed가 오지 않으면 자동으로 전체 정비 가이드 생성 시작
+                    try:
+                        # asyncio.wait_for를 사용하여 타임아웃 설정
+                        # 이벤트가 오면 _pending_cv_detection이 None이 되므로 이를 확인
+                        timeout_seconds = 10.0
+                        start_time = time.time()
+                        
+                        while True:
+                            # _pending_cv_detection이 None이면 이미 handle_audio_playback_completed에서 처리됨
+                            if _pending_cv_detection is None:
+                                print("✅ audio_playback_completed 이벤트 수신 확인 - 이미 전체 정비 가이드 생성이 시작되었습니다.")
+                                break
+                            
+                            # 타임아웃 체크
+                            elapsed = time.time() - start_time
+                            if elapsed >= timeout_seconds:
+                                print("=" * 60)
+                                print(f"⚠️ 타임아웃 ({timeout_seconds}초) - 모바일에서 audio_playback_completed 이벤트가 오지 않았습니다.")
+                                print("   자동으로 전체 정비 가이드 생성을 시작합니다.")
+                                print("=" * 60)
+                                
+                                # 타임아웃 시에도 전체 정비 가이드 생성
+                                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
+                                break
+                            
+                            # 0.5초마다 확인
+                            await asyncio.sleep(0.5)
+                    except Exception as e:
+                        print(f"⚠️ 타임아웃 대기 중 오류 발생: {e}")
+                        # 오류 발생 시에도 전체 정비 가이드 생성
+                        await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
                 
                 # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
                 # CV 탐지 성공 시 마이크는 OFF 상태 유지 (켜지 않음)
