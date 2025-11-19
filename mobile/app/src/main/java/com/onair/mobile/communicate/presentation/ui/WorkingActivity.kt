@@ -15,6 +15,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
 import com.onair.mobile.communicate.data.SseEvent
@@ -1119,17 +1120,21 @@ class WorkingActivity : AppCompatActivity() {
     private fun showAiAnswer() {
         lifecycleScope.launch {
             workingViewModel.finalAnswer.collect { answer ->
+                Log.d(TAG, answer.markdown_text)
                 runSection(
+                    binding.aiResultCause,
                     binding.aiResultCauseText,
                     answer.possible_causes_markdown,
                     answer.possible_causes_audio
                 )
                 runSection(
+                    binding.aiResultAction,
                     binding.aiResultActionText,
                     answer.recommended_actions_markdown,
                     answer.recommended_actions_audio
                 )
                 runSection(
+                    binding.aiResultWarning,
                     binding.aiResultWarningText,
                     answer.safety_warnings_markdown,
                     answer.safety_warnings_audio
@@ -1138,21 +1143,23 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
     suspend fun runSection(
+        cardView: MaterialCardView,
         textView: TextView,
         text: String,
         audioBase64: String?
     ) {
+        cardView.visibility = View.VISIBLE
         withContext(Dispatchers.Main) {
-            textView.slideIn()
+            cardView.slideIn()
         }
         withContext(Dispatchers.Main) {
             showTypingEffect(textView, text)
         }
         playAudio(audioBase64)
-        withContext(Dispatchers.Main) {
-            textView.fadeOut()
-        }
         delay(2000)
+        withContext(Dispatchers.Main) {
+            cardView.fadeOut()
+        }
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
         val markwon = Markwon.create(textView.context)
@@ -1164,6 +1171,7 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
     suspend fun playAudio(base64: String?) {
+        Log.d(TAG, "오디오 base64: $base64")
         if (base64 == null) return
 
         val audioBytes = Base64.decode(base64, Base64.DEFAULT)

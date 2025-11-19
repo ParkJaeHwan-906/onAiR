@@ -198,20 +198,20 @@ fun WhiteboardCanvas(
             }
         }
 
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(100)
-                pulseMarkers = markers.map { marker ->
-                    val newScale = marker.pulseScale + 0.03f
-                    val newOpacity = marker.pulseOpacity - 0.2f
-                    if (newScale > 1.6f) {
-                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
-                    } else {
-                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
-                    }
-                }
-            }
-        }
+//        LaunchedEffect(Unit) {
+//            while (true) {
+//                delay(100)
+//                pulseMarkers = markers.map { marker ->
+//                    val newScale = marker.pulseScale + 0.03f
+//                    val newOpacity = marker.pulseOpacity - 0.2f
+//                    if (newScale > 1.6f) {
+//                        marker.copy(pulseScale = 1f, pulseOpacity = 0.5f)
+//                    } else {
+//                        marker.copy(pulseScale = newScale, pulseOpacity = newOpacity)
+//                    }
+//                }
+//            }
+//        }
 
         LaunchedEffect(viewModel) {
             viewModel.dataReceived.collect { jsonString ->
@@ -363,16 +363,20 @@ fun ArMarker(marker: ArMarker, x: Float, y: Float) {
             repeatMode = RepeatMode.Restart
         )
     )
+    var currentColor = "#ffffff"
+    if (marker.color != null) {
+        currentColor = marker.color
+    }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         drawCircle(
-            color = Color(marker.color.toColorInt()),
+            color = Color(currentColor.toColorInt()),
             radius = marker.info.size,
             center = Offset(x, y)
         )
 
         drawCircle(
-            color = Color(marker.color.toColorInt()).copy(alpha = pulseAlpha),
+            color = Color(currentColor.toColorInt()).copy(alpha = pulseAlpha),
             radius = scale,
             center = Offset(x, y),
             style = Stroke(width = 4f)
