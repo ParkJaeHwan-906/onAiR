@@ -27,6 +27,7 @@ interface ServerToClientEvents {
       x2: number;
       y2: number;
       anomaly: boolean;
+      temperature: number;
     }>;
   }) => void;
   "marker-created": (data: { msg: string }) => void;
