@@ -101,24 +101,45 @@ class GcpBufferedStt:
                 except:
                     break
         
-        # 3~5초 동안 음성 수집 (타임아웃 처리 포함)
+        # 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초)을 고려하여 음성 수집
         buffer = []
         start_time = time.time()
         target_duration = self.buffer_duration
         
-        # 음성 입력 타임아웃: 7초 동안 실제 음성이 들어오지 않으면 타임아웃
-        # (모바일 오디오 재생 완료 후 사용자가 말을 시작할 시간을 고려하여 7초로 설정)
-        SPEECH_TIMEOUT_SEC = 7.0
-        # 초기 대기 시간: 모바일 오디오 재생 완료 후 사용자가 말을 시작할 시간 (2초)
-        INITIAL_GRACE_PERIOD = 2.0
+        # 음성 입력 타임아웃: 12초 동안 실제 음성이 들어오지 않으면 타임아웃
+        # (모바일 오디오 재생 시간 + 사용자 말 시작 시간을 고려하여 충분한 시간 제공)
+        SPEECH_TIMEOUT_SEC = 12.0
+        # 초기 대기 시간: 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초) = 6초
+        # (모바일 오디오 재생 완료를 기다리지 않고 버퍼링 STT가 시작되므로 충분한 시간 제공)
+        INITIAL_GRACE_PERIOD = 6.0
         last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
         MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
         
         chunk_count = 0
+        # 청크 읽기 타임아웃: 0.1초 (큐가 비어있을 때 무한 대기 방지)
+        CHUNK_READ_TIMEOUT = 0.1
+        
         while time.time() - start_time < target_duration:
-            chunk = mic.read()
+            # 타임아웃을 사용하여 큐가 비어있을 때 무한 대기 방지
+            chunk = mic.read(timeout=CHUNK_READ_TIMEOUT)
             if chunk is None:
-                break
+                # 타임아웃 발생 (큐가 비어있음) - 계속 루프 진행하여 전체 타임아웃 체크
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                
+                # 전체 타임아웃 체크 (초기 대기 시간 이후)
+                if elapsed_time > INITIAL_GRACE_PERIOD:
+                    if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
+                        # 타임아웃 발생
+                        error_msg = f"음성 입력 타임아웃 ({int(SPEECH_TIMEOUT_SEC)}초 동안 음성이 감지되지 않음)"
+                        await broadcaster({
+                            "type": "error",
+                            "text": error_msg
+                        })
+                        raise ValueError(error_msg)
+                
+                # 타임아웃이 아니면 계속 루프 진행
+                continue
             
             current_time = time.time()
             elapsed_time = current_time - start_time
@@ -147,6 +168,7 @@ class GcpBufferedStt:
             
             # 타임아웃 확인: 초기 대기 시간 이후에만 타임아웃 체크
             # (초기 대기 시간 동안은 사용자가 말을 시작할 시간을 제공)
+            # 주의: chunk가 None일 때는 이미 위에서 타임아웃 체크를 했으므로 여기서는 음성이 있을 때만 체크
             if elapsed_time > INITIAL_GRACE_PERIOD:
                 if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
                     # 타임아웃 발생
