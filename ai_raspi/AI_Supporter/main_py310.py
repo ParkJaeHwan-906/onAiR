@@ -46,13 +46,20 @@ def run_stt_loop():
     """
     # 브리지 서버를 별도 스레드에서 실행 (재연결될 때까지 무한 재시도)
     bridge_thread = None
-    bridge_retry_delay = 1.0
+    bridge_retry_delay = 1.0        # TODO: 3-5 초로 증가시켜도 괜찮을 듯, 1초면 너무 자주 재시도하게 됨
     bridge_attempt = 0
     
     while True:  # 재연결될 때까지 무한 재시도
         bridge_attempt += 1
         try:
             # 포트 점유 확인 및 해제 시도
+            # 단순 테스트 로직, 포트 점유 확인용
+            #-------------------------------------------------------------
+            # 담당자 : 박소정 
+            # TODO: Socket.io 로 통일 필요
+            # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
+            # [] 바로 연결해보고, 예외가 발생한다면 그때 죽이고 재실행하는게 어떤지
+            #-------------------------------------------------------------
             import socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.5)
@@ -62,14 +69,23 @@ def run_stt_loop():
             if result == 0:
                 # 포트가 이미 사용 중인 경우
                 logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... (시도 {bridge_attempt})")
+                # ---------------------------------------------------------------
+                # 담당자 : 박소정
+                # 개선 방법
+                # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
+                # 
+                # logger.info(f"이미 브리지 서버가 실행중입니다.")
+                # break;
+                # 이하 코드 불필요
+                # ---------------------------------------------------------------
                 try:
                     # 기존 프로세스 종료 시도
                     subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
-                    time.sleep(1)
+                    time.sleep(1)   # TODO: 마찬가지로 1초면 너무 짧음, 3초정도로 늘리면 좋을 듯
                 except Exception:
                     pass
                 continue
-            
+                # ---------------------------------------------------------------
             # 브리지 서버 시작
             bridge_thread = threading.Thread(
                 target=run_server,
@@ -84,6 +100,7 @@ def run_stt_loop():
             wait_start = time.time()
             server_ready = False
             
+            # 3초 동안 계속해서 브리지 서버가 올라왔는지 연결 확인
             while time.time() - wait_start < max_wait_time:
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -111,12 +128,12 @@ def run_stt_loop():
             continue
     
     # WebRTC 프로세스 확인 (마이크 점유 확인)
-    webrtc_pids = []
+    webrtc_pids = []        # TODO: 이거 사용하는 곳이 없어보이는데 확인해주세요
     try:
         result = subprocess.run(['pgrep', '-f', 'socket_manager.py'], capture_output=True, text=True)
         if result.returncode == 0:
             pids = result.stdout.strip().split('\n')
-            webrtc_pids = [pid for pid in pids if pid]
+            webrtc_pids = [pid for pid in pids if pid]      # TODO: 마찬가지로 사용하는 곳이 없어요
     except Exception as e:
         logger.warning(f"⚠️ WebRTC 프로세스 확인 실패: {e}")
     
