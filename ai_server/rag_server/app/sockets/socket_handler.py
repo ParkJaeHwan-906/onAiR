@@ -656,9 +656,12 @@ async def handle_intent_audio_completed(sid, data):
 async def handle_audio_playback_completed(sid, data):
     """
     모바일로부터 오디오 재생 완료 이벤트 수신
-    - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
+    - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="cv_detection_normal": CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+    - type="cv_detection_anomaly": CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
     - type="clarify_qa_turn": Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
+    - type="final_answer": 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
+    - type="service_completed": 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
     """
     sender_device = device_map.get(sid, "unknown")
     
@@ -688,24 +691,9 @@ async def handle_audio_playback_completed(sid, data):
         print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
         print("=" * 60)
         
-        # ========================================
-        # [주석처리] 추후 사용을 위한 Streaming STT 로직
-        # ========================================
-        # # CV 탐지 실패 음성 파일 재생 완료 → 라즈베리파이로 Streaming STT 시작 신호
-        # print("=" * 60)
-        # print("📡 라즈베리파이로 Streaming STT 시작 신호 전송")
-        # print("=" * 60)
-        # 
-        # # 세션 ID 생성 (Clarify 세션용)
-        # import uuid
-        # session_id = str(uuid.uuid4())
-        # 
-        # await broadcast_to("raspi", "start_streaming_stt", {
-        #     "session_id": session_id,
-        #     "message": "모바일 CV 탐지 실패 음성 파일 재생 완료. Streaming STT 세션을 시작하세요."
-        # })
-        # print(f"✅ 라즈베리파이로 Streaming STT 시작 신호 전송 완료: session_id={session_id}")
-        # await wait_for_next_step("라즈베리파이로 Streaming STT 시작 신호 전송 완료", "12-2")
+        # 주의: CV 탐지 실패 시 Streaming STT 로직은 제거되었습니다.
+        # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
+        # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
         
     elif audio_type == "cv_detection_normal":
         # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
@@ -885,15 +873,40 @@ async def handle_audio_playback_completed(sid, data):
         # 라즈베리파이로 CV 탐지 성공 알림
         await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
         
+        # 주의: 서비스 종료 오디오는 final_answer의 모든 섹션 재생 완료 후 재생됩니다.
+        # 모바일에서 final_answer의 마지막 섹션 재생 완료 후 자동으로 서비스 종료 오디오를 재생하고
+        # audio_playback_completed (type="service_completed") 이벤트를 전송합니다.
+        
     elif audio_type == "final_answer":
-        # AI_Supporter 최종 답변 TTS 재생 완료 → 마이크 ON + Wakeword 감지 대기 시작
+        # AI_Supporter 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
         print("=" * 60)
-        print(f"✅ [FastAPI] 최종 답변 TTS 재생 완료 이벤트 수신")
+        print(f"✅ [FastAPI] 최종 답변의 모든 섹션 TTS 재생 완료 이벤트 수신")
         print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
         print("=" * 60)
         print("=" * 60)
-        print(f"🎉 [FastAPI] 서비스 로직 종료")
-        print(f"   💡 Clarify 루프 완료 → 최종 답변 전달 완료")
+        print(f"📤 [FastAPI] 모바일로 서비스 종료 오디오 재생 요청 전송")
+        print(f"   파일: 001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+        print("=" * 60)
+        
+        # 모바일로 서비스 종료 오디오 재생 요청
+        await broadcast_to("mobile", "play_service_end_audio", {
+            "audio_file": "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+        })
+        
+        print("✅ 모바일로 서비스 종료 오디오 재생 요청 전송 완료")
+        print("   💡 모바일에서 오디오 재생 완료 후 service_completed 이벤트 수신 대기")
+        print("=" * 60)
+        await wait_for_next_step("서비스 종료 오디오 재생 요청 전송 완료", "14-1")
+    
+    elif audio_type == "service_completed":
+        # 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
+        print("=" * 60)
+        print(f"✅ [FastAPI] 서비스 종료 오디오 재생 완료 이벤트 수신")
+        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
+        print("=" * 60)
+        print("=" * 60)
+        print(f"🎉 [FastAPI] 서비스 로직 종료 완료")
+        print(f"   💡 모든 처리 완료 → Wakeword 감지 대기 상태로 복귀")
         print("=" * 60)
         print("=" * 60)
         print(f"📤 [FastAPI] 라즈베리파이로 wakeword_start_waiting 이벤트 전송")
@@ -905,9 +918,9 @@ async def handle_audio_playback_completed(sid, data):
         
         print("=" * 60)
         print(f"✅ [FastAPI] Wakeword 감지 대기 시작 이벤트 전송 완료")
-        print(f"   💡 서비스 로직 종료 완료")
+        print(f"   💡 서비스 로직 종료 완료 → 초기 상태로 복귀")
         print("=" * 60)
-        await wait_for_next_step("최종 답변 TTS 재생 완료 처리", "14-1")
+        await wait_for_next_step("Wakeword 감지 대기 상태 복귀 완료", "14-2")
     else:
         print(f"ℹ️ 알 수 없는 오디오 타입: {audio_type}")
 
@@ -1559,13 +1572,16 @@ async def process_clarify_qa_turn(session_id: str, user_question: str):
             print("=" * 60)
             print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
             print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   💡 모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
+            print(f"   💡 모바일에서 모든 섹션 TTS 재생 완료 후 audio_playback_completed (type: final_answer) 이벤트 수신 대기")
+            print(f"   💡 그 후 서비스 종료 오디오 재생 및 wakeword 대기 상태로 복귀")
             print("=" * 60)
             await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
             
-            # 주의: 문서에 따르면 final_answer 전송 후 service_completed를 보내지 않고,
-            # audio_playback_completed (type: "final_answer") 수신 후에만
-            # mic_on과 wakeword_start_waiting을 전송합니다.
+            # 주의: final_answer 전송 후 모든 섹션 재생 완료 시
+            # audio_playback_completed (type: "final_answer") 수신 후
+            # 서비스 종료 오디오 재생 요청을 보내고,
+            # 서비스 종료 오디오 재생 완료 후 audio_playback_completed (type: "service_completed") 수신 시
+            # wakeword_start_waiting을 전송합니다.
             # 이는 handle_audio_playback_completed에서 처리됩니다.
             
     except Exception as e:
