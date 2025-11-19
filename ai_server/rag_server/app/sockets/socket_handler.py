@@ -538,7 +538,6 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
-                global _pending_cv_detection
                 _pending_cv_detection = {
                     "device_type": device_type,
                     "modules": modules,
