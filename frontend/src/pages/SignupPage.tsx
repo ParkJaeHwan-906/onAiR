@@ -71,7 +71,7 @@ function SignupPage() {
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.log("비밀번호 검증 에러:", error.response?.data);
+        // console.log("비밀번호 검증 에러:", error.response?.data);
         const msg =
           error.response?.data?.message ||
           "비밀번호 검증 중 오류가 발생했습니다.";

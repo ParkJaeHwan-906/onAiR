@@ -165,13 +165,13 @@ function WorkAdd({
         let eventSource = sseState.eventSource;
 
         if (!eventSource || eventSource.readyState !== EventSource.OPEN) {
-          console.log("SSE 재연결 시도...");
+          // console.log("SSE 재연결 시도...");
           connectSSE();
           let retry = 0;
           while (retry < 50) {
             const current = useSSEStore.getState().eventSource;
             if (current && current.readyState === EventSource.OPEN) {
-              console.log("SSE 연결 완료");
+              // console.log("SSE 연결 완료");
               eventSource = current;
               break;
             }

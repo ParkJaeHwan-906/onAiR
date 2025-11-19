@@ -22,11 +22,11 @@ function HomePage() {
 
   const formatTime = (dateTimeString: string) => {
     if (!dateTimeString) return "-";
-    const utcDate = new Date(dateTimeString);
-    const kstDate = new Date(utcDate.getTime() + 9 * 60 * 60 * 1000);
+    const utcDate = new Date(dateTimeString); // 백엔드에서 UTC 기준으로 전달됨
+    const kstDate = new Date(utcDate.getTime());
     const hours = String(kstDate.getHours()).padStart(2, "0");
     const minutes = String(kstDate.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
+    return `${hours}시 ${minutes}분`;
   };
 
   const buildTaskSummary = (tasks: Work[]) => {
@@ -68,8 +68,6 @@ function HomePage() {
         ).length;
         setOnlineEmployees(onlineCount);
       }
-    } catch (error) {
-      console.error("통계 데이터 조회 실패:", error);
     } finally {
       setLoading(false);
     }
