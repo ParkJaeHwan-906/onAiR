@@ -183,36 +183,9 @@ class SocketIOClient:
             else:
                 logger.warning("⚠️ 오디오 스트리머가 등록되지 않았습니다.")
         
-        # ========================================
-        # [주석처리] 추후 사용을 위한 Streaming STT 로직
-        # ========================================
-        # @self.sio.on("start_streaming_stt")
-        # async def handle_start_streaming_stt(data):
-        #     """Streaming STT 시작 신호 수신 (FastAPI 서버에서 전송)"""
-        #     session_id = data.get("session_id")
-        #     logger.info(f"📩 start_streaming_stt 이벤트 수신: session_id={session_id}")
-        #     
-        #     if self.manager:
-        #         self.manager.set_stt_mode("streaming")
-        #         
-        #         if not session_id:
-        #             import uuid
-        #             session_id = str(uuid.uuid4())
-        #         
-        #         if hasattr(self.manager, 'bridge_client') and self.manager.bridge_client:
-        #             success = self.manager.bridge_client.emit_start_streaming_stt(session_id)
-        #             if success:
-        #                 logger.info(f"📤 Streaming STT 시작 명령 전송 완료: session_id={session_id}")
-        #             else:
-        #                 logger.error(f"❌ Streaming STT 시작 명령 전송 실패: session_id={session_id}")
-        #         else:
-        #             logger.warning("⚠️ 브리지 클라이언트 미등록")
-        
         @self.sio.on("cv_detection_failed")
         async def handle_cv_detection_failed(data):
             """CV 모델 오류 탐지 실패 이벤트 수신 (AI_SUPPORTER 분기)"""
-            # [주석처리] 추후 사용을 위한 Streaming STT 로직
-            # 현재는 normal과 동일하게 WebRTC 통신 연결 로직으로 처리됨
             logger.info("📩 cv_detection_failed 이벤트 수신 - WebRTC 통신 연결 대기 중")
         
         @self.sio.on("control_raspi")
@@ -220,48 +193,6 @@ class SocketIOClient:
             """라즈베리파이 제어 명령 수신 (모바일 → Socket.IO 서버 → 라즈베리파이)"""
             command = data.get("command", "")
             logger.info(f"📡 라즈베리파이 제어 명령 수신: command={command}")
-            
-            # ========================================
-            # [주석처리] 추후 사용을 위한 Streaming STT 로직
-            # ========================================
-            # if command == "start_streaming_stt":
-            #     # 스트리밍 STT 시작 명령
-            #     logger.info("🎤 스트리밍 STT 시작 명령 수신")
-            #     # manager를 통해 스트리밍 모드로 전환
-            #     if self.manager:
-            #         self.manager.set_stt_mode("streaming")
-            #         # 마이크 활성화
-            #         mic = self.manager.get_mic_stream()
-            #         if mic and not mic.is_active():
-            #             mic.resume()
-            #             logger.info("🔊 마이크 ON (스트리밍 모드 시작)")
-            #         
-            #         # Streaming STT 인스턴스 가져오기
-            #         streaming_stt = self.manager.streaming_stt_instance
-            #         if streaming_stt:
-            #             # Socket.IO 클라이언트 설정
-            #             streaming_stt.socketio_client = self
-            #             
-            #             # 세션 ID 생성 (Clarify 세션용)
-            #             import uuid
-            #             session_id = str(uuid.uuid4())
-            #             logger.info(f"📤 Streaming STT 세션 즉시 시작 (session_id={session_id})")
-            #             
-            #             # 브로드캐스트 함수 (manager를 통해)
-            #             async def broadcaster(msg):
-            #                 await self.manager.broadcast(msg)
-            #             
-            #             # Streaming STT 세션 시작 (별도 태스크로 실행)
-            #             try:
-            #                 import asyncio
-            #                 asyncio.create_task(
-            #                     streaming_stt.run(mic, broadcaster=broadcaster, session_id=session_id)
-            #                 )
-            #                 logger.info("✅ Streaming STT 세션 시작 완료")
-            #             except Exception as e:
-            #                 logger.error(f"❌ Streaming STT 세션 시작 실패: {e}")
-            #         else:
-            #             logger.error("❌ Streaming STT 인스턴스가 등록되지 않았습니다")
             
             if command == "set_stt_mode":
                 # STT 모드 설정 명령

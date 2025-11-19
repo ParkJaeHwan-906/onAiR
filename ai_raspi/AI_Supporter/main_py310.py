@@ -31,18 +31,6 @@ from config import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 자동 모드 플래그 (전역 변수)
-auto_mode_enabled = False
-
-# ========================================
-# 디버그 모드 제거됨 - 자동 진행
-# ========================================
-
-def wait_for_next_step_sync(step_name: str, step_number: str = ""):
-    """디버그 모드 제거됨 - 즉시 진행"""
-    pass
-
-
 def run_stt_loop():
     """
     메인 STT 루프 (Python 3.10에서 실행)
@@ -56,12 +44,13 @@ def run_stt_loop():
     ⑦ 서비스 종료 → STT 세션 OFF (마이크는 계속 ON)
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     """
-    # 브리지 서버를 별도 스레드에서 실행 (재시도 포함)
+    # 브리지 서버를 별도 스레드에서 실행 (재연결될 때까지 무한 재시도)
     bridge_thread = None
-    max_bridge_retries = 3
     bridge_retry_delay = 1.0
+    bridge_attempt = 0
     
-    for bridge_attempt in range(max_bridge_retries):
+    while True:  # 재연결될 때까지 무한 재시도
+        bridge_attempt += 1
         try:
             # 포트 점유 확인 및 해제 시도
             import socket
@@ -72,15 +61,14 @@ def run_stt_loop():
             
             if result == 0:
                 # 포트가 이미 사용 중인 경우
-                if bridge_attempt < max_bridge_retries - 1:
-                    logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... ({bridge_attempt + 1}/{max_bridge_retries})")
-                    try:
-                        # 기존 프로세스 종료 시도
-                        subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
-                        time.sleep(1)
-                    except Exception:
-                        pass
-                    continue
+                logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... (시도 {bridge_attempt})")
+                try:
+                    # 기존 프로세스 종료 시도
+                    subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
+                    time.sleep(1)
+                except Exception:
+                    pass
+                continue
             
             # 브리지 서버 시작
             bridge_thread = threading.Thread(
@@ -113,30 +101,14 @@ def run_stt_loop():
                 logger.info("✅ 브리지 서버 시작 확인 완료")
                 break  # 성공 시 루프 종료
             else:
-                if bridge_attempt < max_bridge_retries - 1:
-                    logger.warning(f"⚠️ 브리지 서버 포트 연결 확인 실패, 재시도 중... ({bridge_attempt + 1}/{max_bridge_retries})")
-                    time.sleep(bridge_retry_delay)
-                    continue
-                else:
-                    logger.warning("⚠️ 브리지 서버 포트 연결 확인 실패. 서버가 시작되지 않았을 수 있습니다.")
-                    break  # 마지막 시도 실패해도 계속 진행 (메인 로직 방해 최소화)
-                    
-        except Exception as e:
-            if bridge_attempt < max_bridge_retries - 1:
-                logger.warning(f"⚠️ 브리지 서버 시작 실패, 재시도 중... ({bridge_attempt + 1}/{max_bridge_retries}): {e}")
+                logger.warning(f"⚠️ 브리지 서버 포트 연결 확인 실패, 재시도 중... (시도 {bridge_attempt})")
                 time.sleep(bridge_retry_delay)
                 continue
-            else:
-                logger.error("=" * 60)
-                logger.error(f"❌ 브리지 서버 시작 실패 (최종): {e}")
-                logger.error("   해결 방법:")
-                logger.error("   1. 포트 5050을 사용 중인 프로세스 확인: sudo lsof -i :5050")
-                logger.error("   2. 프로세스 종료: sudo kill -9 <PID>")
-                logger.error("   3. 또는 모든 main_py310.py 프로세스 종료: pkill -f main_py310.py")
-                logger.error("=" * 60)
-                # 마지막 시도 실패해도 프로그램 계속 실행 (메인 로직 방해 최소화)
-                logger.warning("⚠️ 브리지 서버 없이 계속 진행합니다. 일부 기능이 제한될 수 있습니다.")
-                break
+                    
+        except Exception as e:
+            logger.warning(f"⚠️ 브리지 서버 시작 실패, 재시도 중... (시도 {bridge_attempt}): {e}")
+            time.sleep(bridge_retry_delay)
+            continue
     
     # WebRTC 프로세스 확인 (마이크 점유 확인)
     webrtc_pids = []
@@ -192,22 +164,21 @@ def run_stt_loop():
     buffered_stt_running = {"running": False}
     
     async def broadcast(msg):
-        """STT 결과를 브리지 서버(Socket.IO)로 전송 (재시도 포함)"""
-        max_retries = 2  # 최대 2회 재시도 (메인 로직 방해 최소화)
-        retry_delay = 0.5  # 0.5초 간격 (빠른 재시도)
+        """STT 결과를 브리지 서버(Socket.IO)로 전송 (재연결될 때까지 무한 재시도)"""
+        retry_delay = 0.5  # 초기 재시도 간격 (0.5초)
+        max_retry_delay = 10  # 최대 재시도 간격 (10초)
+        attempt = 0
         
-        for attempt in range(max_retries):
+        while True:  # 재연결될 때까지 무한 재시도
+            attempt += 1
             success = send_stt_result(msg)
             if success:
                 return  # 전송 성공
             
-            # 마지막 시도가 아니면 재시도
-            if attempt < max_retries - 1:
-                logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... ({attempt + 1}/{max_retries})")
-                await asyncio.sleep(retry_delay)
-        
-        # 모든 재시도 실패 시 예외 발생하여 wakeword 대기 상태로 복귀
-        raise ConnectionError("브리지 클라이언트 연결 실패 - STT 결과 전송 불가")
+            # 지수 백오프로 재시도 간격 증가 (최대 10초)
+            wait_time = min(retry_delay * (2 ** min(attempt - 1, 4)), max_retry_delay)
+            logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
+            await asyncio.sleep(wait_time)
     
     async def stt_session():
         """STT 세션 실행 (모드에 따라 버퍼링/스트리밍 선택)"""
@@ -541,35 +512,33 @@ def run_stt_loop():
                     continue
                 
                 # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
-                # FastAPI 연결 상태 확인 및 전송 시도
-                wakeword_sent_successfully = False
-                max_retry_attempts = 3
-                retry_delay = 2  # 재시도 간격 (초)
+                # FastAPI 연결 상태 확인 및 전송 시도 (재연결될 때까지 무한 재시도)
+                retry_delay = 2  # 초기 재시도 간격 (2초)
+                max_retry_delay = 10  # 최대 재시도 간격 (10초)
+                attempt = 0
                 
                 try:
-                    for attempt in range(max_retry_attempts):
+                    while True:  # 재연결될 때까지 무한 재시도
+                        attempt += 1
                         try:
                             result = send_wakeword_detected()
                             
                             if result:
-                                wakeword_sent_successfully = True
-                                break
+                                break  # 전송 성공 시 루프 종료
                             else:
                                 # 브리지 클라이언트가 연결되지 않음
-                                if attempt < max_retry_attempts - 1:
-                                    time.sleep(retry_delay)
+                                # 지수 백오프로 재시도 간격 증가 (최대 10초)
+                                wait_time = min(retry_delay * (2 ** min(attempt - 1, 3)), max_retry_delay)
+                                logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
+                                time.sleep(wait_time)
                         except Exception as e:
-                            if attempt < max_retry_attempts - 1:
-                                time.sleep(retry_delay)
+                            # 지수 백오프로 재시도 간격 증가 (최대 10초)
+                            wait_time = min(retry_delay * (2 ** min(attempt - 1, 3)), max_retry_delay)
+                            logger.warning(f"⚠️ Wakeword 이벤트 전송 오류, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후): {e}")
+                            time.sleep(wait_time)
                 except Exception as e:
-                    # Wakeword 이벤트 전송 오류 시 예외 처리이므로 allow_new_service=False
-                    reset_to_wakeword_waiting(f"Wakeword 이벤트 전송 오류: {e}", allow_new_service=False)
-                    continue
-                
-                # FastAPI 연결 실패 시 wakeword 대기 상태로 복귀 (소켓 연결 오류)
-                # 예외 처리이므로 allow_new_service=False로 호출하여 서비스 겹침 방지
-                if not wakeword_sent_successfully:
-                    reset_to_wakeword_waiting("Wakeword 이벤트 전송 실패", allow_new_service=False)
+                    # 예상치 못한 예외 발생 시에만 wakeword 대기 상태로 복귀
+                    reset_to_wakeword_waiting(f"Wakeword 이벤트 전송 예외: {e}", allow_new_service=False)
                     continue
                 
                 # 모바일에서 음성 파일 재생 완료 대기
