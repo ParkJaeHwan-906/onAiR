@@ -135,6 +135,7 @@ class WorkingActivity : AppCompatActivity() {
         // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
         showAiAnswer()
+        showCvAnswer()
     }
 
     override fun onStart() {
@@ -1144,12 +1145,18 @@ class WorkingActivity : AppCompatActivity() {
     private fun showCvAnswer() {
         lifecycleScope.launch {
             workingViewModel.cvAnswer.collect { value ->
-                runSection(
-                    binding.cvResultError,
-                    binding.cvResultErrorText,
-                    value.message,
-                    value.audio_content
-                )
+                binding.cvResultError.visibility = View.VISIBLE
+                withContext(Dispatchers.Main) {
+                    binding.cvResultError.slideIn()
+                }
+                withContext(Dispatchers.Main) {
+                    showTypingEffect(binding.cvResultErrorText, value.message)
+                }
+                playAudio(value.audio_content)
+                delay(2000)
+                withContext(Dispatchers.Main) {
+                    binding.cvResultError.fadeOut()
+                }
             }
         }
     }
