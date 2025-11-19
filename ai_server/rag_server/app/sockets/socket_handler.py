@@ -664,6 +664,7 @@ async def handle_intent_audio_completed(sid, data):
                 print(f"✅ CV 모델 오류 탐지 성공: {cv_result.get('message', '')}")
                 print("=" * 60)
                 await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+                
 
                 # ---------------------------
                 # 1단계: 간단한 탐지 알림 메시지 생성 및 전송
