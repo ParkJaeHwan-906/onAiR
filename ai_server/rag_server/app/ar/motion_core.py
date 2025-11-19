@@ -275,6 +275,47 @@ def process_frame(frame_bgr, sid=None):
             "flow_mean": (0.0, 0.0),
             "pose_ok": False,
         }
+    
+    
+    
+    # ==========================================================
+    # --- Optical Flow 호출 전 prev_pts 유효성 검사 ---
+    # ==========================================================
+    if prev_pts is None or len(prev_pts) == 0:
+        # print("[DEBUG] prev_pts 없음 → 신규 특징점 추출")
+        pts, method = extract_features(gray)
+
+        if pts is None or len(pts) == 0:
+            # 재추출도 실패 → no_tracks
+            prev_gray = gray.copy()
+            prev_pts = None
+            last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+            return {
+                "status": "no_tracks",
+                "tracked": 0,
+                "inliers": 0,
+                "ransac_ratio": 0.0,
+                "size": float(size_acc),
+                "flow_mean": (0.0, 0.0),
+                "pose_ok": False,
+            }
+
+        # 재추출 성공 → 새 prev_pts 로 초기화
+        prev_gray = gray.copy()
+        prev_pts = pts
+        last_flow_mean = np.array([0.0, 0.0], dtype=np.float32)
+
+        return {
+            "status": "init",
+            "tracked": int(len(pts)),
+            "inliers": int(len(pts)),
+            "ransac_ratio": 100.0,
+            "size": float(size_acc),
+            "flow_mean": (0.0, 0.0),
+            "pose_ok": False,
+        }
+
+
 
     # --- 3) Optical Flow 추적 ---
     # print("[DEBUG] [STEP2] Optical Flow 추적 시작")
