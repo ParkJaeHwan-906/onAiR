@@ -9,12 +9,12 @@ import androidx.fragment.app.DialogFragment
 import androidx.core.graphics.drawable.toDrawable
 import com.bumptech.glide.Glide
 import com.onair.mobile.R
-import com.onair.mobile.databinding.DialogAiOnBinding
+import com.onair.mobile.databinding.DialogOnairOnBinding
 
-class AiOnDialog(val statusMessage: String) : DialogFragment(
+class OnAirOnDialog() : DialogFragment(
 ) {
 
-    private lateinit var binding: DialogAiOnBinding
+    private lateinit var binding: DialogOnairOnBinding
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -24,7 +24,7 @@ class AiOnDialog(val statusMessage: String) : DialogFragment(
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         isCancelable = false
 
-        binding = DialogAiOnBinding.inflate(inflater, container, false)
+        binding = DialogOnairOnBinding.inflate(inflater, container, false)
         return binding.root
     }
 
@@ -33,15 +33,7 @@ class AiOnDialog(val statusMessage: String) : DialogFragment(
         val gif = binding.aiOnGif
         Glide.with(this)
             .asGif()
-            .load(R.drawable.logo_gif)
+            .load(R.drawable.start_logo)
             .into(gif)
-
-        binding.aiStatusText.text = statusMessage
-    }
-    
-    fun updateMessage(newMessage: String) {
-        if (::binding.isInitialized) {
-            binding.aiStatusText.text = newMessage
-        }
     }
 }
