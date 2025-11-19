@@ -61,7 +61,7 @@ async def device_detector_loop():
                         if angle_val is not None:
                             angle, value = angle_val
                             temp_value = round(float(value), 1)
-                            if temp_value < 20 or temp_value > 70:
+                            if temp_value < 20 or temp_value > 40:
                                 is_anomaly = True
 
                             # 라벨에 온도 표시 붙이기
