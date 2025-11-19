@@ -602,12 +602,12 @@ class WorkingActivity : AppCompatActivity() {
                     ttsRepository.playAudio(cvAnomaly.audio_content, cvAnomaly.audio_encoding) {
                         // 재생 완료 콜백
                         Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
-                        
+
                         // 모달 표시 ("답변 생성 중...")
                         runOnUiThread {
                             showModal("답변 생성 중...")
                         }
-                        
+
                         // FastAPI 서버로 재생 완료 이벤트 전송
                         val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
                         if (success) {
@@ -864,7 +864,7 @@ class WorkingActivity : AppCompatActivity() {
                 ) {
                     // possible_causes 완료 후 2초 대기
                     kotlinx.coroutines.delay(2000)
-                    
+
                     processSection(
                         sectionName = "조치",
                         markdownText = recommendedActionsMarkdown,
@@ -874,7 +874,7 @@ class WorkingActivity : AppCompatActivity() {
                     ) {
                         // recommended_actions 완료 후 2초 대기
                         kotlinx.coroutines.delay(2000)
-                        
+
                         processSection(
                             sectionName = "주의사항",
                             markdownText = safetyWarningsMarkdown,
@@ -889,7 +889,7 @@ class WorkingActivity : AppCompatActivity() {
                             Log.i(TAG, "   Type: final_answer")
                             Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
                             Log.i(TAG, "============================================================")
-                            
+
                             val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
                             if (success) {
                                 Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")

@@ -26,6 +26,7 @@ import io.livekit.android.room.track.RemoteAudioTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import io.livekit.android.room.track.Track
@@ -55,6 +56,8 @@ class CallViewModel(
     val dataReceived = _dataReceived
     val arMarkers = SocketHolder.socketClient.arMarkers
     val finishEvent = SocketHolder.socketClient.callEnd
+    private val _frameState = MutableStateFlow<ByteArray?>(null)
+    val frameState = _frameState.asStateFlow()
 
     // blueprint-canvas 영상 트랙
     private val _blueprintTrack = MutableStateFlow<RemoteVideoTrack?>(null)
@@ -92,7 +95,7 @@ class CallViewModel(
                 Log.i("CallViewModel", "🎯 ViewModel에서 AR 마커 수신: ${markers.size}")
             }
         }
-
+        collectFrames()
     }
     private fun connectToRoom() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -114,6 +117,14 @@ class CallViewModel(
                 }
             } catch (e: Throwable) {
                 Log.e("connectToRoom", "연결 중 오류 발생"+e.message.toString())
+            }
+        }
+    }
+    private fun collectFrames() {
+        viewModelScope.launch {
+            SocketHolder.socketClient.videoFrames.collect { frame ->
+                _frameState.value = frame
+                Log.d("Call view model", frame.toString())
             }
         }
     }
