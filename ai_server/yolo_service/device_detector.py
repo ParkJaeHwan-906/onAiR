@@ -7,6 +7,7 @@ from ai_server.yolo_service.redis_client import (
     save_device_state, get_device_state, get_latest_frame, save_yolo_result
 )
 from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, DEVICE_CLASSES
+from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG
 
 DETECTION_INTERVAL = 2.0
 CONF_THRESHOLD = 0.75
@@ -42,17 +43,35 @@ async def device_detector_loop():
             # YOLO 박스 표준 스키마로 변환
             all_boxes = []
             for d in detections:
-                # return_boxes=True일 때 x1, y1, x2, y2가 직접 포함됨
                 if "x1" in d and "y1" in d and "x2" in d and "y2" in d:
-                    all_boxes.append({
-                        "label": d["label"],
-                        "confidence": float(d["confidence"]),
-                        "x1": int(d["x1"]),
-                        "y1": int(d["y1"]),
-                        "x2": int(d["x2"]),
-                        "y2": int(d["y2"]),
-                    })
 
+                    x1, y1, x2, y2 = map(int, [d["x1"], d["y1"], d["x2"], d["y2"]])
+                    label = d["label"]
+                    conf = float(d["confidence"])
+
+                    display_label = label
+                    temp_value = None
+
+                    # thermometer → 게이지 각도/값 계산
+                    if label == "thermometer":
+                        roi = frame[y1:y2, x1:x2]
+
+                        angle_val = detect_gauge_angle_fast(roi, THERMO_CONFIG)
+                        if angle_val is not None:
+                            angle, value = angle_val
+                            temp_value = round(float(value), 1)
+                            # 라벨에 온도 표시 붙이기
+                            display_label = f"thermometer({temp_value})"
+
+                    all_boxes.append({
+                        "label": display_label,
+                        "confidence": conf,
+                        "x1": x1,
+                        "y1": y1,
+                        "x2": x2,
+                        "y2": y2,
+                        "temperature": temp_value     # 필요하면 나중에 서버에서 활용
+                    })
             await save_yolo_result(ts, all_boxes)
 
             # 디바이스 후보
