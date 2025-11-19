@@ -539,6 +539,15 @@ async def handle_intent_audio_completed(sid, data):
                 print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
                 print("=" * 60)
                 
+                # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
+                global _pending_cv_detection
+                _pending_cv_detection = {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "cv_result": cv_result
+                }
+                
                 # 모바일로 cv_detection_failed 이벤트 전송 (Operator와 동일하게 즉시 처리)
                 print("=" * 60)
                 print("📤 [단계 10] 모바일로 cv_detection_failed 이벤트 전송 시작")
@@ -556,6 +565,15 @@ async def handle_intent_audio_completed(sid, data):
                 print("=" * 60)
                 print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
                 print("=" * 60)
+                
+                # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
+                global _pending_cv_detection
+                _pending_cv_detection = {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "cv_result": cv_result
+                }
                 
                 # 모바일로 cv_detection_normal 이벤트 전송 (Operator와 동일하게 즉시 처리)
                 print("=" * 60)
@@ -683,103 +701,149 @@ async def handle_audio_playback_completed(sid, data):
     print(f"   Type: {audio_type}, Session ID: {session_id}, Turn ID: {turn_id}")
     print("=" * 60)
     
-    # CV 탐지 실패/정상은 OPERATOR와 동일하게 즉시 처리 (wait_for_next_step 제거)
-    if audio_type == "cv_detection_failed":
-        # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태 (normal과 동일)
-        print("=" * 60)
-        print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
-        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
-        print("=" * 60)
+    # CV 탐지 관련 오디오 재생 완료 처리
+    # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
+    global _pending_cv_detection
+    
+    # CV 탐지 결과가 있는 경우 (cv_detection_failed, cv_detection_normal, cv_detection_anomaly)
+    if _pending_cv_detection:
+        cv_result = _pending_cv_detection.get("cv_result", {})
+        detected = cv_result.get("detected", False)
+        is_normal = (detected == "Normal")
+        is_anomaly = (detected is True or (isinstance(detected, bool) and detected))
         
-        print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
-        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
-        print("=" * 60)
-        
-        # 주의: CV 탐지 실패 시 Streaming STT 로직은 제거되었습니다.
-        # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
-        # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
-        
-    elif audio_type == "cv_detection_normal":
-        # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
-        print("=" * 60)
-        print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
-        print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
-        print("=" * 60)
-        
-        print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
-        print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
-        print("=" * 60)
-        
-    # Clarify 로직 비활성화 - clarify_qa_turn 처리 주석처리
-    # elif audio_type == "clarify_qa_turn":
-    #     # Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
-    #     # (이미 라즈베리파이에서 Streaming STT가 실행 중이므로 별도 처리 불필요)
-    #     print("=" * 60)
-    #     print(f"✅ [FastAPI] Clarify Q&A 턴 TTS 재생 완료 이벤트 수신")
-    #     print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-    #     print("=" * 60)
-    #     print("=" * 60)
-    #     print(f"🔄 [FastAPI] 다음 Streaming STT 질문 대기 중")
-    #     print(f"   💡 라즈베리파이 Streaming STT는 계속 실행 중")
-    #     print(f"   💡 사용자가 다음 질문을 말하면 자동으로 처리됩니다")
-    #     print("=" * 60)
-    #     await wait_for_next_step("Clarify Q&A 턴 TTS 재생 완료 처리", "12-3")
-    elif audio_type == "cv_detection_anomaly":
-        # CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
-        print("=" * 60)
-        print(f"✅ [FastAPI] CV 탐지 알림 TTS 재생 완료 이벤트 수신")
-        print("=" * 60)
-        
-        global _pending_cv_detection
-        if not _pending_cv_detection:
-            print("⚠️ CV 탐지 결과가 저장되지 않았습니다.")
-            return
-        
-        device_type = _pending_cv_detection["device_type"]
-        modules = _pending_cv_detection["modules"]
-        anomalies = _pending_cv_detection["anomalies"]
-        cv_result = _pending_cv_detection["cv_result"]
-        
-        # ---------------------------
-        # 2단계: 전체 정비 가이드 생성
-        # ---------------------------
-        print("=" * 60)
-        print(f"📚 [단계 12] 전체 정비 가이드 생성 시작")
-        print("=" * 60)
-        
-        # RAG용 질의 문장 생성
-        query_parts = []
-        if device_type and device_type != "unknown":
-            query_parts.append(f"{device_type}에서")
-        
-        # 모듈별 이상 탐지 (detail 필드 포함)
-        detected_modules = []
-        for module_name, module_res in anomalies.items():
-            if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
-                detail = module_res.get("detail")
-                if detail:
-                    detected_modules.append(f"{module_name}.{detail}")
-                else:
-                    detected_modules.append(module_name)
-        
-        if detected_modules:
-            query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
-        else:
-            query_parts.append("이상이 탐지되었습니다")
-        
-        query = " ".join(query_parts)
-        print(f"   Query: {query}")
-        
-        # RAG 검색
-        try:
-            from app.core.config import settings
-            base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
-            hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
-            used_hits = hits[:5]
+        if not detected:
+            # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+            print("=" * 60)
+            print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
+            print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+            print("=" * 60)
             
-            if not used_hits:
-                print("⚠️ RAG 검색 결과가 없습니다.")
-                answer_text = f"{query}에 대한 관련 문서를 찾을 수 없습니다."
+            print("✅ CV 탐지 실패 음성 파일 재생 완료 처리 완료")
+            print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+            print("=" * 60)
+            
+            # 전역 변수 초기화
+            _pending_cv_detection = None
+            
+            # 주의: CV 탐지 실패 시 Streaming STT 로직은 제거되었습니다.
+            # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
+            # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
+            
+        elif is_normal:
+            # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
+            print("=" * 60)
+            print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
+            print("   WebRTC 오디오 스트리밍 대기 중 (accept_communication 이벤트 대기)")
+            print("=" * 60)
+            
+            print("✅ CV 탐지 정상 음성 파일 재생 완료 처리 완료")
+            print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
+            print("=" * 60)
+            
+            # 전역 변수 초기화
+            _pending_cv_detection = None
+        
+        elif is_anomaly:
+            # CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
+            print("=" * 60)
+            print(f"✅ [FastAPI] CV 탐지 알림 TTS 재생 완료 이벤트 수신")
+            print("=" * 60)
+            
+            device_type = _pending_cv_detection["device_type"]
+            modules = _pending_cv_detection["modules"]
+            anomalies = _pending_cv_detection["anomalies"]
+            cv_result = _pending_cv_detection["cv_result"]
+            
+            # ---------------------------
+            # 2단계: 전체 정비 가이드 생성
+            # ---------------------------
+            print("=" * 60)
+            print(f"📚 [단계 12] 전체 정비 가이드 생성 시작")
+            print("=" * 60)
+            
+            # RAG용 질의 문장 생성
+            query_parts = []
+            if device_type and device_type != "unknown":
+                query_parts.append(f"{device_type}에서")
+            
+            # 모듈별 이상 탐지 (detail 필드 포함)
+            detected_modules = []
+            for module_name, module_res in anomalies.items():
+                if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+                    detail = module_res.get("detail")
+                    if detail:
+                        detected_modules.append(f"{module_name}.{detail}")
+                    else:
+                        detected_modules.append(module_name)
+            
+            if detected_modules:
+                query_parts.append(f"{', '.join(detected_modules)}에서 이상이 탐지되었습니다")
+            else:
+                query_parts.append("이상이 탐지되었습니다")
+            
+            query = " ".join(query_parts)
+            print(f"   Query: {query}")
+            
+            # RAG 검색
+            try:
+                from app.core.config import settings
+                base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
+                hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
+                used_hits = hits[:5]
+                
+                if not used_hits:
+                    print("⚠️ RAG 검색 결과가 없습니다.")
+                    answer_text = f"{query}에 대한 관련 문서를 찾을 수 없습니다."
+                    structured_answer = {
+                        "error_code": query,
+                        "markdown_text": "",
+                        "possible_causes": [],
+                        "recommended_actions": [],
+                        "safety_warnings": [],
+                        "possible_causes_markdown": "",
+                        "recommended_actions_markdown": "",
+                        "safety_warnings_markdown": "",
+                        "possible_causes_audio": None,
+                        "possible_causes_audio_encoding": None,
+                        "recommended_actions_audio": None,
+                        "recommended_actions_audio_encoding": None,
+                        "safety_warnings_audio": None,
+                        "safety_warnings_audio_encoding": None,
+                        "tts_text": answer_text,
+                        "query": query,
+                        "citations": []
+                    }
+                else:
+                    print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+                    
+                    # GPT-4o로 최종 답변 생성
+                    print("=" * 60)
+                    print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
+                    print("=" * 60)
+                    
+                    snippets = [h["source"]["content"] for h in used_hits]
+                    
+                    # error_code 추출
+                    error_code = None
+                    for module_name, module_res in anomalies.items():
+                        if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
+                            detail = module_res.get("detail")
+                            if detail:
+                                error_code = f"{module_name}.{detail}"
+                            else:
+                                error_code = module_name
+                            break
+                    
+                    answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
+                    answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
+                    structured_answer = answer_result
+                    print(f"✅ 전체 정비 가이드 생성 완료")
+            except Exception as e:
+                print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
+                import traceback
+                traceback.print_exc()
+                answer_text = f"{query}에 대한 답변을 생성하는 중 오류가 발생했습니다."
                 structured_answer = {
                     "error_code": query,
                     "markdown_text": "",
@@ -799,88 +863,39 @@ async def handle_audio_playback_completed(sid, data):
                     "query": query,
                     "citations": []
                 }
-            else:
-                print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
-                
-                # GPT-4o로 최종 답변 생성
-                print("=" * 60)
-                print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
-                print("=" * 60)
-                
-                snippets = [h["source"]["content"] for h in used_hits]
-                
-                # error_code 추출
-                error_code = None
-                for module_name, module_res in anomalies.items():
-                    if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
-                        detail = module_res.get("detail")
-                        if detail:
-                            error_code = f"{module_name}.{detail}"
-                        else:
-                            error_code = module_name
-                        break
-                
-                answer_result = llm_generate_answer(query, snippets, error_code=error_code, hits=used_hits)
-                answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
-                structured_answer = answer_result
-                print(f"✅ 전체 정비 가이드 생성 완료")
-        except Exception as e:
-            print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
-            import traceback
-            traceback.print_exc()
-            answer_text = f"{query}에 대한 답변을 생성하는 중 오류가 발생했습니다."
-            structured_answer = {
-                "error_code": query,
-                "markdown_text": "",
-                "possible_causes": [],
-                "recommended_actions": [],
-                "safety_warnings": [],
-                "possible_causes_markdown": "",
-                "recommended_actions_markdown": "",
-                "safety_warnings_markdown": "",
-                "possible_causes_audio": None,
-                "possible_causes_audio_encoding": None,
-                "recommended_actions_audio": None,
-                "recommended_actions_audio_encoding": None,
-                "safety_warnings_audio": None,
-                "safety_warnings_audio_encoding": None,
-                "tts_text": answer_text,
-                "query": query,
-                "citations": []
-            }
-        
-        # 모바일로 전체 정비 가이드 전송 (각 섹션별 TTS 포함)
-        print("=" * 60)
-        print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
-        print("=" * 60)
-        await broadcast_to("mobile", "final_answer", {
-            "session_id": None,
-            "turn_id": 1,
-            "status": "completed",
-            "answer": answer_text,
-            "structured_answer": structured_answer,
-            "audio_content": None,  # 전체 TTS는 제거 (각 섹션별로 분리)
-            "audio_encoding": None,
-            "citations": structured_answer.get("citations", []),
-            "cv_detection_result": {
-                "device_type": device_type,
-                "modules": modules,
-                "anomalies": anomalies,
-                "message": cv_result.get('message', '')
-            }
-        })
-        print("✅ 모바일로 전체 정비 가이드 전송 완료")
-        print("=" * 60)
-        
-        # 전역 변수 초기화
-        _pending_cv_detection = None
-        
-        # 라즈베리파이로 CV 탐지 성공 알림
-        await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
-        
-        # 주의: 서비스 종료 오디오는 final_answer의 모든 섹션 재생 완료 후 재생됩니다.
-        # 모바일에서 final_answer의 마지막 섹션 재생 완료 후 자동으로 서비스 종료 오디오를 재생하고
-        # audio_playback_completed (type="service_completed") 이벤트를 전송합니다.
+            
+            # 모바일로 전체 정비 가이드 전송 (각 섹션별 TTS 포함)
+            print("=" * 60)
+            print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
+            print("=" * 60)
+            await broadcast_to("mobile", "final_answer", {
+                "session_id": None,
+                "turn_id": 1,
+                "status": "completed",
+                "answer": answer_text,
+                "structured_answer": structured_answer,
+                "audio_content": None,  # 전체 TTS는 제거 (각 섹션별로 분리)
+                "audio_encoding": None,
+                "citations": structured_answer.get("citations", []),
+                "cv_detection_result": {
+                    "device_type": device_type,
+                    "modules": modules,
+                    "anomalies": anomalies,
+                    "message": cv_result.get('message', '')
+                }
+            })
+            print("✅ 모바일로 전체 정비 가이드 전송 완료")
+            print("=" * 60)
+            
+            # 전역 변수 초기화
+            _pending_cv_detection = None
+            
+            # 라즈베리파이로 CV 탐지 성공 알림
+            await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
+            
+            # 주의: 서비스 종료 오디오는 final_answer의 모든 섹션 재생 완료 후 재생됩니다.
+            # 모바일에서 final_answer의 마지막 섹션 재생 완료 후 자동으로 서비스 종료 오디오를 재생하고
+            # audio_playback_completed (type="service_completed") 이벤트를 전송합니다.
         
     elif audio_type == "final_answer":
         # AI_Supporter 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
