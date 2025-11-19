@@ -87,7 +87,7 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
-    private lateinit var description : String
+    private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
 
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
@@ -298,16 +298,27 @@ class WorkingActivity : AppCompatActivity() {
     private fun goCall() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
-                Log.d("RTC", token)
+                Log.d("RTC", "LiveKit 토큰 수신: ${if (token.isNotBlank()) "있음 (길이: ${token.length})" else "없음"}")
                 if (token.isNotBlank()) {
-                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java). apply {
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "🚀 CallActivity로 이동 시작")
+                    Log.i(TAG, "   토큰: ${token.take(20)}...")
+                    Log.i(TAG, "   설명: $description")
+                    Log.i(TAG, "============================================================")
+                    
+                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
 //                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
                         putExtra("description", description)
                     }
+                    
+                    // FastAPI 서버로 accept_communication 이벤트 전송
                     socketIoSttClient.sendAcceptCommunication()
+                    Log.i(TAG, "📤 FastAPI 서버로 accept_communication 이벤트 전송 완료")
+                    
                     startActivity(intent)
+                    Log.i(TAG, "✅ CallActivity로 이동 완료")
 
                     binding.callRequestCard.visibility = View.GONE
                 }
@@ -1096,7 +1107,7 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
     }
-
+ 
     private fun showModal(statusMessage: String) {
         if (aiOnDialog?.isVisible == true) return
         aiOnDialog = AiOnDialog(statusMessage)
