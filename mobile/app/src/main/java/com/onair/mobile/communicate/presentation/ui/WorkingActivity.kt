@@ -87,12 +87,13 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
-    private lateinit var description : String
+    private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
 
     private var isWaitingForClarification = false
     private var currentSessionId: String? = null
     private var currentTurnId: Int = 1
     private var aiOnDialog: AiOnDialog? = null
+    private var onAirOnDialog:  OnAirOnDialog? = null
     private var isActivityResumed = false  // Activity가 resume 상태인지 추적
     private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
@@ -100,9 +101,9 @@ class WorkingActivity : AppCompatActivity() {
 
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
-        private const val AI_SUPPORTER_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
+        private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
-        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
+        private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
         private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
     }
@@ -135,6 +136,7 @@ class WorkingActivity : AppCompatActivity() {
         // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
         showAiAnswer()
+        showCvAnswer()
     }
 
     override fun onStart() {
@@ -234,9 +236,10 @@ class WorkingActivity : AppCompatActivity() {
                 socketIoSttClient.videoFrames.collect { value ->
                     value.let {
                         val bitmap = it.toBitmap()
+                        val cropped = bitmap?.toBottomCropped()
                         Log.d("Demonstrate Activity", bitmap.toString())
                         Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
-                        binding.videoView.setImageBitmap(bitmap)
+                        binding.videoView.setImageBitmap(cropped)
                     }
                 }
             }
@@ -245,6 +248,23 @@ class WorkingActivity : AppCompatActivity() {
 
     private fun ByteArray.toBitmap(): Bitmap? {
         return BitmapFactory.decodeByteArray(this, 0, this.size)
+    }
+    private fun Bitmap.toBottomCropped(targetRatio: Float = 4f/3f) : Bitmap {
+        val srcWidth = this.width
+        val srcHeight = this.height
+
+        val targetHeight = (srcWidth / targetRatio).toInt()
+
+        if (targetHeight >= srcHeight) return this
+
+        val top = (srcHeight - targetHeight) / 2
+//        val top = srcHeight - targetHeight
+
+        return Bitmap.createBitmap(
+            this,
+            0, top, srcWidth,
+            targetHeight
+        )
     }
 
     private fun observeViewModel() {
@@ -265,10 +285,10 @@ class WorkingActivity : AppCompatActivity() {
                         setResult(RESULT_OK)
                         finish()
                     } else {
-                        Toast.makeText(
-                            this@WorkingActivity,
-                            "작업 완료 처리 실패",
-                            Toast.LENGTH_SHORT).show()
+//                        Toast.makeText(
+//                            this@WorkingActivity,
+//                            "작업 완료 처리 실패",
+//                            Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -296,16 +316,27 @@ class WorkingActivity : AppCompatActivity() {
     private fun goCall() {
         lifecycleScope.launch {
             workingViewModel.liveKitToken.collect { token ->
-                Log.d("RTC", token)
+                Log.d("RTC", "LiveKit 토큰 수신: ${if (token.isNotBlank()) "있음 (길이: ${token.length})" else "없음"}")
                 if (token.isNotBlank()) {
-                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java). apply {
+                    Log.i(TAG, "============================================================")
+                    Log.i(TAG, "🚀 CallActivity로 이동 시작")
+                    Log.i(TAG, "   토큰: ${token.take(20)}...")
+                    Log.i(TAG, "   설명: $description")
+                    Log.i(TAG, "============================================================")
+                    
+                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
 //                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
                         putExtra("description", description)
                     }
+                    
+                    // FastAPI 서버로 accept_communication 이벤트 전송
                     socketIoSttClient.sendAcceptCommunication()
+                    Log.i(TAG, "📤 FastAPI 서버로 accept_communication 이벤트 전송 완료")
+                    
                     startActivity(intent)
+                    Log.i(TAG, "✅ CallActivity로 이동 완료")
 
                     binding.callRequestCard.visibility = View.GONE
                 }
@@ -434,39 +465,34 @@ class WorkingActivity : AppCompatActivity() {
                     IntentType.AI_SUPPORTER -> {
                         Log.i(TAG, "✅ AI_SUPPORTER 분기 처리 시작")
 
-                        // UI 업데이트: "AI Supporter on" (1초간)
-                        runOnUiThread {
-//                            binding.taskName.text = "AI Supporter on"
-                        }
-
-                        // 1초 후 "오류 탐지 중..." 표시
-                        lifecycleScope.launch {
-                            kotlinx.coroutines.delay(1000)
-                            runOnUiThread {
-//                                binding.taskName.text = "오류 탐지 중..."
-                            }
-                        }
-
-                        // 음성 파일 재생
-                        Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
-                        // 모달 표시
+                        // 모달 표시: "AI 서포터 on"
                         runOnUiThread {
                             showModal("AI 서포터 on")
                         }
+
+                        // AI Supporter 시작 오디오 재생
+                        Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
-                            // 모달 숨기기
+                            
+                            // 모달 텍스트를 "AI 서포터가 오류 탐지 중..."으로 변경
                             runOnUiThread {
-                                hideModal()
+                                aiOnDialog?.updateMessage("AI 서포터가 오류 탐지 중...")
                             }
-
-                            // FastAPI 서버로 재생 완료 이벤트 전송
-                            val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
-                            if (success) {
-                                Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
-                            } else {
-                                Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                            
+                            // 2초 대기 후 FastAPI 서버로 재생 완료 이벤트 전송
+                            lifecycleScope.launch {
+                                kotlinx.coroutines.delay(2000)
+                                
+                                val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
+                                if (success) {
+                                    Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
+                                } else {
+                                    Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                                }
+                                
+                                // 모달은 CV 탐지 결과가 오면 자동으로 처리됨 (hideModal은 CV 탐지 결과에서 처리)
                             }
                         }
                     }
@@ -552,19 +578,16 @@ class WorkingActivity : AppCompatActivity() {
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 실패 메시지 표시")
 
+                // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
+                runOnUiThread {
+                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                
                 // CV 탐지 실패 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
-                // 모달 표시
-                runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
-                    // 모달 숨기기
-                    runOnUiThread {
-                        hideModal()
-                    }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendCvDetectionFailedAudioCompleted()
@@ -608,56 +631,15 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handleCvDetectionAnomaly(cvAnomaly: CvDetectionAnomalyDto) {
+        // showCvAnswer() 함수가 cvAnswer Flow를 collect하고 있어서
+        // SocketIoSttClient에서 _cvAnswer.tryEmit(cvAnomaly)를 호출하면
+        // 자동으로 showCvAnswer()의 collect가 트리거됩니다.
+        // 따라서 이 함수에서는 추가 처리 없이 로그만 남깁니다.
         Log.i(TAG, "============================================================")
-        Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (1단계: 간단한 알림)")
+        Log.i(TAG, "✅ [모바일] CV 탐지 이상 이벤트 수신 (showCvAnswer 함수로 처리)")
         Log.i(TAG, "   메시지: ${cvAnomaly.message}")
+        Log.i(TAG, "   💡 SocketIoSttClient에서 cvAnswer Flow에 emit → showCvAnswer() 자동 실행")
         Log.i(TAG, "============================================================")
-
-        lifecycleScope.launch {
-            try {
-                // UI 업데이트
-                runOnUiThread {
-//                    binding.taskName.text = cvAnomaly.message
-                }
-
-                // TTS 재생
-                if (cvAnomaly.audio_content != null && cvAnomaly.audio_content.isNotBlank()) {
-                    Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
-                    ttsRepository.playAudio(cvAnomaly.audio_content, cvAnomaly.audio_encoding) {
-                        // 재생 완료 콜백
-                        Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
-
-                        // 모달 표시 ("답변 생성 중...")
-                        runOnUiThread {
-                            showModal("답변 생성 중...")
-                        }
-
-                        // FastAPI 서버로 재생 완료 이벤트 전송
-                        val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
-                        if (success) {
-                            Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료")
-                            Log.i(TAG, "   💡 모달 표시 중: '답변 생성 중...'")
-                            Log.i(TAG, "   💡 final_answer 수신 시 모달 자동 숨김")
-                        } else {
-                            Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패")
-                            // 전송 실패해도 모달은 유지 (final_answer 수신 시 숨김)
-                        }
-                    }
-                } else {
-                    // 오디오가 없어도 모달 표시 및 이벤트 전송
-                    runOnUiThread {
-                        showModal("답변 생성 중...")
-                    }
-                    val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
-                    if (success) {
-                        Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료 (오디오 없음)")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ CV 탐지 이상 처리 오류: ${e.message}")
-                e.printStackTrace()
-            }
-        }
     }
 
     private fun handleCvDetectionNormal(cvNormal: CvDetectionNormalDto) {
@@ -671,19 +653,16 @@ class WorkingActivity : AppCompatActivity() {
                 }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
+                // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
+                runOnUiThread {
+                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                }
+                
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
-                // 모달 표시
-                runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                }
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
-                    // 모달 숨기기
-                    runOnUiThread {
-                        hideModal()
-                    }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
                     val success = socketIoSttClient.sendCvDetectionNormalAudioCompleted()
@@ -1078,12 +1057,19 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 Log.i(TAG, "🔊 로컬 음성 파일 재생 시작: $WAKEWORD_AUDIO_FILE")
 
+                runOnUiThread {
+                    showOnModal()
+                }
+
                 mediaPlayerController.playLocalAudio(WAKEWORD_AUDIO_FILE) {
                     Log.i(TAG, "✅ 로컬 음성 파일 재생 완료")
 
                     val success = socketIoSttClient.sendWakewordAudioCompleted()
                     if (success) {
                         Log.i(TAG, "📤 모바일 음성 파일 재생 완료 이벤트 전송 완료")
+                        runOnUiThread {
+                            hideOnModal()
+                        }
                     } else {
                         Log.e(TAG, "❌ 모바일 음성 파일 재생 완료 이벤트 전송 실패")
                     }
@@ -1108,6 +1094,11 @@ class WorkingActivity : AppCompatActivity() {
                 val fileToPlay = if (audioFile.isNotBlank()) audioFile else SERVICE_END_AUDIO_FILE
                 Log.i(TAG, "🔊 서비스 종료 오디오 재생 시작: $fileToPlay")
 
+                // 서비스 종료 오디오 재생 시 OnAir 모달 표시
+                runOnUiThread {
+                    showOnModal()
+                }
+
                 mediaPlayerController.playLocalAudio(fileToPlay) {
                     Log.i(TAG, "============================================================")
                     Log.i(TAG, "✅ 서비스 종료 오디오 재생 완료")
@@ -1130,26 +1121,72 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
     }
-
+ 
     private fun showModal(statusMessage: String) {
         if (aiOnDialog?.isVisible == true) return
         aiOnDialog = AiOnDialog(statusMessage)
         aiOnDialog?.show(supportFragmentManager, "waiting call")
+    }
+    private fun showOnModal() {
+        Log.d("show on modal", "모달 호출")
+        if (onAirOnDialog?.isVisible == true) return
+        onAirOnDialog = OnAirOnDialog()
+        onAirOnDialog?.show(supportFragmentManager, "onAiR on")
     }
 
     private fun hideModal() {
         aiOnDialog?.dismiss()
         aiOnDialog = null
     }
+    private fun hideOnModal() {
+        onAirOnDialog?.dismiss()
+        onAirOnDialog = null
+    }
     private fun showCvAnswer() {
         lifecycleScope.launch {
             workingViewModel.cvAnswer.collect { value ->
-                runSection(
-                    binding.cvResultError,
-                    binding.cvResultErrorText,
-                    value.message,
-                    value.audio_content
-                )
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (showCvAnswer 함수)")
+                Log.i(TAG, "   메시지: ${value.message}")
+                Log.i(TAG, "============================================================")
+                
+                binding.cvResultError.visibility = View.VISIBLE
+                withContext(Dispatchers.Main) {
+                    binding.cvResultError.slideIn()
+                }
+                withContext(Dispatchers.Main) {
+                    showTypingEffect(binding.cvResultErrorText, value.message)
+                }
+                
+                // 오디오 재생
+                if (value.audio_content != null && value.audio_content.isNotBlank()) {
+                    Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
+                    playAudio(value.audio_content)
+                    Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
+                } else {
+                    Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
+                }
+                
+                // 오디오 재생 완료 후 바로 카드 fadeOut
+                withContext(Dispatchers.Main) {
+                    binding.cvResultError.fadeOut()
+                }
+                
+                // 모달 표시 ("답변 생성 중...")
+                runOnUiThread {
+                    showModal("답변 생성 중...")
+                }
+                
+                // FastAPI 서버로 재생 완료 이벤트 전송
+                val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
+                if (success) {
+                    Log.i(TAG, "📤 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 완료")
+                    Log.i(TAG, "   💡 모달 표시 중: '답변 생성 중...'")
+                    Log.i(TAG, "   💡 final_answer 수신 시 모달 자동 숨김")
+                } else {
+                    Log.e(TAG, "❌ 모바일 CV 탐지 이상 음성 파일 재생 완료 이벤트 전송 실패")
+                    // 전송 실패해도 모달은 유지 (final_answer 수신 시 숨김)
+                }
             }
         }
     }
