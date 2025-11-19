@@ -11,14 +11,6 @@ from config import settings
 import numpy as np
 
 
-# ========================================
-# 디버그 모드 제거됨 - 자동 진행
-# ========================================
-
-async def wait_for_next_step_async(step_name: str, step_number: str = ""):
-    """디버그 모드 제거됨 - 즉시 진행"""
-    pass
-
 class GcpBufferedStt:
     def __init__(self):
         self.language = settings.LANGUAGE
