@@ -1800,15 +1800,12 @@ async def handle_video_frame(sid, data):
         frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
         # await broadcast_to('pc', "video_frame", jpeg_bytes.tobytes())
         # await broadcast_to('mobile', "video_frame", frame_base64)
-        await broadcast_to(['pc', 'mobile'], "video_frame", {
+        await broadcast_to('pc', "video_frame", {
             "timestamp": timestamp,
             "frame": jpeg_bytes.tobytes()
         })
-        frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-        await broadcast_to('mobile', "video_frame", {
-            "timestamp": timestamp,
-            "frame": frame_base64
-        })
+        # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+        await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
         return
 
     # --- ⑤ AR 마커 업데이트 및 브로드캐스트 (기존 로직 그대로) ---
@@ -1845,15 +1842,12 @@ async def handle_video_frame(sid, data):
 
     # --- ⑥ PC로 프레임 전송 (timestamp 포함) ---
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
-    await broadcast_to(['pc', 'mobile'], "video_frame", {
+    await broadcast_to('pc', "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
-    frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-    await broadcast_to('mobile', "video_frame", {
-        "timestamp": timestamp,
-        "frame": frame_base64
-    })
+    # frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+    await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
     try:
         yolo_res = await get_latest_yolo_result()
         if yolo_res:
