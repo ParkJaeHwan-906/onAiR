@@ -118,9 +118,11 @@ class DemonstrateActivity : ComponentActivity() {
                 callViewModel.frameState.collect { value ->
                     value?.let {
                         val bitmap = it.toBitmap()
+//                        val cropped = bitmap?.toBottomCropped()
                         Log.d("Demonstrate Activity", bitmap.toString())
                         Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
                         binding.videoView.setImageBitmap(bitmap)
+//                        binding.videoView.setImageBitmap(cropped)
                     }
                 }
             }
@@ -128,6 +130,23 @@ class DemonstrateActivity : ComponentActivity() {
     }
     private fun ByteArray.toBitmap(): Bitmap? {
         return BitmapFactory.decodeByteArray(this, 0, this.size)
+    }
+    private fun Bitmap.toBottomCropped(targetRatio: Float = 4f/3f) : Bitmap {
+        val srcWidth = this.width
+        val srcHeight = this.height
+
+        val targetHeight = (srcWidth / targetRatio).toInt()
+
+        if (targetHeight >= srcHeight) return this
+
+        val top = (srcHeight - targetHeight) / 2
+//        val top = srcHeight - targetHeight
+
+        return Bitmap.createBitmap(
+            this,
+            0, top, srcWidth,
+            targetHeight
+        )
     }
     @Composable
     fun CallScreen(viewModel: CallViewModel) {
@@ -167,6 +186,9 @@ class DemonstrateActivity : ComponentActivity() {
     }
     private val REMOTE_WIDTH = 600f
     private val REMOTE_HEIGHT = 680f
+//    private val targetRatio = 4f / 3f
+//    private val targetHeight = 360f / (4f / 3f)
+//    private val topCrop = (360f - targetHeight) / 2f
 
     @Composable
     fun WhiteboardCanvas(
@@ -187,6 +209,22 @@ class DemonstrateActivity : ComponentActivity() {
                         y = (remoteY * scale) + offsetY
                     )
                 }
+//                { remoteX: Float, remoteY: Float ->
+//
+//                    // 1) 중앙 crop 보정
+//                    val correctedY = remoteY - topCrop
+//
+//                    // 2) crop 영역 바깥이면 표시하지 않음
+//                    if (correctedY < 0f || correctedY > targetHeight) {
+//                        Offset(-10000f, -10000f) // 화면 밖으로 버려서 안 보이게
+//                    } else {
+//                        // 3) 기존 scale + offset 로직 유지
+//                        Offset(
+//                            x = (remoteX * scale) + offsetX,
+//                            y = (correctedY * scale) + offsetY
+//                        )
+//                    }
+//                }
             }
 
             var completedPaths = remember { mutableStateListOf<TimedPath>() }
@@ -202,6 +240,7 @@ class DemonstrateActivity : ComponentActivity() {
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
                     context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+                    Log.d("Demo", "오디오 함수 리턴")
                     (context as? Activity)?.finish()
                 }
             }
@@ -398,6 +437,7 @@ class DemonstrateActivity : ComponentActivity() {
             afd.close() // fd는 설정 후 닫아도 됨
 
             mediaPlayer.setOnCompletionListener {
+                Log.d("Demo", "재생 완료 리스너")
                 it.release()
                 // 재생이 끝나면 코루틴 재개 (finish()가 호출될 수 있게 함)
                 if (continuation.isActive) continuation.resume(Unit)
@@ -405,6 +445,7 @@ class DemonstrateActivity : ComponentActivity() {
 
             mediaPlayer.setOnErrorListener { _, _, _ ->
                 // 에러 나면 멈추지 말고 그냥 종료로 넘어가게 처리
+                Log.e("Demo", "audio error")
                 mediaPlayer.release()
                 if (continuation.isActive) continuation.resume(Unit)
                 true
@@ -421,14 +462,15 @@ class DemonstrateActivity : ComponentActivity() {
                 } catch (e: Exception) { e.printStackTrace() }
             }
 
-            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
-            mediaPlayer.setOnCompletionListener { mp ->
-                mp.release()
-            }
+//            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
+//            mediaPlayer.setOnCompletionListener { mp ->
+//                mp.release()
+//            }
 
         } catch (e: Exception) {
             Log.e("AudioPlayer", "재생 실패: $fileName", e)
             mediaPlayer.release() // 에러 발생 시에도 해제
+            if (continuation.isActive) continuation.resume(Unit)
         }
     }
 }
