@@ -807,22 +807,31 @@ class WorkingActivity : AppCompatActivity() {
         runOnUiThread {
             hideModal()
         }
-
+        
+        // 간단한 알림 메시지 카드 숨기기 (확실하게)
+        // final_answer 수신 시 간단한 알림 카드가 아직 표시되어 있을 수 있으므로 확실히 숨김
         runOnUiThread {
-//            binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
+            binding.cvResultError.visibility = View.GONE
+            binding.cvResultError.alpha = 0f
+            binding.cvResultError.clearAnimation()  // 진행 중인 애니메이션 취소
         }
-
-        // 각 섹션별 말풍선 표시 및 오디오 재생
-        val structuredAnswer = finalAnswer.structured_answer
-        if (structuredAnswer != null) {
-            handleStructuredAnswerSections(structuredAnswer)
-        } else {
-            // Fallback: 기존 방식 (전체 오디오 재생)
-            handleFinalAnswer(
-                answer = finalAnswer.answer,
-                audioContent = finalAnswer.audio_content,
-                mimeType = finalAnswer.audio_encoding
-            )
+        
+        // 간단한 알림 카드가 완전히 사라진 후 섹션별 카드 표시를 위해 짧은 딜레이
+        lifecycleScope.launch {
+            delay(100)  // 100ms 딜레이로 간단한 알림 카드가 완전히 사라지도록 보장
+            
+            // 각 섹션별 말풍선 표시 및 오디오 재생
+            val structuredAnswer = finalAnswer.structured_answer
+            if (structuredAnswer != null) {
+                handleStructuredAnswerSections(structuredAnswer)
+            } else {
+                // Fallback: 기존 방식 (전체 오디오 재생)
+                handleFinalAnswer(
+                    answer = finalAnswer.answer,
+                    audioContent = finalAnswer.audio_content,
+                    mimeType = finalAnswer.audio_encoding
+                )
+            }
         }
 
         isWaitingForClarification = false
@@ -858,6 +867,10 @@ class WorkingActivity : AppCompatActivity() {
                 val safetyWarningsAudioEncoding = structuredAnswer["safety_warnings_audio_encoding"] as? String
 
                 // 각 섹션별 처리 (순차적으로)
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "📋 [모바일] 섹션별 처리 시작 (원인 → 조치 → 주의사항)")
+                Log.i(TAG, "============================================================")
+                
                 processSection(
                     sectionName = "원인",
                     markdownText = possibleCausesMarkdown,
@@ -865,9 +878,8 @@ class WorkingActivity : AppCompatActivity() {
                     audioEncoding = possibleCausesAudioEncoding,
                     isLastSection = false
                 ) {
-                    // possible_causes 완료 후 2초 대기
-                    kotlinx.coroutines.delay(2000)
-
+                    // possible_causes 완료 후 바로 다음 섹션 진행
+                    Log.i(TAG, "✅ [모바일] 원인 섹션 완료, 조치 섹션 시작")
                     processSection(
                         sectionName = "조치",
                         markdownText = recommendedActionsMarkdown,
@@ -875,9 +887,8 @@ class WorkingActivity : AppCompatActivity() {
                         audioEncoding = recommendedActionsAudioEncoding,
                         isLastSection = false
                     ) {
-                        // recommended_actions 완료 후 2초 대기
-                        kotlinx.coroutines.delay(2000)
-
+                        // recommended_actions 완료 후 바로 다음 섹션 진행
+                        Log.i(TAG, "✅ [모바일] 조치 섹션 완료, 주의사항 섹션 시작")
                         processSection(
                             sectionName = "주의사항",
                             markdownText = safetyWarningsMarkdown,
@@ -956,7 +967,10 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
 
-        // 완료 콜백 호출
+        // runSection() 완료 후 완료 콜백 호출 (다음 섹션 진행)
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "📋 [모바일] $sectionName 섹션 처리 완료, 다음 섹션으로 진행")
+        Log.i(TAG, "============================================================")
         onComplete()
     }
 
@@ -1150,6 +1164,11 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "   메시지: ${value.message}")
                 Log.i(TAG, "============================================================")
                 
+                // "AI 서포터가 오류 탐지 중" 모달 숨기기
+                runOnUiThread {
+                    hideModal()
+                }
+                
                 binding.cvResultError.visibility = View.VISIBLE
                 withContext(Dispatchers.Main) {
                     binding.cvResultError.slideIn()
@@ -1167,9 +1186,11 @@ class WorkingActivity : AppCompatActivity() {
                     Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
                 }
                 
-                // 오디오 재생 완료 후 바로 카드 fadeOut
+                // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
+                binding.cvResultError.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+                // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
                 withContext(Dispatchers.Main) {
-                    binding.cvResultError.fadeOut()
+                    binding.cvResultError.visibility = View.GONE
                 }
                 
                 // 모달 표시 ("답변 생성 중...")
@@ -1221,6 +1242,7 @@ class WorkingActivity : AppCompatActivity() {
         text: String,
         audioBase64: String?
     ) {
+        // 이전 섹션 카드가 완전히 사라졌는지 확인
         cardView.visibility = View.VISIBLE
         withContext(Dispatchers.Main) {
             cardView.slideIn()
@@ -1228,10 +1250,13 @@ class WorkingActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             showTypingEffect(textView, text)
         }
+        // 오디오 재생 완료까지 대기
         playAudio(audioBase64)
-        delay(2000)
+        // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
+        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+        // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
         withContext(Dispatchers.Main) {
-            cardView.fadeOut()
+            cardView.visibility = View.GONE
         }
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
@@ -1245,7 +1270,10 @@ class WorkingActivity : AppCompatActivity() {
     }
     suspend fun playAudio(base64: String?) {
         Log.d(TAG, "오디오 base64: $base64")
-        if (base64 == null) return
+        if (base64 == null || base64.isBlank()) {
+            Log.w(TAG, "⚠️ 오디오 base64가 null이거나 비어있습니다")
+            return
+        }
 
         val audioBytes = Base64.decode(base64, Base64.DEFAULT)
         val tempFile = File.createTempFile("tts", ".mp3")
@@ -1259,9 +1287,28 @@ class WorkingActivity : AppCompatActivity() {
         player.setOnCompletionListener {
             completion.complete(Unit)
             player.release()
+            tempFile.delete()  // 임시 파일 삭제
         }
-        player.prepare()
-        player.start()
+        player.setOnErrorListener { _, what, extra ->
+            Log.e(TAG, "❌ MediaPlayer 오류: what=$what, extra=$extra")
+            completion.complete(Unit)  // 오류 발생 시에도 완료 처리
+            player.release()
+            tempFile.delete()
+            true
+        }
+        try {
+            player.prepare()
+            player.start()
+            Log.d(TAG, "✅ 오디오 재생 시작")
+            completion.await()  // 재생 완료까지 대기
+            Log.d(TAG, "✅ 오디오 재생 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 오디오 재생 오류: ${e.message}")
+            e.printStackTrace()
+            completion.complete(Unit)
+            player.release()
+            tempFile.delete()
+        }
 
         completion.await()
     }
