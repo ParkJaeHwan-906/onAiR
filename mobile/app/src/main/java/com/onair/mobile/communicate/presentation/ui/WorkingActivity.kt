@@ -101,7 +101,7 @@ class WorkingActivity : AppCompatActivity() {
 
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
-        private const val AI_SUPPORTER_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
+        private const val AI_SUPPORTER_AUDIO_FILE = "001_AI_Supporter_기능을_시작합니다_오류_탐지.mp3"
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류를_탐지하지_못했습니다_AI_Supporter와의.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
@@ -447,39 +447,34 @@ class WorkingActivity : AppCompatActivity() {
                     IntentType.AI_SUPPORTER -> {
                         Log.i(TAG, "✅ AI_SUPPORTER 분기 처리 시작")
 
-                        // UI 업데이트: "AI Supporter on" (1초간)
-                        runOnUiThread {
-//                            binding.taskName.text = "AI Supporter on"
-                        }
-
-                        // 1초 후 "오류 탐지 중..." 표시
-                        lifecycleScope.launch {
-                            kotlinx.coroutines.delay(1000)
-                            runOnUiThread {
-//                                binding.taskName.text = "오류 탐지 중..."
-                            }
-                        }
-
-                        // 음성 파일 재생
-                        Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
-                        // 모달 표시
+                        // 모달 표시: "AI 서포터 on"
                         runOnUiThread {
                             showModal("AI 서포터 on")
                         }
+
+                        // AI Supporter 시작 오디오 재생
+                        Log.i(TAG, "🔊 AI_SUPPORTER 음성 파일 재생 시작: $AI_SUPPORTER_AUDIO_FILE")
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
-                            // 모달 숨기기
+                            
+                            // 모달 텍스트를 "AI 서포터가 오류 탐지 중..."으로 변경
                             runOnUiThread {
-                                hideModal()
+                                aiOnDialog?.updateMessage("AI 서포터가 오류 탐지 중...")
                             }
-
-                            // FastAPI 서버로 재생 완료 이벤트 전송
-                            val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
-                            if (success) {
-                                Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
-                            } else {
-                                Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                            
+                            // 2초 대기 후 FastAPI 서버로 재생 완료 이벤트 전송
+                            lifecycleScope.launch {
+                                kotlinx.coroutines.delay(2000)
+                                
+                                val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
+                                if (success) {
+                                    Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
+                                } else {
+                                    Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
+                                }
+                                
+                                // 모달은 CV 탐지 결과가 오면 자동으로 처리됨 (hideModal은 CV 탐지 결과에서 처리)
                             }
                         }
                     }
@@ -567,16 +562,15 @@ class WorkingActivity : AppCompatActivity() {
 
                 // CV 탐지 실패 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
-                // 모달 표시
-                runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                }
+                // 기존 모달 유지 (텍스트는 그대로 "AI 서포터가 오류 탐지 중...")
+                // 모달을 새로 표시하지 않고 기존 모달 유지
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 실패 음성 파일 재생 완료")
-                    // 모달 숨기기
+                    
+                    // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경
                     runOnUiThread {
-                        hideModal()
+                        aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
                     }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
@@ -645,16 +639,15 @@ class WorkingActivity : AppCompatActivity() {
 
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
-                // 모달 표시
-                runOnUiThread {
-                    showModal("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
-                }
+                // 기존 모달 유지 (텍스트는 그대로 "AI 서포터가 오류 탐지 중...")
+                // 모달을 새로 표시하지 않고 기존 모달 유지
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
                     // 재생 완료 콜백
                     Log.i(TAG, "✅ CV 탐지 정상 음성 파일 재생 완료")
-                    // 모달 숨기기
+                    
+                    // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경
                     runOnUiThread {
-                        hideModal()
+                        aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
                     }
 
                     // FastAPI 서버로 재생 완료 이벤트 전송
