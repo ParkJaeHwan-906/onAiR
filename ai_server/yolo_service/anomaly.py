@@ -124,7 +124,7 @@ async def run_anomaly_detection():
 
     # 6) anomaly 존재 여부
     has_anomaly = any(
-        v.get("status") in ("anomaly", "warning")
+        v.get("status") != ("not_found")
         for v in anomalies.values()
     )
     # 7) 최종 반환
