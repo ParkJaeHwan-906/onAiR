@@ -356,6 +356,26 @@ async def handle_wakeword_detected(sid, data):
     print("✅ [단계 2-1-1 완료] 모바일로 Wakeword 감지 이벤트 전송 완료")
     print("=" * 60)
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
+    
+    # ⚠️ 중요: 오디오 재생 시작과 동시에 버퍼링 STT 세션 시작
+    # 오디오 재생 중에도 사용자가 말할 수 있도록 버퍼링 STT 세션을 미리 시작
+    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
+    if raspi_sids:
+        print("=" * 60)
+        print("📡 [단계 2-1-2] 라즈베리파이로 버퍼링 STT 세션 시작 이벤트 전송 (오디오 재생과 동시에)")
+        print("   💡 오디오 재생 중에도 사용자 음성을 수집할 수 있도록 버퍼링 STT 세션을 미리 시작")
+        print("=" * 60)
+        await broadcast_to("raspi", "wakeword_audio_completed", {
+            "timestamp": None  # 필요시 추가
+        })
+        print("=" * 60)
+        print("✅ [단계 2-1-2 완료] 라즈베리파이로 버퍼링 STT 세션 시작 이벤트 전송 완료")
+        print("=" * 60)
+    else:
+        print("=" * 60)
+        print("⚠️ [오류] 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
+        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
+        print("=" * 60)
 
 
 async def handle_wakeword_waiting_ready(sid, data):
@@ -388,7 +408,8 @@ async def handle_wakeword_waiting_ready(sid, data):
 async def handle_wakeword_audio_completed(sid, data):
     """
     모바일로부터 음성 파일 재생 완료 이벤트 수신
-    라즈베리파이로 이벤트를 전송하여 버퍼링 STT 세션 시작
+    ⚠️ 중요: 버퍼링 STT 세션은 이미 오디오 재생 시작과 동시에 시작되었으므로
+    여기서는 추가 처리 없이 로그만 남김
     """
     print("=" * 60)
     print(f"🔔 [이벤트 수신] wakeword_audio_completed 이벤트 도착")
@@ -414,33 +435,10 @@ async def handle_wakeword_audio_completed(sid, data):
     print("=" * 60)
     print(f"📝 [단계 2-2] FastAPI 서버: 모바일 음성 파일 재생 완료 이벤트 수신 [mobile]")
     print("=" * 60)
+    print("ℹ️ 버퍼링 STT 세션은 이미 오디오 재생 시작과 동시에 시작되었습니다.")
+    print("   버퍼링 STT 결과가 오면 자동으로 처리됩니다.")
+    print("=" * 60)
     await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
-    
-    # 라즈베리파이 연결 상태 확인
-    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
-    if not raspi_sids:
-        print("=" * 60)
-        print("⚠️ [오류] 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
-        print(f"   현재 연결된 디바이스: {list(set(device_map.values()))}")
-        print("=" * 60)
-        return
-    
-    print("=" * 60)
-    print(f"✅ 라즈베리파이 디바이스 연결 확인: {len(raspi_sids)}개")
-    print(f"   라즈베리파이 SID: {[s[:15] + '...' for s in raspi_sids]}")
-    print("=" * 60)
-    
-    # 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)
-    print("=" * 60)
-    print("📡 [단계 2-2-1] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 (버퍼링 STT 세션 시작)")
-    print("=" * 60)
-    await broadcast_to("raspi", "wakeword_audio_completed", {
-        "timestamp": None  # 필요시 추가
-    })
-    print("=" * 60)
-    print("✅ [단계 2-2-1 완료] 라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료")
-    print("=" * 60)
-    await wait_for_next_step("라즈베리파이로 음성 파일 재생 완료 이벤트 전송 완료", "2-2-1")
 
 
 async def handle_intent_audio_completed(sid, data):
@@ -486,7 +484,7 @@ async def handle_intent_audio_completed(sid, data):
             
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
-            has_anomaly = cv_raw.get("detected", False)
+            detected = cv_raw.get("detected", False)  # 모듈 탐지 여부
             
             filtered_anomalies = {
                 k: v for k, v in anomalies.items()
@@ -633,21 +631,25 @@ async def handle_intent_audio_completed(sid, data):
             detected = bool(cv_result["detected"])
             device_type = cv_result.get("device_type", "unknown")
             anomalies = cv_result.get("anomalies", {})
+            messages = cv_result.get("message", [])
+            
+            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
+            has_real_anomaly = len(anomalies) > 0 or len(messages) > 0
             
             # 디버깅: 조건 분기 확인
             print("=" * 60)
             print("🔍 [디버깅] 조건 분기 확인:")
-            print(f"   detected: {detected} (type: {type(detected)})")
-            print(f"   is_normal: {is_normal} (type: {type(is_normal)})")
-            print(f"   is_anomaly: {is_anomaly} (type: {type(is_anomaly)})")
-            print(f"   not detected: {not detected}")
-            print(f"   detected and is_normal: {detected and is_normal}")
+            print(f"   detected: {detected} (모듈 탐지 여부)")
+            print(f"   modules: {len(modules)}개")
+            print(f"   has_real_anomaly: {has_real_anomaly} (anomalies: {len(anomalies)}, messages: {len(messages)})")
             print("=" * 60)
             
+            # 3가지 케이스로 분기
             if not detected:
-                # CV 모델이 오류를 탐지하지 못한 경우
+                # 케이스 1: detected = False + modules 없음 → 탐지 실패(failed)
                 print("=" * 60)
-                print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                print(f"⚠️ [단계 9 완료] CV 모델 탐지 실패: detected=False (모듈 탐지 실패)")
+                print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
@@ -670,10 +672,11 @@ async def handle_intent_audio_completed(sid, data):
                 print("✅ CV 탐지 실패 처리 완료")
                 print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
                 print("=" * 60)
-            elif detected and is_normal:
-                # CV 모델이 정상 상태를 탐지한 경우
+            elif detected and not has_real_anomaly:
+                # 케이스 2: detected = True + modules 있음 + 실제 이상 없음 → 정상(normal)
                 print("=" * 60)
-                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
+                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: 모듈은 탐지되었지만 이상 없음")
+                print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
@@ -1041,11 +1044,9 @@ async def handle_audio_playback_completed(sid, data):
     if _pending_cv_detection:
         cv_result = _pending_cv_detection.get("cv_result", {})
         detected = cv_result.get("detected", False)
-        is_normal = (detected == "Normal")
-        is_anomaly = (detected is True or (isinstance(detected, bool) and detected))
         
-        # ⚠️ 중요: audio_type을 먼저 확인하여 정확한 분기 처리
-        if audio_type == "cv_detection_failed" or (not detected and audio_type != "cv_detection_anomaly"):
+        # ⚠️ 중요: audio_type만으로 정확한 분기 처리 (detected 값으로는 판단하지 않음)
+        if audio_type == "cv_detection_failed":
             # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
             print("=" * 60)
             print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
@@ -1064,7 +1065,7 @@ async def handle_audio_playback_completed(sid, data):
             # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
             # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
             
-        elif audio_type == "cv_detection_normal" or (is_normal and audio_type != "cv_detection_anomaly"):
+        elif audio_type == "cv_detection_normal":
             # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
             print("=" * 60)
             print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
@@ -1079,7 +1080,7 @@ async def handle_audio_playback_completed(sid, data):
             # 전역 변수 초기화
             _pending_cv_detection = None
         
-        elif audio_type == "cv_detection_anomaly" and is_anomaly:
+        elif audio_type == "cv_detection_anomaly":
             # CV 탐지 알림 TTS 재생 완료 이벤트 수신
             # ⚠️ 주의: 이미 handle_intent_audio_completed에서 간단한 알림 전송 직후
             # 전체 정비 가이드가 생성되어 전송되었을 수 있음

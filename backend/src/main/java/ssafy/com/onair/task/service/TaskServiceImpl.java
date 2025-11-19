@@ -91,4 +91,9 @@ public class TaskServiceImpl implements TaskService {
                                 .orElseThrow(() -> new IllegalArgumentException("작업자를 찾을 수 없습니다."))));
         return true;
     }
+
+    @Transactional
+    public Integer resetTask() {
+        return tasksRepository.resetTask();
+    }
 }
