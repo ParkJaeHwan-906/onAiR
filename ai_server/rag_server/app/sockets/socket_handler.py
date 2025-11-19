@@ -486,7 +486,7 @@ async def handle_intent_audio_completed(sid, data):
             
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
-            has_anomaly = cv_raw.get("detected", False)
+            detected = cv_raw.get("detected", False)  # 모듈 탐지 여부
             
             filtered_anomalies = {
                 k: v for k, v in anomalies.items()
@@ -499,15 +499,8 @@ async def handle_intent_audio_completed(sid, data):
                 if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
             
-            if not has_anomaly and modules:
-                has_anomaly = "Normal"
-            
-            # has_anomaly가 "Normal" 문자열인지 확인
-            is_normal = (has_anomaly == "Normal")
-            is_anomaly = (has_anomaly is True or (isinstance(has_anomaly, bool) and has_anomaly))
-            
             cv_result = {
-                "detected": has_anomaly,
+                "detected": detected,
                 "device_type": cv_raw.get("device_type"),
                 "modules": modules,
                 "anomalies": filtered_anomalies,
@@ -596,21 +589,25 @@ async def handle_intent_audio_completed(sid, data):
             detected = bool(cv_result["detected"])
             device_type = cv_result.get("device_type", "unknown")
             anomalies = cv_result.get("anomalies", {})
+            messages = cv_result.get("message", [])
+            
+            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
+            has_real_anomaly = len(anomalies) > 0 or len(messages) > 0
             
             # 디버깅: 조건 분기 확인
             print("=" * 60)
             print("🔍 [디버깅] 조건 분기 확인:")
-            print(f"   detected: {detected} (type: {type(detected)})")
-            print(f"   is_normal: {is_normal} (type: {type(is_normal)})")
-            print(f"   is_anomaly: {is_anomaly} (type: {type(is_anomaly)})")
-            print(f"   not detected: {not detected}")
-            print(f"   detected and is_normal: {detected and is_normal}")
+            print(f"   detected: {detected} (모듈 탐지 여부)")
+            print(f"   modules: {len(modules)}개")
+            print(f"   has_real_anomaly: {has_real_anomaly} (anomalies: {len(anomalies)}, messages: {len(messages)})")
             print("=" * 60)
             
+            # 3가지 케이스로 분기
             if not detected:
-                # CV 모델이 오류를 탐지하지 못한 경우
+                # 케이스 1: detected = False + modules 없음 → 탐지 실패(failed)
                 print("=" * 60)
-                print(f"⚠️ [단계 9 완료] CV 모델 오류 탐지 실패: {cv_result.get('message', '')}")
+                print(f"⚠️ [단계 9 완료] CV 모델 탐지 실패: detected=False (모듈 탐지 실패)")
+                print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)
@@ -633,10 +630,11 @@ async def handle_intent_audio_completed(sid, data):
                 print("✅ CV 탐지 실패 처리 완료")
                 print("   💡 accept_communication 이벤트 수신 시 WebRTC 오디오 스트리밍이 시작됩니다.")
                 print("=" * 60)
-            elif detected and is_normal:
-                # CV 모델이 정상 상태를 탐지한 경우
+            elif detected and not has_real_anomaly:
+                # 케이스 2: detected = True + modules 있음 + 실제 이상 없음 → 정상(normal)
                 print("=" * 60)
-                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: {cv_result.get('message', '')}")
+                print(f"✅ [단계 9 완료] CV 모델 정상 상태 탐지: 모듈은 탐지되었지만 이상 없음")
+                print(f"   메시지: {cv_result.get('message', '')}")
                 print("=" * 60)
                 
                 # CV 탐지 결과를 전역 변수에 저장 (audio_playback_completed에서 사용)

@@ -70,7 +70,7 @@ function BackdoorPage() {
     ctx.font = "12px Arial";
 
     overlay?.boxes?.forEach((b: any) => {
-      if (b.confidence < 0.2) return;
+      if (b.confidence < 0.6) return;
 
       const color = b.anomaly ? "#ff3333" : getClassColor(b.label);
 
@@ -180,24 +180,25 @@ function BackdoorPage() {
 
     const handleOverlay = (data: any) => {
       const timestamp = data.timestamp;
-      // const hasAnomaly = data.boxes?.some((b: any) => b.anomaly) ?? false;
-      // console.log("📌 frame anomaly:", hasAnomaly);
+      const hasAnomaly = data.boxes?.some((b: any) => b.anomaly) ?? false;
+      console.log("📌 frame anomaly:", hasAnomaly);
 
       // // 로그
-      // console.group("🟦 YOLO Overlay 수신됨");
-      // console.log("📌 timestamp:", timestamp);
-      // // console.log("📌 anomaly:", hasAnomaly);
-      // console.log("📌 total boxes:", data.boxes?.length || 0);
-      // data.boxes?.forEach((b: any, idx: number) => {
-      //   console.group(`▶ Box ${idx + 1}`);
-      //   console.log("label:", b.label);
-      //   console.log("confidence:", b.confidence.toFixed(3));
-      //   console.log("x1:", b.x1, "y1:", b.y1);
-      //   console.log("x2:", b.x2, "y2:", b.y2);
-      //   console.log("anomaly:", b.anomaly);
-      //   console.groupEnd();
-      // });
-      // console.groupEnd();
+      console.group("🟦 YOLO Overlay 수신됨");
+      console.log("📌 timestamp:", timestamp);
+      // console.log("📌 anomaly:", hasAnomaly);
+      console.log("📌 total boxes:", data.boxes?.length || 0);
+      data.boxes?.forEach((b: any, idx: number) => {
+        console.group(`▶ Box ${idx + 1}`);
+        console.log("label:", b.label);
+        console.log("confidence:", b.confidence.toFixed(3));
+        console.log("x1:", b.x1, "y1:", b.y1);
+        console.log("x2:", b.x2, "y2:", b.y2);
+        console.log("anomaly:", b.anomaly);
+        console.log("temperature", b.temperature);
+        console.groupEnd();
+      });
+      console.groupEnd();
 
       overlayBuffer.current.push({ ...data, timestamp });
       if (overlayBuffer.current.length > MAX_BUFFER)
