@@ -306,11 +306,13 @@ def send_stt_result(result: dict):
 # 4️⃣ 서버 실행
 def run_server(host='127.0.0.1', port=5050):
     from werkzeug.serving import WSGIRequestHandler, make_server
-    import socket
+    import socket   # TODO: Socket.io 로 통일 필요
     logging.basicConfig(level=logging.INFO)
     logger.info(f"🚀 STT 브리지 서버 시작 (Socket.IO): ws://{host}:{port}")
     
     # 포트가 이미 사용 중인지 확인
+    # ------------------------------------------------------------------------------
+    # TODO: 이전 main_py310.py 에서 포트 점유를 확인하는데, 중복해서 확인할 필요가 있을까요?
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
@@ -328,7 +330,7 @@ def run_server(host='127.0.0.1', port=5050):
     except socket.error as e:
         # 포트 확인 중 오류 발생 (무시 가능)
         logger.debug(f"포트 확인 중 오류 (무시 가능): {e}")
-    
+    # ------------------------------------------------------------------------------
     # threading 모드를 사용하므로 werkzeug 서버 사용
     try:
         server = make_server(host, port, app, request_handler=WSGIRequestHandler)
