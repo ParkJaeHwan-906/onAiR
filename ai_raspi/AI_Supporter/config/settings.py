@@ -14,10 +14,10 @@ DEVICE_INDEX = None     # 기본 마이크 자동 선택
 
 # === STT 버퍼링 설정 ===
 # 모바일 오디오 재생 시간(3-5초) + 사용자 말 시작 시간(1-2초)을 고려하여 7초로 설정
-STT_BUFFER_DURATION_SEC = 7.0
+STT_BUFFER_DURATION_SEC = 5.0
 
 # === STT 스트리밍 설정 ===
-SILENCE_TIMEOUT_SEC = 1.5  # 침묵 타임아웃 (초) - 한 문장이 끝났음을 감지하기 위한 대기 시간
+# SILENCE_TIMEOUT_SEC = 1.5  # 침묵 타임아웃 (초) - 한 문장이 끝났음을 감지하기 위한 대기 시간
 
 # === FastAPI 서버 설정 ===
 # FastAPI 서버 URL (Socket.IO 서버도 통합되어 있음)
