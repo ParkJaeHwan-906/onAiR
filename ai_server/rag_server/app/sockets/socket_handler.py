@@ -761,55 +761,18 @@ async def handle_intent_audio_completed(sid, data):
                     import traceback
                     traceback.print_exc()
                     print("=" * 60)
-                    # 전송 실패 시에도 타임아웃 로직으로 전체 정비 가이드 생성
+                    # 전송 실패 시에도 전체 정비 가이드 생성
                 
-                # ⚠️ 중요: audio_content가 None이면 모바일에서 TTS 재생을 하지 않으므로
-                # audio_playback_completed 이벤트를 기다리지 않고 바로 전체 정비 가이드 생성을 시작
-                if notification_audio is None:
-                    print("⚠️ TTS 변환 실패로 audio_content가 None입니다.")
-                    print("   모바일에서 TTS 재생을 하지 않으므로 바로 전체 정비 가이드 생성을 시작합니다.")
-                    print("=" * 60)
-                    
-                    # 바로 전체 정비 가이드 생성 로직 실행
-                    # (handle_audio_playback_completed의 is_anomaly 분기와 동일한 로직)
-                    await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
-                else:
-                    print("   💡 모바일에서 오디오 재생 완료 후 전체 정비 가이드 생성 시작")
-                    print("   💡 모바일에서 audio_playback_completed (type: cv_detection_anomaly) 이벤트 수신 대기 중...")
-                    print("   ⚠️ 만약 이벤트가 오지 않으면 모바일 앱 로그를 확인하세요!")
-                    print("=" * 60)
-                    
-                    # ⚠️ 타임아웃 설정: 10초 내에 audio_playback_completed가 오지 않으면 자동으로 전체 정비 가이드 생성 시작
-                    try:
-                        # asyncio.wait_for를 사용하여 타임아웃 설정
-                        # 이벤트가 오면 _pending_cv_detection이 None이 되므로 이를 확인
-                        timeout_seconds = 10.0
-                        start_time = time.time()
-                        
-                        while True:
-                            # _pending_cv_detection이 None이면 이미 handle_audio_playback_completed에서 처리됨
-                            if _pending_cv_detection is None:
-                                print("✅ audio_playback_completed 이벤트 수신 확인 - 이미 전체 정비 가이드 생성이 시작되었습니다.")
-                                break
-                            
-                            # 타임아웃 체크
-                            elapsed = time.time() - start_time
-                            if elapsed >= timeout_seconds:
-                                print("=" * 60)
-                                print(f"⚠️ 타임아웃 ({timeout_seconds}초) - 모바일에서 audio_playback_completed 이벤트가 오지 않았습니다.")
-                                print("   자동으로 전체 정비 가이드 생성을 시작합니다.")
-                                print("=" * 60)
-                                
-                                # 타임아웃 시에도 전체 정비 가이드 생성
-                                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
-                                break
-                            
-                            # 0.5초마다 확인
-                            await asyncio.sleep(0.5)
-                    except Exception as e:
-                        print(f"⚠️ 타임아웃 대기 중 오류 발생: {e}")
-                        # 오류 발생 시에도 전체 정비 가이드 생성
-                        await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
+                # ⚠️ 중요: 간단한 알림 전송 직후 바로 전체 정비 가이드 생성 시작
+                # 모바일에서 간단한 알림 오디오를 재생하는 동안 백그라운드에서 전체 정비 가이드 생성
+                print("=" * 60)
+                print("📚 [단계 11-1] 간단한 알림 전송 직후 전체 정비 가이드 생성 시작 (백그라운드)")
+                print("   💡 모바일에서 간단한 알림 오디오 재생 중에도 전체 정비 가이드 생성 진행")
+                print("=" * 60)
+                
+                # 바로 전체 정비 가이드 생성 로직 실행
+                # (모바일에서 간단한 알림 오디오 재생과 병렬로 진행)
+                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
                 
                 # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
                 # CV 탐지 성공 시 마이크는 OFF 상태 유지 (켜지 않음)
@@ -1079,19 +1042,37 @@ async def handle_audio_playback_completed(sid, data):
             _pending_cv_detection = None
         
         elif audio_type == "cv_detection_anomaly" and is_anomaly:
-            # CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
+            # CV 탐지 알림 TTS 재생 완료 이벤트 수신
+            # ⚠️ 주의: 이미 handle_intent_audio_completed에서 간단한 알림 전송 직후
+            # 전체 정비 가이드가 생성되어 전송되었을 수 있음
             print("=" * 60)
             print(f"✅ [FastAPI] CV 탐지 알림 TTS 재생 완료 이벤트 수신")
             print("=" * 60)
             
-            # _pending_cv_detection에서 CV 탐지 결과 가져오기
-            device_type = _pending_cv_detection["device_type"]
-            modules = _pending_cv_detection["modules"]
-            anomalies = _pending_cv_detection["anomalies"]
-            cv_result = _pending_cv_detection["cv_result"]
-            
-            # 전체 정비 가이드 생성 및 전송 (공통 함수 사용)
-            await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
+            # _pending_cv_detection이 None이면 이미 전체 정비 가이드가 생성되어 전송됨
+            if _pending_cv_detection is None:
+                print("=" * 60)
+                print("ℹ️ [FastAPI] _pending_cv_detection이 None입니다.")
+                print("   이미 전체 정비 가이드가 생성되어 전송되었습니다.")
+                print("   추가 처리 없이 종료합니다.")
+                print("=" * 60)
+            else:
+                # _pending_cv_detection이 남아있으면 (타임아웃 등으로 인해 아직 생성되지 않은 경우)
+                # 전체 정비 가이드 생성 및 전송
+                print("=" * 60)
+                print("⚠️ [FastAPI] _pending_cv_detection이 아직 남아있습니다.")
+                print("   전체 정비 가이드 생성이 아직 완료되지 않았습니다.")
+                print("   지금 생성합니다.")
+                print("=" * 60)
+                
+                # _pending_cv_detection에서 CV 탐지 결과 가져오기
+                device_type = _pending_cv_detection["device_type"]
+                modules = _pending_cv_detection["modules"]
+                anomalies = _pending_cv_detection["anomalies"]
+                cv_result = _pending_cv_detection["cv_result"]
+                
+                # 전체 정비 가이드 생성 및 전송 (공통 함수 사용)
+                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
         
     elif audio_type == "final_answer":
         # AI_Supporter 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
