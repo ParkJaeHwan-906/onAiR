@@ -1002,11 +1002,9 @@ async def handle_audio_playback_completed(sid, data):
     if _pending_cv_detection:
         cv_result = _pending_cv_detection.get("cv_result", {})
         detected = cv_result.get("detected", False)
-        is_normal = (detected == "Normal")
-        is_anomaly = (detected is True or (isinstance(detected, bool) and detected))
         
-        # ⚠️ 중요: audio_type을 먼저 확인하여 정확한 분기 처리
-        if audio_type == "cv_detection_failed" or (not detected and audio_type != "cv_detection_anomaly"):
+        # ⚠️ 중요: audio_type만으로 정확한 분기 처리 (detected 값으로는 판단하지 않음)
+        if audio_type == "cv_detection_failed":
             # CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
             print("=" * 60)
             print(f"✅ [단계 10 완료] CV 탐지 실패 음성 파일 재생 완료 확인")
@@ -1025,7 +1023,7 @@ async def handle_audio_playback_completed(sid, data):
             # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
             # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
             
-        elif audio_type == "cv_detection_normal" or (is_normal and audio_type != "cv_detection_anomaly"):
+        elif audio_type == "cv_detection_normal":
             # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
             print("=" * 60)
             print(f"✅ [단계 10 완료] CV 탐지 정상 음성 파일 재생 완료 확인")
@@ -1040,7 +1038,7 @@ async def handle_audio_playback_completed(sid, data):
             # 전역 변수 초기화
             _pending_cv_detection = None
         
-        elif audio_type == "cv_detection_anomaly" and is_anomaly:
+        elif audio_type == "cv_detection_anomaly":
             # CV 탐지 알림 TTS 재생 완료 이벤트 수신
             # ⚠️ 주의: 이미 handle_intent_audio_completed에서 간단한 알림 전송 직후
             # 전체 정비 가이드가 생성되어 전송되었을 수 있음
