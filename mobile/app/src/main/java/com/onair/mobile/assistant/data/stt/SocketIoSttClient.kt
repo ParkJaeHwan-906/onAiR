@@ -9,6 +9,7 @@ import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
+import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
 import io.socket.client.IO
@@ -62,10 +63,10 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-//    private val _callEnd = MutableSharedFlow<Boolean>(replay = 0)
-//    val callEnd = _callEnd.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
+    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>()
+    val finalAnswer = _finalAnswer.asSharedFlow()
 
     /**
      * Socket.IO 서버에 연결
@@ -223,24 +224,24 @@ class SocketIoSttClient(
             }
             
             // final_answer 이벤트 수신 (최종 답변)
-            socket?.on("final_answer") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val jsonString = data.toString()
-                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
-                        
-                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
-                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
-                        onFinalAnswer?.invoke(finalAnswer)
-                    } else {
-                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
+//            socket?.on("final_answer") { args ->
+//                try {
+//                    val data = args[0] as? JSONObject
+//                    if (data != null) {
+//                        val jsonString = data.toString()
+//                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
+//
+//                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
+//                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
+//                        onFinalAnswer?.invoke(finalAnswer)
+//                    } else {
+//                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
+//                    }
+//                } catch (e: Exception) {
+//                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
+//                    e.printStackTrace()
+//                }
+//            }
             
             // cv_detection_failed 이벤트 수신 (CV 모델 오류 탐지 실패)
             socket?.on("cv_detection_failed") { args ->
@@ -352,6 +353,24 @@ class SocketIoSttClient(
                 Log.d(TAG, "연결 종료 이벤트 수신")
 //                _callEnd.tryEmit(true)
                 _callEnd.trySend(Unit)
+            }
+
+            socket?.on("final_answer") { args ->
+                Log.d(TAG, "AI 답변 이벤트 수신")
+                try {
+                    val data = args[0] as? JSONObject
+                    if (data != null) {
+                        val answerStr = data.getJSONObject("structured_answer").toString()
+                        val answer = Json.decodeFromString<StructuredAnswer>(answerStr)
+                        _finalAnswer.tryEmit(answer)
+                    } else {
+                        Log.e(TAG, "답변 data가 없습니다.")
+                    }
+                } catch (e: Exception) {
+                Log.e(TAG, "❌ Clarify 응답 처리 오류: ${e.message}")
+            }
+
+
             }
             
             // 서버 메시지 수신 (디버깅용)
