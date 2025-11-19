@@ -36,84 +36,143 @@ GAUGE_RAG_MESSAGE = {
 # FAST GAUGE ANGLE + VALUE
 # -------------------------------------
 def detect_gauge_angle_fast(roi, cfg):
-    h, w = roi.shape[:2]
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    try:
+        h, w = roi.shape[:2]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    circles = cv2.HoughCircles(
-        blur,
-        cv2.HOUGH_GRADIENT,
-        1,
-        200,
-        param1=100,
-        param2=22,
-        minRadius=50,
-        maxRadius=0,
-    )
-
-    img_center = np.array([w / 2, h / 2])
-
-    if circles is None:
-        R = max(min(h, w) * 0.45, 20)
-        x0, y0 = w // 2, h // 2
-    else:
-        circles = np.uint16(np.around(circles))[0]
-        x0, y0, R = max(
-            circles,
-            key=lambda c: (c[2] * 0.7) - np.linalg.norm(np.array([c[0], c[1]]) - img_center)
+        # -----------------------
+        # 1) 중심 + 반지름 추정
+        # -----------------------
+        circles = cv2.HoughCircles(
+            blur, cv2.HOUGH_GRADIENT, 1, 200,
+            param1=100, param2=22, minRadius=50, maxRadius=0
         )
-        R = max(min(R, min(h, w) * 0.45), 20)
 
-    edges = cv2.Canny(blur, 50, 150)
-    yy, xx = np.indices(edges.shape)
-    rr = np.sqrt((xx - x0) ** 2 + (yy - y0) ** 2)
+        img_center = np.array([w / 2, h / 2])
 
-    mask_annulus = (rr > R * 0.20) & (rr < R * 0.90)
-    mask_textband = (rr > R * 0.50) & (rr < R * 0.70)
+        if circles is None:
+            x0, y0 = w // 2, h // 2
+            R = max(min(h, w) * 0.45, 20)
+        else:
+            circles = np.uint16(np.around(circles))[0]
+            x0, y0, R = max(
+                circles,
+                key=lambda c: (c[2] * 0.7)
+                - np.linalg.norm(np.array([c[0], c[1]]) - img_center)
+            )
+            R = max(min(R, min(h, w) * 0.45), 20)
 
-    edges[~mask_annulus] = 0
-    edges[mask_textband] = 0
+        # -----------------------
+        # 2) Edge + 바늘 몸통 mask
+        # -----------------------
+        edges = cv2.Canny(blur, 50, 150)
 
-    thetas = np.deg2rad(np.arange(0, 360, 2.0))
-    scores = []
+        yy, xx = np.indices(edges.shape)
+        rr = np.sqrt((xx - x0) ** 2 + (yy - y0) ** 2)
 
-    for th in thetas:
-        xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-        ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-        xs = np.clip(xs, 0, w - 1)
-        ys = np.clip(ys, 0, h - 1)
-        scores.append(edges[ys, xs].sum())
+        pointer_mask = (rr > R * 0.20) & (rr < R * 0.60)
+        edges_ptr = edges.copy()
+        edges_ptr[~pointer_mask] = 0
 
-    if len(scores) == 0:
+        # fallback
+        if edges_ptr.sum() < 400:
+            edges_ptr = edges
+
+        # -----------------------
+        # 3) Angle voting
+        # -----------------------
+        thetas = np.deg2rad(np.arange(0, 360, 1.5))
+        scores = []
+
+        for th in thetas:
+            xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
+            ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
+            xs = np.clip(xs, 0, w - 1)
+            ys = np.clip(ys, 0, h - 1)
+            scores.append(edges_ptr[ys, xs].sum())
+
+        scores = np.asarray(scores, dtype=np.float32)
+        if scores.max() < 10:
+            return None
+
+        degs = (np.rad2deg(thetas) + 180) % 360
+
+        # -----------------------
+        # 4) valid range filtering
+        # -----------------------
+        def cw(a, b): return (a - b) % 360
+
+        min_angle = cfg["min_angle"]
+        max_angle = cfg["max_angle"]
+        sweep = cw(min_angle, max_angle) or 360
+
+        margin = 5.0
+        valid_mask = []
+        for d in degs:
+            prog = cw(min_angle, d)
+            valid_mask.append(prog <= (sweep + margin))
+        valid_mask = np.array(valid_mask, bool)
+        scores[~valid_mask] = 0
+
+        best_idx = int(np.argmax(scores))
+        angle = float(degs[best_idx] % 360)
+
+        # -----------------------
+        # 5) 몸통 두께 기반 flip correction
+        # -----------------------
+        def body_thickness(a):
+            th = np.deg2rad(a)
+            rs = np.linspace(R * 0.20, R * 0.45, 15)
+            widths = []
+
+            for r in rs:
+                x = int(x0 + np.cos(th) * r)
+                y = int(y0 - np.sin(th) * r)
+
+                line_vals = []
+                for k in range(-7, 8):
+                    xx = int(x - k * np.sin(th))
+                    yy = int(y + k * np.cos(th))
+
+                    if 0 <= xx < w and 0 <= yy < h:
+                        line_vals.append(edges[yy, xx])
+                    else:
+                        line_vals.append(0)
+
+                widths.append(sum(v > 0 for v in line_vals))
+
+            return np.mean(widths)
+
+        opp = (angle + 180) % 360
+        if body_thickness(opp) > body_thickness(angle) * 1.15:
+            angle = opp
+
+        # -----------------------
+        # 6) thermometer 전용 물리 보정
+        # -----------------------
+        def cw_delta(a, b): return (a - b) % 360
+
+        progressed = cw_delta(min_angle, angle)
+        ratio = float(np.clip(progressed / sweep, 0, 1))
+        value = cfg["min_val"] + ratio * (cfg["max_val"] - cfg["min_val"])
+
+        if cfg["max_val"] == 100:
+            opp_angle = (angle + 180) % 360
+            prog_o = cw_delta(min_angle, opp_angle)
+            ratio_o = np.clip(prog_o / sweep, 0, 1)
+            value_o = cfg["min_val"] + ratio_o * (cfg["max_val"] - cfg["min_val"])
+
+            if 0 <= value <= 20 and 40 <= value_o <= 100:
+                angle, value = opp_angle, value_o
+
+            if 80 <= value <= 100 and 0 <= value_o <= 30:
+                angle, value = opp_angle, value_o
+
+        return angle, value
+
+    except:
         return None
-
-    best_idx = int(np.argmax(scores))
-    angle = (np.rad2deg(thetas[best_idx]) + 360) % 360
-
-    def safe_sample(th):
-        xs = (x0 + np.cos(np.deg2rad(th)) * np.linspace(R * 0.3, R * 0.9, 30)).astype(int)
-        ys = (y0 - np.sin(np.deg2rad(th)) * np.linspace(R * 0.3, R * 0.9, 30)).astype(int)
-        xs = np.clip(xs, 0, w - 1)
-        ys = np.clip(ys, 0, h - 1)
-        return edges[ys, xs].sum()
-
-    score1 = safe_sample(angle)
-    score2 = safe_sample((angle + 180) % 360)
-
-    if score2 > score1 * 1.15:
-        angle = (angle + 180) % 360
-
-    def cw_delta(a, b): return (a - b) % 360
-
-    sweep_cw = cw_delta(cfg["min_angle"], cfg["max_angle"])
-    sweep_cw = sweep_cw or 360
-
-    progressed = cw_delta(cfg["min_angle"], angle)
-    ratio = np.clip(progressed / sweep_cw, 0, 1)
-
-    value = cfg["min_val"] + ratio * (cfg["max_val"] - cfg["min_val"])
-
-    return angle, value
 
 
 # -------------------------------------
