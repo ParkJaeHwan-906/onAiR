@@ -484,13 +484,14 @@ async def handle_intent_audio_completed(sid, data):
             
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})
-            detected = cv_raw.get("detected", False)  # 모듈 탐지 여부
-            
+            detected = cv_raw.get("detected", False)
+            has_anomaly = cv_raw.get("has_anomaly", False)
+
             filtered_anomalies = {
                 k: v for k, v in anomalies.items()
                 if v.get("results") and len(v.get("results")) > 0
             }      
-            
+
             raw_messages = cv_raw.get("messages", [])
             filtered_msgs = [
                 msg for msg in raw_messages
