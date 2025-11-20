@@ -146,6 +146,7 @@ class WorkingActivity : AppCompatActivity() {
             if (::socketIoSttClient.isInitialized) {
                 socketIoSttClient.connect()
                 Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
+                Log.d(TAG, hasSentCommunicationClose.toString())
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
@@ -237,8 +238,8 @@ class WorkingActivity : AppCompatActivity() {
                     value.let {
                         val bitmap = it.toBitmap()
                         val cropped = bitmap?.toBottomCropped()
-                        Log.d("Demonstrate Activity", bitmap.toString())
-                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
+//                        Log.d("Demonstrate Activity", bitmap.toString())
+//                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
                         binding.videoView.setImageBitmap(cropped)
                     }
                 }
@@ -334,7 +335,9 @@ class WorkingActivity : AppCompatActivity() {
                     // FastAPI 서버로 accept_communication 이벤트 전송
                     socketIoSttClient.sendAcceptCommunication()
                     Log.i(TAG, "📤 FastAPI 서버로 accept_communication 이벤트 전송 완료")
-                    
+
+                    if (aiOnDialog != null) hideModal()
+
                     startActivity(intent)
                     Log.i(TAG, "✅ CallActivity로 이동 완료")
 
@@ -515,9 +518,6 @@ class WorkingActivity : AppCompatActivity() {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ OPERATOR 음성 파일 재생 완료")
                             // 모달 숨기기
-                            runOnUiThread {
-                                hideModal()
-                            }
 
                             // FastAPI 서버로 재생 완료 이벤트 전송
                             val success = socketIoSttClient.sendIntentAudioCompleted("OPERATOR")
@@ -1310,6 +1310,8 @@ class WorkingActivity : AppCompatActivity() {
         // aiOnDialog 참조 초기화
         aiOnDialog = null
         Log.d(TAG, "hideModal() 완료")
+
+
     }
     private fun hideOnModal() {
         try {
@@ -1424,6 +1426,8 @@ class WorkingActivity : AppCompatActivity() {
                     answer.safety_warnings_audio
                 )
                 showOnModal()
+                delay(2000)
+                hideOnModal()
             }
         }
     }
@@ -1651,7 +1655,7 @@ class WorkingActivity : AppCompatActivity() {
             }
             
             // 다음 wakeword 감지를 위해 플래그 리셋
-            hasSentCommunicationClose = false
+//            hasSentCommunicationClose = false
         } catch (e: Exception) {
             Log.e(TAG, "❌ 상태 초기화 중 오류: ${e.message}")
             e.printStackTrace()

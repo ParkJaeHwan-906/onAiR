@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -77,8 +78,9 @@ import kotlin.coroutines.resume
 import kotlin.getValue
 import kotlin.math.roundToInt
 
-class DemonstrateActivity : ComponentActivity() {
+class DemonstrateActivity : AppCompatActivity() {
     private lateinit var description : String
+    private var onAirOnDialog : OnAirOnDialog? = null
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
@@ -103,7 +105,7 @@ class DemonstrateActivity : ComponentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
         description = intent.getStringExtra("description")
-            ?: throw java.lang.NullPointerException("description is null")
+            ?: "RC카 고장"
         Log.d("DemonstrateActivity", "OnCreate")
         initView()
     }
@@ -119,8 +121,8 @@ class DemonstrateActivity : ComponentActivity() {
                     value?.let {
                         val bitmap = it.toBitmap()
 //                        val cropped = bitmap?.toBottomCropped()
-                        Log.d("Demonstrate Activity", bitmap.toString())
-                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
+//                        Log.d("Demonstrate Activity", bitmap.toString())
+//                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
                         binding.videoView.setImageBitmap(bitmap)
 //                        binding.videoView.setImageBitmap(cropped)
                     }
@@ -147,6 +149,47 @@ class DemonstrateActivity : ComponentActivity() {
             0, top, srcWidth,
             targetHeight
         )
+    }
+    private fun showOnModal() {
+        try {
+            // 기존 모달이 있으면 먼저 숨기기
+//            if (onAirOnDialog != null && onAirOnDialog?.isVisible == true) {
+//                onAirOnDialog?.dismissAllowingStateLoss()
+//                onAirOnDialog = null
+//            }
+            // 새 모달 생성 및 표시
+            onAirOnDialog = OnAirOnDialog()
+            onAirOnDialog?.show(supportFragmentManager, "onAiR on")
+        } catch (e: Exception) {
+        }
+    }
+    private fun hideOnModal() {
+        try {
+            // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+            try {
+                val fragment = supportFragmentManager.findFragmentByTag("onAiR on")
+                if (fragment != null && fragment is OnAirOnDialog) {
+                    fragment.dismissAllowingStateLoss()
+                }
+            } catch (e: Exception) {
+            }
+
+            // 방법 2: onAirOnDialog를 통해 dismiss
+            if (onAirOnDialog != null) {
+                try {
+                    onAirOnDialog?.dismissAllowingStateLoss()
+                } catch (e: Exception) {
+                    try {
+                        onAirOnDialog?.dismiss()
+                    } catch (e2: Exception) {
+                    }
+                }
+            }
+
+            onAirOnDialog = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
     @Composable
     fun CallScreen(viewModel: CallViewModel) {
@@ -184,8 +227,10 @@ class DemonstrateActivity : ComponentActivity() {
             }
         }
     }
-    private val REMOTE_WIDTH = 600f
-    private val REMOTE_HEIGHT = 680f
+    private val REMOTE_WIDTH = 360f
+    private val REMOTE_HEIGHT = 480f
+//    private val REMOTE_WIDTH = 600f
+//    private val REMOTE_HEIGHT = 680f
 //    private val targetRatio = 4f / 3f
 //    private val targetHeight = 360f / (4f / 3f)
 //    private val topCrop = (360f - targetHeight) / 2f
@@ -239,8 +284,10 @@ class DemonstrateActivity : ComponentActivity() {
             val context = LocalContext.current
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
+                    showOnModal()
                     context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
                     Log.d("Demo", "오디오 함수 리턴")
+                    hideOnModal()
                     (context as? Activity)?.finish()
                 }
             }
@@ -361,6 +408,14 @@ class DemonstrateActivity : ComponentActivity() {
 
         return Triple(scale, offsetX, offsetY)
     }
+    private fun arCalculateTransform(screenWidth: Float, screenHeight: Float): Triple<Float, Float, Float> {
+        val scale = screenHeight / REMOTE_HEIGHT
+        val scaledWidth = REMOTE_WIDTH * scale
+        val offsetX = (screenWidth - scaledWidth) /2f
+        val offsetY = 0f
+
+        return Triple(scale, offsetX, offsetY)
+    }
 
     @Composable
     fun ArMarker(marker: ArMarker, x: Float, y: Float) {
@@ -473,4 +528,5 @@ class DemonstrateActivity : ComponentActivity() {
             if (continuation.isActive) continuation.resume(Unit)
         }
     }
+
 }
