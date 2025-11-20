@@ -1350,12 +1350,12 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (showCvAnswer 함수)")
                 Log.i(TAG, "   메시지: ${value.message}")
                 Log.i(TAG, "============================================================")
-                
+
                 // "AI 서포터가 오류 탐지 중" 모달 숨기기
                 runOnUiThread {
                     hideModal()
                 }
-                
+
                 binding.cvResultError.visibility = View.VISIBLE
                 withContext(Dispatchers.Main) {
                     binding.cvResultError.slideIn()
@@ -1401,6 +1401,9 @@ class WorkingActivity : AppCompatActivity() {
     private fun showAiAnswer() {
         lifecycleScope.launch {
             workingViewModel.finalAnswer.collect { answer ->
+
+                if (aiOnDialog != null) hideModal()
+
                 Log.d(TAG, answer.markdown_text)
                 runSection(
                     binding.aiResultCause,
@@ -1420,6 +1423,7 @@ class WorkingActivity : AppCompatActivity() {
                     answer.safety_warnings_markdown,
                     answer.safety_warnings_audio
                 )
+                showOnModal()
             }
         }
     }
