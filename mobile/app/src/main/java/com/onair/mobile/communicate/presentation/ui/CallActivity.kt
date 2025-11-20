@@ -6,7 +6,7 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
@@ -66,7 +66,9 @@ import io.livekit.android.compose.ui.RendererType
 import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.collections.emptyList
 import androidx.core.graphics.toColorInt
@@ -83,7 +85,7 @@ data class TimedPath(
     val timestamp: Long = System.currentTimeMillis()
 )
 //lateinit var description : String
-class CallActivity : ComponentActivity() {
+class CallActivity : FragmentActivity() {
     private lateinit var description : String
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
@@ -187,16 +189,87 @@ class CallActivity : ComponentActivity() {
             var pulseMarkers: List<ArMarker>? = null
 
             val context = LocalContext.current
-            val activity = context as? ComponentActivity
+            val activity = context as? FragmentActivity
             
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
-                    activity?.runOnUiThread {
-                        val dialog = OnAirOnDialog()
-                        dialog.show(activity.supportFragmentManager, "onAirOn")
+                    Log.d("CallActivity", "============================================================")
+                    Log.d("CallActivity", "📩 [CallActivity] 통신 종료 이벤트 수신")
+                    Log.d("CallActivity", "   서비스 종료 오디오 재생 및 모달 표시")
+                    Log.d("CallActivity", "============================================================")
+                    
+                    // 서비스 종료 오디오 재생 시작과 동시에 모달 표시
+                    var dialog: OnAirOnDialog? = null
+                    
+                    // 모달 표시와 오디오 재생을 동시에 시작
+                    launch(Dispatchers.Main) {
+                        try {
+                            // 기존 모달이 있으면 먼저 숨기기 (WorkingActivity의 showOnModal() 로직과 동일)
+                            val existingFragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
+                            if (existingFragment != null && existingFragment is OnAirOnDialog && existingFragment.isVisible) {
+                                existingFragment.dismissAllowingStateLoss()
+                            }
+                            
+                            // 새 모달 생성 및 표시
+                            dialog = OnAirOnDialog()
+                            dialog?.show(activity?.supportFragmentManager ?: return@launch, "onAiR on")
+                            Log.d("CallActivity", "✅ [CallActivity] OnAirOnDialog 표시 완료")
+                        } catch (e: Exception) {
+                            Log.e("CallActivity", "❌ [CallActivity] 모달 표시 오류: ${e.message}")
+                            e.printStackTrace()
+                        }
                     }
-                    context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-                    activity?.finish()
+                    
+                    // 오디오 재생 시작 (모달 표시와 동시에)
+                    try {
+                        context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+                        Log.d("CallActivity", "✅ [CallActivity] 서비스 종료 오디오 재생 완료")
+                        
+                        // 모달 숨기기 (WorkingActivity의 hideOnModal() 로직과 동일)
+                        withContext(Dispatchers.Main) {
+                            try {
+                                // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+                                val fragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
+                                if (fragment != null && fragment is OnAirOnDialog) {
+                                    fragment.dismissAllowingStateLoss()
+                                }
+                                
+                                // 방법 2: dialog 참조를 통해 dismiss
+                                dialog?.dismissAllowingStateLoss()
+                                dialog?.dismiss()
+                                
+                                dialog = null
+                                Log.d("CallActivity", "✅ [CallActivity] OnAirOnDialog 숨김 완료")
+                            } catch (e: Exception) {
+                                Log.e("CallActivity", "❌ [CallActivity] 모달 숨기기 오류: ${e.message}")
+                            }
+                        }
+                        
+                        // WorkingActivity로 돌아가기
+                        activity?.finish()
+                        Log.d("CallActivity", "✅ [CallActivity] WorkingActivity로 복귀")
+                    } catch (e: Exception) {
+                        Log.e("CallActivity", "❌ [CallActivity] 오디오 재생 오류: ${e.message}")
+                        e.printStackTrace()
+                        // 오류 발생 시에도 모달 숨기고 Activity 종료
+                        withContext(Dispatchers.Main) {
+                            try {
+                                // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+                                val fragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
+                                if (fragment != null && fragment is OnAirOnDialog) {
+                                    fragment.dismissAllowingStateLoss()
+                                }
+                                
+                                // 방법 2: dialog 참조를 통해 dismiss
+                                dialog?.dismissAllowingStateLoss()
+                                dialog?.dismiss()
+                                dialog = null
+                            } catch (e2: Exception) {
+                                Log.e("CallActivity", "❌ [CallActivity] 모달 숨기기 오류: ${e2.message}")
+                            }
+                        }
+                        activity?.finish()
+                    }
                 }
             }
 
