@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         }
         observeNavigation()
         }
+
     private fun observeNavigation() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
