@@ -803,26 +803,59 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "   답변: ${finalAnswer.answer.take(100)}...")
         Log.i(TAG, "============================================================")
 
-        // 모달 숨기기 ("답변 생성 중..." 모달)
-        runOnUiThread {
-            hideModal()
+        // 모달 숨기기 ("답변 생성 중..." 모달) - 즉시 실행
+        Log.i(TAG, "============================================================")
+        Log.i(TAG, "🔍 [모바일] final_answer 수신 시 모달 숨기기 시작")
+        Log.i(TAG, "   aiOnDialog 상태: ${if (aiOnDialog != null) "존재" else "null"}")
+        if (aiOnDialog != null) {
+            Log.i(TAG, "   aiOnDialog isAdded: ${aiOnDialog?.isAdded}")
+            Log.i(TAG, "   aiOnDialog isVisible: ${aiOnDialog?.isVisible}")
+            Log.i(TAG, "   aiOnDialog isRemoving: ${aiOnDialog?.isRemoving}")
         }
-
+        Log.i(TAG, "============================================================")
+        
+        // 간단한 알림 메시지 카드 숨기기 (확실하게)
+        // final_answer 수신 시 간단한 알림 카드가 아직 표시되어 있을 수 있으므로 확실히 숨김
         runOnUiThread {
-//            binding.taskName.text = "최종 답변: ${finalAnswer.answer.take(200)}..."
+            binding.cvResultError.visibility = View.GONE
+            binding.cvResultError.alpha = 0f
+            binding.cvResultError.clearAnimation()  // 진행 중인 애니메이션 취소
         }
-
-        // 각 섹션별 말풍선 표시 및 오디오 재생
-        val structuredAnswer = finalAnswer.structured_answer
-        if (structuredAnswer != null) {
-            handleStructuredAnswerSections(structuredAnswer)
-        } else {
-            // Fallback: 기존 방식 (전체 오디오 재생)
-            handleFinalAnswer(
-                answer = finalAnswer.answer,
-                audioContent = finalAnswer.audio_content,
-                mimeType = finalAnswer.audio_encoding
-            )
+        
+        // 모달 숨기기 및 간단한 알림 카드가 완전히 사라진 후 섹션별 카드 표시를 위해 딜레이
+        lifecycleScope.launch {
+            // 메인 스레드에서 모달 숨기기 (여러 번 시도)
+            withContext(Dispatchers.Main) {
+                hideModal()
+            }
+            
+            // 모달이 완전히 사라질 때까지 대기
+            delay(200)  // 200ms 딜레이로 모달과 간단한 알림 카드가 완전히 사라지도록 보장
+            
+            // 모달이 여전히 표시되어 있으면 다시 시도
+            val fragment = supportFragmentManager.findFragmentByTag("waiting call")
+            if (fragment != null && fragment is AiOnDialog && fragment.isVisible) {
+                Log.w(TAG, "⚠️ 모달이 여전히 표시 중, 재시도")
+                withContext(Dispatchers.Main) {
+                    hideModal()
+                }
+                delay(100)  // 추가 딜레이
+            }
+            
+            Log.i(TAG, "✅ [모바일] 모달 숨기기 완료")
+            
+            // 각 섹션별 말풍선 표시 및 오디오 재생
+            val structuredAnswer = finalAnswer.structured_answer
+            if (structuredAnswer != null) {
+                handleStructuredAnswerSections(structuredAnswer)
+            } else {
+                // Fallback: 기존 방식 (전체 오디오 재생)
+                handleFinalAnswer(
+                    answer = finalAnswer.answer,
+                    audioContent = finalAnswer.audio_content,
+                    mimeType = finalAnswer.audio_encoding
+                )
+            }
         }
 
         isWaitingForClarification = false
@@ -858,6 +891,10 @@ class WorkingActivity : AppCompatActivity() {
                 val safetyWarningsAudioEncoding = structuredAnswer["safety_warnings_audio_encoding"] as? String
 
                 // 각 섹션별 처리 (순차적으로)
+                Log.i(TAG, "============================================================")
+                Log.i(TAG, "📋 [모바일] 섹션별 처리 시작 (원인 → 조치 → 주의사항)")
+                Log.i(TAG, "============================================================")
+                
                 processSection(
                     sectionName = "원인",
                     markdownText = possibleCausesMarkdown,
@@ -865,9 +902,8 @@ class WorkingActivity : AppCompatActivity() {
                     audioEncoding = possibleCausesAudioEncoding,
                     isLastSection = false
                 ) {
-                    // possible_causes 완료 후 2초 대기
-                    kotlinx.coroutines.delay(2000)
-
+                    // possible_causes 완료 후 바로 다음 섹션 진행
+                    Log.i(TAG, "✅ [모바일] 원인 섹션 완료, 조치 섹션 시작")
                     processSection(
                         sectionName = "조치",
                         markdownText = recommendedActionsMarkdown,
@@ -875,9 +911,8 @@ class WorkingActivity : AppCompatActivity() {
                         audioEncoding = recommendedActionsAudioEncoding,
                         isLastSection = false
                     ) {
-                        // recommended_actions 완료 후 2초 대기
-                        kotlinx.coroutines.delay(2000)
-
+                        // recommended_actions 완료 후 바로 다음 섹션 진행
+                        Log.i(TAG, "✅ [모바일] 조치 섹션 완료, 주의사항 섹션 시작")
                         processSection(
                             sectionName = "주의사항",
                             markdownText = safetyWarningsMarkdown,
@@ -885,19 +920,50 @@ class WorkingActivity : AppCompatActivity() {
                             audioEncoding = safetyWarningsAudioEncoding,
                             isLastSection = true
                         ) {
-                            // 마지막 섹션 완료 → 서비스 종료 처리
-                            Log.i(TAG, "============================================================")
-                            Log.i(TAG, "✅ [모바일] 모든 섹션 처리 완료")
-                            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
-                            Log.i(TAG, "   Type: final_answer")
-                            Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
-                            Log.i(TAG, "============================================================")
-
-                            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-                            if (success) {
-                                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
-                            } else {
-                                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
+                            // 마지막 섹션 완료 → 2초 대기 후 서비스 종료 처리
+                            try {
+                                // 2초 대기
+                                delay(2000)
+                                
+                                // 서비스 종료 오디오 재생 시작과 동시에 모달 표시
+                                withContext(Dispatchers.Main) {
+                                    showOnModal()
+                                }
+                                
+                                // 서비스 종료 오디오 재생
+                                withContext(Dispatchers.Main) {
+                                    try {
+                                        mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
+                                            // 모달 숨기기
+                                            hideOnModal()
+                                            
+                                            // FastAPI로 서비스 완료 이벤트 전송
+                                            socketIoSttClient.sendServiceCompletedAudioCompleted()
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "❌ 서비스 종료 오디오 재생 오류: ${e.message}")
+                                        e.printStackTrace()
+                                        // 오류 발생 시에도 모달 숨기고 이벤트 전송
+                                        hideOnModal()
+                                        socketIoSttClient.sendServiceCompletedAudioCompleted()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ [모바일] 마지막 섹션 완료 후 서비스 종료 처리 중 오류 발생: ${e.message}")
+                                e.printStackTrace()
+                                // 오류 발생 시에도 모달 표시 및 서비스 종료 처리 시도
+                                try {
+                                    withContext(Dispatchers.Main) {
+                                        showOnModal()
+                                        mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
+                                            hideOnModal()
+                                            socketIoSttClient.sendServiceCompletedAudioCompleted()
+                                        }
+                                    }
+                                } catch (e2: Exception) {
+                                    Log.e(TAG, "❌ [모바일] 서비스 종료 처리 재시도 중 오류: ${e2.message}")
+                                    e2.printStackTrace()
+                                }
                             }
                         }
                     }
@@ -922,10 +988,6 @@ class WorkingActivity : AppCompatActivity() {
         isLastSection: Boolean,
         onComplete: suspend () -> Unit
     ) {
-        Log.i(TAG, "============================================================")
-        Log.i(TAG, "📋 [모바일] 섹션 처리 시작: $sectionName")
-        Log.i(TAG, "============================================================")
-
         // 섹션별 CardView와 TextView 매핑
         val (cardView, textView) = when (sectionName) {
             "원인" -> Pair(binding.aiResultCause, binding.aiResultCauseText)
@@ -938,26 +1000,35 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
 
-        // 마크다운 텍스트가 있으면 runSection() 호출하여 UI 표시 및 오디오 재생
-        if (markdownText != null && markdownText.isNotBlank()) {
-            Log.i(TAG, "💬 [UI] $sectionName 마크다운 말풍선 표시 시작")
-            runSection(
-                cardView = cardView,
-                textView = textView,
-                text = markdownText,
-                audioBase64 = audioContent
-            )
-            Log.i(TAG, "✅ [UI] $sectionName 마크다운 말풍선 표시 및 오디오 재생 완료")
-        } else {
-            // 마크다운 텍스트가 없으면 오디오만 재생
-            Log.w(TAG, "⚠️ [UI] $sectionName 마크다운 텍스트가 없습니다. 오디오만 재생합니다.")
-            if (audioContent != null && audioContent.isNotBlank()) {
-                playAudio(audioContent)
+        try {
+            // 마크다운 텍스트가 있으면 runSection() 호출하여 UI 표시 및 오디오 재생
+            if (markdownText != null && markdownText.isNotBlank()) {
+                runSection(
+                    cardView = cardView,
+                    textView = textView,
+                    text = markdownText,
+                    audioBase64 = audioContent
+                )
+            } else {
+                // 마크다운 텍스트가 없으면 오디오만 재생
+                if (audioContent != null && audioContent.isNotBlank()) {
+                    playAudio(audioContent)
+                }
+            }
+
+            // runSection() 완료 후 완료 콜백 호출 (다음 섹션 진행)
+            onComplete()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ [모바일] $sectionName 섹션 처리 중 오류 발생: ${e.message}")
+            e.printStackTrace()
+            // 오류 발생 시에도 완료 콜백 호출하여 다음 섹션으로 진행
+            try {
+                onComplete()
+            } catch (e2: Exception) {
+                Log.e(TAG, "❌ [모바일] 완료 콜백 호출 중 오류 발생: ${e2.message}")
+                e2.printStackTrace()
             }
         }
-
-        // 완료 콜백 호출
-        onComplete()
     }
 
     private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
@@ -1083,9 +1154,12 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private fun handlePlayServiceEndAudio(audioFile: String) {
+        // ⚠️ 주의: 이 함수는 CV 탐지 이상 케이스에서만 사용됨
+        // 섹션별 카드가 표시되는 경우는 마지막 섹션 완료 후 직접 서비스 종료 오디오를 재생함
         Log.i(TAG, "============================================================")
-        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신")
+        Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신 (handlePlayServiceEndAudio)")
         Log.i(TAG, "   파일: $audioFile")
+        Log.i(TAG, "   ⚠️ 주의: 섹션별 카드가 있는 경우는 이 함수를 사용하지 않음")
         Log.i(TAG, "============================================================")
 
         lifecycleScope.launch {
@@ -1105,6 +1179,11 @@ class WorkingActivity : AppCompatActivity() {
                     Log.i(TAG, "📤 FastAPI로 audio_playback_completed (type: service_completed) 이벤트 전송 시작")
                     Log.i(TAG, "============================================================")
 
+                    // 모달 숨기기
+                    runOnUiThread {
+                        hideOnModal()
+                    }
+
                     val success = socketIoSttClient.sendServiceCompletedAudioCompleted()
                     if (success) {
                         Log.i(TAG, "✅ [모바일] FastAPI로 service_completed 이벤트 전송 완료")
@@ -1123,24 +1202,146 @@ class WorkingActivity : AppCompatActivity() {
     }
  
     private fun showModal(statusMessage: String) {
-        if (aiOnDialog?.isVisible == true) return
+        // 이미 모달이 표시되어 있으면 숨기고 새로 표시
+        if (aiOnDialog != null) {
+            Log.d(TAG, "showModal: 기존 모달이 존재함, 먼저 숨김")
+            try {
+                aiOnDialog?.dismiss()
+                aiOnDialog?.dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 기존 모달 dismiss 오류: ${e.message}")
+            }
+            aiOnDialog = null
+        }
         aiOnDialog = AiOnDialog(statusMessage)
         aiOnDialog?.show(supportFragmentManager, "waiting call")
+        Log.d(TAG, "showModal: 모달 표시 완료 - $statusMessage")
     }
     private fun showOnModal() {
-        Log.d("show on modal", "모달 호출")
-        if (onAirOnDialog?.isVisible == true) return
-        onAirOnDialog = OnAirOnDialog()
-        onAirOnDialog?.show(supportFragmentManager, "onAiR on")
+        try {
+            // 기존 모달이 있으면 먼저 숨기기
+            if (onAirOnDialog != null && onAirOnDialog?.isVisible == true) {
+                onAirOnDialog?.dismissAllowingStateLoss()
+                onAirOnDialog = null
+            }
+            
+            // 새 모달 생성 및 표시
+            onAirOnDialog = OnAirOnDialog()
+            onAirOnDialog?.show(supportFragmentManager, "onAiR on")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ [모바일] showOnModal() 오류: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     private fun hideModal() {
-        aiOnDialog?.dismiss()
+        Log.d(TAG, "hideModal() 호출")
+        try {
+            // 방법 1: supportFragmentManager에서 직접 찾아서 dismiss (가장 확실한 방법)
+            try {
+                val fragment = supportFragmentManager.findFragmentByTag("waiting call")
+                if (fragment != null && fragment is AiOnDialog) {
+                    Log.d(TAG, "supportFragmentManager에서 모달 발견 (isAdded: ${fragment.isAdded}, isVisible: ${fragment.isVisible}, isRemoving: ${fragment.isRemoving})")
+                    // isAdded 체크를 제거하고 무조건 dismiss 시도 (더 강력하게)
+                    try {
+                        fragment.dismissAllowingStateLoss()  // 상태 손실 허용하여 확실히 닫기
+                        Log.d(TAG, "✅ FragmentManager를 통해 모달 dismiss 완료")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Fragment dismiss 중 오류 발생, dismiss() 재시도: ${e.message}")
+                        try {
+                            fragment.dismiss()  // 일반 dismiss도 시도
+                            Log.d(TAG, "✅ FragmentManager를 통해 모달 dismiss() 완료")
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "❌ Fragment dismiss()도 실패: ${e2.message}")
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "supportFragmentManager에서 모달을 찾을 수 없음")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ supportFragmentManager에서 모달 dismiss 오류: ${e.message}")
+                e.printStackTrace()
+            }
+            
+            // 방법 2: FragmentManager의 모든 Fragment를 순회하면서 DialogFragment 찾기
+            try {
+                val fragments = supportFragmentManager.fragments
+                for (frag in fragments) {
+                    if (frag is AiOnDialog && frag.isVisible) {
+                        Log.d(TAG, "FragmentManager에서 표시 중인 AiOnDialog 발견, dismiss 시도")
+                        try {
+                            frag.dismissAllowingStateLoss()
+                            Log.d(TAG, "✅ FragmentManager 순회를 통해 모달 dismiss 완료")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ FragmentManager 순회 dismiss 오류: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ FragmentManager 순회 중 오류: ${e.message}")
+                e.printStackTrace()
+            }
+            
+            // 방법 3: aiOnDialog를 통해 dismiss (백업 방법)
+            if (aiOnDialog != null) {
+                Log.d(TAG, "aiOnDialog가 존재함, dismiss() 호출")
+                try {
+                    // isAdded 체크를 제거하고 무조건 dismiss 시도
+                    aiOnDialog?.dismissAllowingStateLoss()  // 상태 손실 허용하여 확실히 닫기
+                    Log.d(TAG, "✅ aiOnDialog를 통해 모달 dismiss 완료")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ aiOnDialog dismissAllowingStateLoss 오류, dismiss() 재시도: ${e.message}")
+                    try {
+                        aiOnDialog?.dismiss()  // 일반 dismiss도 시도
+                        Log.d(TAG, "✅ aiOnDialog를 통해 모달 dismiss() 완료")
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "❌ aiOnDialog dismiss()도 실패: ${e2.message}")
+                        e2.printStackTrace()
+                    }
+                }
+            } else {
+                Log.d(TAG, "aiOnDialog가 null임")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ hideModal() 전체 오류: ${e.message}")
+            e.printStackTrace()
+        }
+        
+        // aiOnDialog 참조 초기화
         aiOnDialog = null
+        Log.d(TAG, "hideModal() 완료")
     }
     private fun hideOnModal() {
-        onAirOnDialog?.dismiss()
-        onAirOnDialog = null
+        try {
+            // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+            try {
+                val fragment = supportFragmentManager.findFragmentByTag("onAiR on")
+                if (fragment != null && fragment is OnAirOnDialog) {
+                    fragment.dismissAllowingStateLoss()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ FragmentManager에서 OnAir 모달 dismiss 오류: ${e.message}")
+            }
+            
+            // 방법 2: onAirOnDialog를 통해 dismiss
+            if (onAirOnDialog != null) {
+                try {
+                    onAirOnDialog?.dismissAllowingStateLoss()
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ onAirOnDialog dismiss 오류: ${e.message}")
+                    try {
+                        onAirOnDialog?.dismiss()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "❌ onAirOnDialog dismiss()도 실패: ${e2.message}")
+                    }
+                }
+            }
+            
+            onAirOnDialog = null
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ hideOnModal() 전체 오류: ${e.message}")
+            e.printStackTrace()
+        }
     }
     private fun showCvAnswer() {
         lifecycleScope.launch {
@@ -1149,6 +1350,11 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "✅ [모바일] CV 탐지 이상 수신 (showCvAnswer 함수)")
                 Log.i(TAG, "   메시지: ${value.message}")
                 Log.i(TAG, "============================================================")
+                
+                // "AI 서포터가 오류 탐지 중" 모달 숨기기
+                runOnUiThread {
+                    hideModal()
+                }
                 
                 binding.cvResultError.visibility = View.VISIBLE
                 withContext(Dispatchers.Main) {
@@ -1167,9 +1373,11 @@ class WorkingActivity : AppCompatActivity() {
                     Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
                 }
                 
-                // 오디오 재생 완료 후 바로 카드 fadeOut
+                // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
+                binding.cvResultError.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+                // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
                 withContext(Dispatchers.Main) {
-                    binding.cvResultError.fadeOut()
+                    binding.cvResultError.visibility = View.GONE
                 }
                 
                 // 모달 표시 ("답변 생성 중...")
@@ -1221,6 +1429,7 @@ class WorkingActivity : AppCompatActivity() {
         text: String,
         audioBase64: String?
     ) {
+        // 이전 섹션 카드가 완전히 사라졌는지 확인
         cardView.visibility = View.VISIBLE
         withContext(Dispatchers.Main) {
             cardView.slideIn()
@@ -1228,10 +1437,13 @@ class WorkingActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             showTypingEffect(textView, text)
         }
+        // 오디오 재생 완료까지 대기
         playAudio(audioBase64)
-        delay(2000)
+        // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
+        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+        // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
         withContext(Dispatchers.Main) {
-            cardView.fadeOut()
+            cardView.visibility = View.GONE
         }
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
@@ -1245,7 +1457,10 @@ class WorkingActivity : AppCompatActivity() {
     }
     suspend fun playAudio(base64: String?) {
         Log.d(TAG, "오디오 base64: $base64")
-        if (base64 == null) return
+        if (base64 == null || base64.isBlank()) {
+            Log.w(TAG, "⚠️ 오디오 base64가 null이거나 비어있습니다")
+            return
+        }
 
         val audioBytes = Base64.decode(base64, Base64.DEFAULT)
         val tempFile = File.createTempFile("tts", ".mp3")
@@ -1259,9 +1474,28 @@ class WorkingActivity : AppCompatActivity() {
         player.setOnCompletionListener {
             completion.complete(Unit)
             player.release()
+            tempFile.delete()  // 임시 파일 삭제
         }
-        player.prepare()
-        player.start()
+        player.setOnErrorListener { _, what, extra ->
+            Log.e(TAG, "❌ MediaPlayer 오류: what=$what, extra=$extra")
+            completion.complete(Unit)  // 오류 발생 시에도 완료 처리
+            player.release()
+            tempFile.delete()
+            true
+        }
+        try {
+            player.prepare()
+            player.start()
+            Log.d(TAG, "✅ 오디오 재생 시작")
+            completion.await()  // 재생 완료까지 대기
+            Log.d(TAG, "✅ 오디오 재생 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 오디오 재생 오류: ${e.message}")
+            e.printStackTrace()
+            completion.complete(Unit)
+            player.release()
+            tempFile.delete()
+        }
 
         completion.await()
     }

@@ -501,12 +501,8 @@ async def handle_intent_audio_completed(sid, data):
 
 =======
             
-            if not has_anomaly and modules:
-                has_anomaly = "Normal"
-            
-            # has_anomaly가 "Normal" 문자열인지 확인
-            is_normal = (has_anomaly == "Normal")
-            is_anomaly = (has_anomaly is True or (isinstance(has_anomaly, bool) and has_anomaly))
+            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
+            has_real_anomaly = len(filtered_anomalies) > 0 or len(filtered_msgs) > 0
             
 >>>>>>> 709311eea296ab9c0ff07644b7afa026d9341d93
             has_thermo = any(m["label"] == "thermometer" for m in modules)
@@ -546,13 +542,13 @@ async def handle_intent_audio_completed(sid, data):
                     "message": "thermometer 과열"
                 }
             else:
-                    cv_result = {
-                        "detected": has_anomaly,
-                        "device_type": cv_raw.get("device_type"),
-                        "modules": modules,
-                        "anomalies": filtered_anomalies,
-                        "message": filtered_msgs
-                    }
+                cv_result = {
+                    "detected": detected,
+                    "device_type": cv_raw.get("device_type"),
+                    "modules": modules,
+                    "anomalies": filtered_anomalies,
+                    "message": filtered_msgs
+                }
             
             # ========================================
             # 테스트용 하드코딩 (주석 처리 - 테스트 시에만 사용)
@@ -807,18 +803,16 @@ async def handle_intent_audio_completed(sid, data):
                     import traceback
                     traceback.print_exc()
                     print("=" * 60)
-                    # 전송 실패 시에도 전체 정비 가이드 생성
+                    # 전송 실패 시에도 _pending_cv_detection은 유지 (audio_playback_completed에서 처리)
                 
-                # ⚠️ 중요: 간단한 알림 전송 직후 바로 전체 정비 가이드 생성 시작
-                # 모바일에서 간단한 알림 오디오를 재생하는 동안 백그라운드에서 전체 정비 가이드 생성
+                # ⚠️ 중요: 간단한 알림 전송 후 전체 정비 가이드는 생성하지 않음
+                # 모바일에서 간단한 알림 오디오 재생 완료 후 audio_playback_completed 이벤트를 받으면
+                # 그때 handle_audio_playback_completed에서 generate_final_maintenance_guide()를 호출함
                 print("=" * 60)
-                print("📚 [단계 11-1] 간단한 알림 전송 직후 전체 정비 가이드 생성 시작 (백그라운드)")
-                print("   💡 모바일에서 간단한 알림 오디오 재생 중에도 전체 정비 가이드 생성 진행")
+                print("📚 [단계 11-1] 간단한 알림 전송 완료")
+                print("   💡 모바일에서 간단한 알림 오디오 재생 완료 후 전체 정비 가이드 생성 시작")
+                print("   💡 audio_playback_completed (type: cv_detection_anomaly) 수신 시 generate_final_maintenance_guide() 호출")
                 print("=" * 60)
-                
-                # 바로 전체 정비 가이드 생성 로직 실행
-                # (모바일에서 간단한 알림 오디오 재생과 병렬로 진행)
-                await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
                 
                 # 라즈베리파이로 CV 탐지 성공 알림 (기존 로직 유지)
                 # CV 탐지 성공 시 마이크는 OFF 상태 유지 (켜지 않음)
@@ -1087,33 +1081,32 @@ async def handle_audio_playback_completed(sid, data):
         
         elif audio_type == "cv_detection_anomaly":
             # CV 탐지 알림 TTS 재생 완료 이벤트 수신
-            # ⚠️ 주의: 이미 handle_intent_audio_completed에서 간단한 알림 전송 직후
-            # 전체 정비 가이드가 생성되어 전송되었을 수 있음
+            # ⚠️ 중요: 간단한 알림 오디오 재생 완료 후 전체 정비 가이드 생성 시작
             print("=" * 60)
             print(f"✅ [FastAPI] CV 탐지 알림 TTS 재생 완료 이벤트 수신")
+            print("   💡 간단한 알림 오디오 재생 완료 → 전체 정비 가이드 생성 시작")
             print("=" * 60)
             
-            # _pending_cv_detection이 None이면 이미 전체 정비 가이드가 생성되어 전송됨
+            # _pending_cv_detection이 없으면 오류
             if _pending_cv_detection is None:
                 print("=" * 60)
-                print("ℹ️ [FastAPI] _pending_cv_detection이 None입니다.")
-                print("   이미 전체 정비 가이드가 생성되어 전송되었습니다.")
-                print("   추가 처리 없이 종료합니다.")
+                print("⚠️ [FastAPI] _pending_cv_detection이 None입니다.")
+                print("   CV 탐지 결과가 저장되지 않았습니다.")
+                print("   전체 정비 가이드를 생성할 수 없습니다.")
                 print("=" * 60)
             else:
-                # _pending_cv_detection이 남아있으면 (타임아웃 등으로 인해 아직 생성되지 않은 경우)
-                # 전체 정비 가이드 생성 및 전송
-                print("=" * 60)
-                print("⚠️ [FastAPI] _pending_cv_detection이 아직 남아있습니다.")
-                print("   전체 정비 가이드 생성이 아직 완료되지 않았습니다.")
-                print("   지금 생성합니다.")
-                print("=" * 60)
-                
                 # _pending_cv_detection에서 CV 탐지 결과 가져오기
                 device_type = _pending_cv_detection["device_type"]
                 modules = _pending_cv_detection["modules"]
                 anomalies = _pending_cv_detection["anomalies"]
                 cv_result = _pending_cv_detection["cv_result"]
+                
+                print("=" * 60)
+                print("📚 [단계 12] 전체 정비 가이드 생성 시작")
+                print(f"   device_type: {device_type}")
+                print(f"   modules: {len(modules)}개")
+                print(f"   anomalies: {len(anomalies)}개")
+                print("=" * 60)
                 
                 # 전체 정비 가이드 생성 및 전송 (공통 함수 사용)
                 await generate_final_maintenance_guide(device_type, modules, anomalies, cv_result)
