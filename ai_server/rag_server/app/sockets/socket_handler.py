@@ -497,14 +497,10 @@ async def handle_intent_audio_completed(sid, data):
                 msg for msg in raw_messages
                 if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
             ]
-<<<<<<< HEAD
-
-=======
             
             # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
             has_real_anomaly = len(filtered_anomalies) > 0 or len(filtered_msgs) > 0
             
->>>>>>> 709311eea296ab9c0ff07644b7afa026d9341d93
             has_thermo = any(m["label"] == "thermometer" for m in modules)
             if has_thermo:
                 cv_result = {
