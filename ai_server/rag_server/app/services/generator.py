@@ -18,39 +18,7 @@ else:
 
 
 # ==============================
-# 🧩 1. Answerability Gate (Gemini Flash)
-# ==============================
-def llm_self_check(query: str, snippets: List[str]) -> bool:
-    """
-    Gemini Flash 기반 Self-Check (Clarify 단계)
-    """
-    prompt = (
-        "You are an answerability checker. "
-        "If the following snippets are sufficient to answer the query, "
-        "respond ONLY with YES, otherwise respond ONLY with NO.\n\n"
-        f"Query: {query}\n\nSnippets:\n- " + "\n- ".join(snippets[:5])
-    )
-
-    if not gms_api_key:
-        return True  # API 키가 없으면 기본값으로 True 반환
-    
-    try:
-        print(f"🔵 [Self-Check] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
-        text = call_gemini_via_gms(
-            model=settings.GMS_MODEL_GATE,
-            prompt=prompt,
-            api_key=gms_api_key
-        ).strip().upper()
-        result = text.startswith("Y")
-        print(f"✅ [Self-Check] Gemini-Flash API 호출 성공: {result} (응답: {text[:50]})")
-        return result
-    except Exception as e:
-        print(f"❌ [Self-Check] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
-        return True
-
-
-# ==============================
-# 🧠 2. Final Generator (GPT-4o via GMS) - Structured Output + TTS 친화적
+# 🧠 Final Generator (GPT-4o via GMS) - Structured Output + TTS 친화적
 # ==============================
 
 def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Dict[str, Any]]) -> str:

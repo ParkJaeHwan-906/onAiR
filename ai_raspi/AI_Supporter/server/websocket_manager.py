@@ -14,8 +14,6 @@ class ConnectionManager:
         self.lock = asyncio.Lock()
         self.stt_mode = "buffered"  # "buffered" 또는 "streaming"
         self.mic_stream = None  # 마이크 스트림 인스턴스
-        self.streaming_stt_instance = None  # Streaming STT 인스턴스 참조
-        self.stop_streaming_sessions = set()  # 종료할 세션 ID 집합
         self.service_completed = False  # 서비스 완료 플래그 (GPT-4o 답변 생성 및 TTS 완료 후 True)
         self.audio_streamer = None  # WebRTC 오디오 스트리머 인스턴스
 
@@ -65,31 +63,6 @@ class ConnectionManager:
         """등록된 마이크 스트림 인스턴스를 반환합니다."""
         return self.mic_stream
     
-    def set_streaming_stt_instance(self, streaming_stt_instance):
-        """
-        Streaming STT 인스턴스를 등록합니다.
-        
-        Args:
-            streaming_stt_instance: GcpStreamingStt 인스턴스
-        """
-        self.streaming_stt_instance = streaming_stt_instance
-        logger.info("✅ Streaming STT 인스턴스가 등록되었습니다.")
-    
-    def get_stop_streaming_session(self, session_id: str) -> bool:
-        """세션 ID에 대한 종료 신호 확인 및 제거"""
-        if session_id in self.stop_streaming_sessions:
-            self.stop_streaming_sessions.remove(session_id)
-            return True
-        return False
-    
-    def add_stop_streaming_session(self, session_id: str):
-        """종료할 세션 ID 추가"""
-        self.stop_streaming_sessions.add(session_id)
-        logger.info(f"🛑 Streaming STT 종료 신호 등록: session_id={session_id}")
-        
-        # Streaming STT 인스턴스에 직접 종료 신호 전달
-        if self.streaming_stt_instance:
-            self.streaming_stt_instance.stop_session(session_id)
 
     async def broadcast(self, message):
         """

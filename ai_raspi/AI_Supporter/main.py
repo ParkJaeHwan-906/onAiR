@@ -13,17 +13,6 @@ from bridge.stt_bridge_client import SttBridgeClient
 from server.app import manager  # manager만 사용 (app은 레거시)
 from config import settings
 
-# Streaming STT는 Python 3.10에서만 동작하므로, 
-# Python 3.13에서는 인스턴스를 생성하지 않고 None으로 설정
-# 실제 Streaming STT는 Python 3.10 프로세스에서 처리됨
-try:
-    from stt.gcp_stt_stream import GcpStreamingStt
-    from stt.mic_stream import MicStream
-    STREAMING_STT_AVAILABLE = True
-except ImportError as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"⚠️ Streaming STT를 사용할 수 없습니다 (Python 3.10에서만 동작): {e}")
-    STREAMING_STT_AVAILABLE = False
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -43,22 +32,6 @@ def run_socketio_client():
     # Socket.IO 클라이언트 초기화
     socketio_client = SocketIOClient(manager=manager)
     manager.set_socketio_client(socketio_client)
-    
-    # Streaming STT 인스턴스 생성 및 등록 (Python 3.13에서 사용 가능한 경우)
-    # 주의: 실제 Streaming STT는 Python 3.10에서 실행되지만,
-    # cv_detection_failed 이벤트 처리를 위해 인스턴스가 필요함
-    if STREAMING_STT_AVAILABLE:
-        try:
-            # MicStream은 Python 3.10에서만 사용 가능하므로 None으로 설정
-            # 실제 마이크 스트림은 Python 3.10 프로세스에서 관리됨
-            streaming_stt = GcpStreamingStt(socketio_client=socketio_client)
-            manager.set_streaming_stt_instance(streaming_stt)
-            logger.info("✅ Streaming STT 인스턴스 등록 완료")
-        except Exception as e:
-            logger.warning(f"⚠️ Streaming STT 인스턴스 생성 실패: {e}")
-            logger.warning("   Streaming STT는 Python 3.10 프로세스에서 처리됩니다.")
-    else:
-        logger.info("ℹ️ Streaming STT는 Python 3.10 프로세스에서 처리됩니다.")
     
     # 브리지 클라이언트 초기화
     bridge_client = SttBridgeClient()

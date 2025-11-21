@@ -4,8 +4,6 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 
 설계 요구사항:
 1. 라즈베리파이로부터 STT 텍스트 직접 수신 (WebSocket)
-2. 모바일과 Clarify 턴 주고받기 (WebSocket)
-3. Streaming STT 처리
 """
 import socketio
 import cv2
@@ -19,10 +17,9 @@ from typing import Dict, Any, Optional
 from app.services.intent_service import classify_intent
 from app.services import memory
 from app.services.retrieve_service import hybrid_retrieve, rerank
-from app.services.answerability import comprehensive_evidence_check, normalize_query_style
+from app.services.answerability import normalize_query_style
 from app.services.generator import llm_generate_answer, generate_cv_detection_notification
 from app.services.tts_service import text_to_speech
-from app.services.llm_service import clarify_query
 from app.ar import motion_core
 import httpx
 from app.services.yolo_overlay import get_latest_yolo_result
@@ -37,7 +34,6 @@ async def run_anomaly_detection():
         res.raise_for_status()
         return res.json()
 
-# Gemini 모델 import (clarify_qa_turn에서 사용)
 try:
     import google.generativeai as genai
     from app.core.config import settings
@@ -61,8 +57,6 @@ sio = socketio.AsyncServer(
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 
-# Clarify 세션 추적 (session_id → 현재 Clarify 턴 정보)
-clarify_sessions: Dict[str, Dict[str, Any]] = {}  # { session_id: { turn_id, history, ... } }
 
 # Intent 결과 저장 (CV 로직 실행 대기용)
 pending_intents: Dict[str, str] = {}  # { session_id 또는 임시 키: "AI_SUPPORTER" | "OPERATOR" }
@@ -164,10 +158,6 @@ def init_socketio():
     sio.on("wakeword_audio_completed")(handle_wakeword_audio_completed)  # 모바일에서 음성 파일 재생 완료 이벤트 수신
     sio.on("intent_audio_completed")(handle_intent_audio_completed)  # 모바일에서 Intent 음성 파일 재생 완료 이벤트 수신 (AI_SUPPORTER용)
     sio.on("audio_playback_completed")(handle_audio_playback_completed)  # 모바일에서 오디오 재생 완료 이벤트 수신 (CV 탐지 실패, Clarify Q&A 턴 등)
-    sio.on("start_clarify_session")(handle_start_clarify_session)
-    sio.on("end_clarify_session")(handle_end_clarify_session)
-    sio.on("clarify_response")(handle_clarify_response)  # 모바일에서 오는 Clarify 응답 수신
-    sio.on("clarify_input")(handle_clarify_input)  # 모바일에서 오는 Clarify 입력 수신 (Socket.IO를 통해)
     sio.on("control_raspi")(handle_control_raspi)  # 모바일에서 라즈베리파이 제어 명령
     sio.on("video_frame")(handle_video_frame)
     sio.on("audio_frame")(handle_audio_frame)  
@@ -1002,7 +992,6 @@ async def handle_audio_playback_completed(sid, data):
     - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="cv_detection_normal": CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="cv_detection_anomaly": CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
-    - type="clarify_qa_turn": Clarify Q&A 턴 TTS 재생 완료 → 다음 Streaming STT 질문 대기
     - type="final_answer": 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
     - type="service_completed": 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
     """
@@ -1056,9 +1045,6 @@ async def handle_audio_playback_completed(sid, data):
             # 전역 변수 초기화
             _pending_cv_detection = None
             
-            # 주의: CV 탐지 실패 시 Streaming STT 로직은 제거되었습니다.
-            # 현재는 CV 탐지 실패/정상 모두 WebRTC 오디오 스트리밍 대기 상태로 바로 이동합니다.
-            # Streaming STT → Clarify 루프는 다른 경로(모바일에서 직접 Clarify 세션 시작)에서만 사용됩니다.
             
         elif audio_type == "cv_detection_normal":
             # CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
@@ -1165,7 +1151,6 @@ async def handle_stt_result(sid, data):
     
     설계 요구사항:
     - 버퍼링 STT: type="final" → Gemini-Flash로 Intent 분류 → 모바일 전송
-    - Streaming STT: type="interim" 또는 "final" → Redis 세션에 추가 → Clarify 처리
     """
     print("=" * 60)
     print(f"🔔 [이벤트 수신] stt_result 이벤트 도착")
@@ -1286,684 +1271,7 @@ async def handle_stt_result(sid, data):
                 "reasoning": f"Intent 분류 중 오류 발생: {e}",
                 "stt_confidence": confidence
             })
-    
-    # Streaming STT (Clarify 루프 중)
-    elif session_id:
-        # Redis 세션에 STT 텍스트 추가
-        memory.append_event(session_id, {
-            "role": "user",
-            "type": "streaming_stt",
-            "data": {
-                "text": stt_text,
-                "type": stt_type,
-                "confidence": confidence
-            }
-        })
-        
-        # type="final"이면 Clarify 처리 시작 (새로운 방식: clarify_qa_turn)
-        if stt_type == "final":
-            print("=" * 60)
-            print(f"📝 [단계 13] FastAPI 서버: Streaming STT 결과 수신 [raspi]")
-            print(f"   Session ID: {session_id}")
-            print(f"   타입: {stt_type}, 텍스트: {stt_text}")
-            print(f"   신뢰도: {confidence}")
-            print("=" * 60)
-            print("=" * 60)
-            print(f"🤖 [FastAPI] Gemini-Flash 호출 시작 (Clarify 필요 여부 판단)")
-            print(f"   Session ID: {session_id}")
-            print("=" * 60)
-            await wait_for_next_step("Streaming STT 결과 수신 완료", "13")
-            await process_clarify_qa_turn(session_id, stt_text)
-        
-        print(f"✅ Streaming STT 수신 [session={session_id}]: '{stt_text[:50]}...'")
 
-
-# ========================================
-# Clarify 루프 처리
-# ========================================
-
-async def process_clarify_turn(session_id: str, query: str, force_green: bool = False):
-    """
-    Clarify 턴 처리:
-    1. Redis 히스토리 로드
-    2. Hybrid Search + Rerank
-    3. Evidence Check (RED/YELLOW/GREEN)
-    4. RED/YELLOW → Clarify 질문 생성 (Gemini Flash)
-    5. GREEN → 최종 답변 생성 (GPT-4o)
-    6. 모바일로 WebSocket 이벤트 전송
-    """
-    # 히스토리 로드
-    history = memory.get_history(session_id)
-    history_context = ""
-    
-    # 최근 사용자 query 2개 결합
-    user_lines = []
-    for ev in reversed(history):
-        if ev.get("role") == "user" and ev.get("type") in ["query", "streaming_stt"]:
-            text = ev.get("data", {}).get("text", "") or ev.get("data", {}).get("query", "")
-            if text:
-                user_lines.append(text)
-            if len(user_lines) >= 2:
-                break
-    
-    if user_lines:
-        history_context = " \n".join(reversed(user_lines))
-    
-    effective_query = f"{history_context} \n{query}" if history_context else query
-    normalized_query = normalize_query_style(effective_query)
-    
-    # Hybrid Search + Rerank
-    base_hits = hybrid_retrieve(normalized_query, top_k=8)
-    hits = rerank(normalized_query, base_hits, top_k=6)
-    used_hits = hits[:5]
-    
-    if not hits:
-        await broadcast_to("mobile", "clarify_turn", {
-            "session_id": session_id,
-            "turn_id": len(clarify_sessions.get(session_id, {}).get("turns", [])) + 1,
-            "status": "error",
-            "message": "관련 문서를 찾을 수 없습니다."
-        })
-        return
-    
-    # Evidence Check
-    need_clarify, evidence_stats = comprehensive_evidence_check(effective_query, used_hits)
-    gate_decision = evidence_stats.get("gate_decision")
-    
-    # force_green=True면 강제로 GREEN 처리
-    if force_green:
-        gate_decision = "GREEN"
-        need_clarify = False
-        evidence_stats["gate_decision"] = "GREEN"
-        evidence_stats["gate_rule"] = "FORCED_GREEN"
-    
-    # Clarify 세션 정보 업데이트
-    if session_id not in clarify_sessions:
-        clarify_sessions[session_id] = {
-            "turns": [],
-            "started_at": None
-        }
-    
-    turn_id = len(clarify_sessions[session_id]["turns"]) + 1
-    
-    # RED/YELLOW → Clarify 질문 생성
-    if need_clarify or gate_decision != "GREEN":
-        from app.services.answerability import make_clarify_prompt
-        
-        clarified_result = make_clarify_prompt(effective_query, used_hits, evidence_stats)
-        
-        # Redis에 저장
-        memory.append_event(session_id, {
-            "role": "system",
-            "type": "clarify",
-            "data": {
-                "turn_id": turn_id,
-                "gate_decision": gate_decision,
-                "clarify_guidance": clarified_result.get("guide", ""),
-                "evidence_stats": evidence_stats
-            }
-        })
-        
-        clarify_sessions[session_id]["turns"].append({
-            "turn_id": turn_id,
-            "status": "clarify",
-            "gate_decision": gate_decision
-        })
-        
-        # 모바일로 Clarify 턴 전송
-        await broadcast_to("mobile", "clarify_turn", {
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "status": "clarify",
-            "gate_decision": gate_decision,
-            "question": clarified_result.get("guide", ""),
-            "examples": clarified_result.get("examples", []),
-            "evidence_trace": evidence_stats.get("evidence_trace", {}),
-            "missing_info": evidence_stats.get("missing_info", [])
-        })
-        
-        print(f"📤 Clarify 턴 {turn_id} 전송 [session={session_id}]: {gate_decision}")
-    
-    # GREEN → 최종 답변 생성
-    else:
-        snippets = [h["source"]["content"] for h in used_hits]
-        answer_result = llm_generate_answer(effective_query, snippets, used_hits)
-        
-        # 구조화된 답변에서 TTS 텍스트 추출
-        answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
-        structured_answer = answer_result  # 전체 구조화된 답변
-        
-        # TTS 생성 (TTS 친화적 텍스트 사용)
-        try:
-            tts_result = text_to_speech(answer_text)
-            audio_url = None  # 또는 파일 저장 후 URL 생성
-        except Exception as e:
-            print(f"⚠️ TTS 생성 실패: {e}")
-            tts_result = None
-        
-        # Redis에 저장
-        memory.append_event(session_id, {
-            "role": "assistant",
-            "type": "final_answer",
-            "data": {
-                "answer": answer_text,
-                "citations": [
-                    {
-                        "section": h["source"]["section"],
-                        "pages": h["source"]["pages"],
-                    }
-                    for h in used_hits[:3]
-                ]
-            }
-        })
-        
-        # 세션 초기화
-        memory.clear_history(session_id)
-        clarify_sessions.pop(session_id, None)
-        
-        # 모바일로 최종 답변 전송 (구조화된 답변 포함)
-        await broadcast_to("mobile", "final_answer", {
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "status": "completed",
-            "answer": answer_text,  # TTS 친화적 텍스트
-            "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
-            "audio_content": tts_result.get("audio_content") if tts_result else None,
-            "audio_encoding": tts_result.get("audio_encoding") if tts_result else None,
-            "citations": structured_answer.get("citations", [
-                {
-                    "section": h["source"]["section"],
-                    "pages": h["source"]["pages"],
-                }
-                for h in used_hits[:3]
-            ])
-        })
-        
-        print(f"✅ 최종 답변 생성 완료 [session={session_id}]")
-
-
-# ========================================
-# 새로운 Clarify 루프 처리 (작업자 질문 + LLM 답변)
-# ========================================
-
-async def process_clarify_qa_turn(session_id: str, user_question: str):
-    """
-    Streaming STT 세션 중 Clarify 질문/답변 턴 처리:
-    1. 히스토리 컨텍스트 구성
-    2. Hybrid Search + Rerank (RAG 기반)
-    3. Evidence Check (RED/YELLOW/GREEN) - RAG 기반 판단
-    4. RED/YELLOW → Clarify 질문 생성 (Gemini-Flash) 및 LLM 답변 생성
-    5. TTS 변환 후 clarify_qa_turn 이벤트 전송
-    6. GREEN → GPT-4o로 최종 답변 생성 + TTS + 모바일 전송
-    """
-    # 히스토리 로드
-    history = memory.get_history(session_id)
-    
-    # 세션 정보 가져오기 또는 생성
-    if session_id not in clarify_sessions:
-        clarify_sessions[session_id] = {
-            "turns": [],
-            "history": []
-        }
-    
-    turn_id = len(clarify_sessions[session_id]["turns"]) + 1
-    
-    try:
-        # 1. 히스토리 컨텍스트 구성 (이전 대화 기록 반영)
-        history_context = ""
-        user_lines = []
-        clarify_lines = []  # Clarify 질문/답변도 포함
-        
-        for ev in reversed(history):
-            role = ev.get("role")
-            event_type = ev.get("type")
-            data = ev.get("data", {})
-            
-            # 사용자 질문 (스트리밍 STT)
-            if role == "user" and event_type == "streaming_stt":
-                text = data.get("text", "")
-                if text:
-                    user_lines.append(text)
-            
-            # Clarify 질문/답변 (시스템)
-            elif role == "system" and event_type == "clarify":
-                clarify_guidance = data.get("clarify_guidance", "")
-                if clarify_guidance:
-                    clarify_lines.append(f"시스템 질문: {clarify_guidance}")
-            
-            if len(user_lines) >= 2:  # 최근 2개 질문 사용
-                break
-        
-        if user_lines:
-            history_context = " \n".join(reversed(user_lines))
-        
-        # Clarify 맥락 추가 (이전 Clarify 질문 반영)
-        if clarify_lines:
-            history_context += "\n\n" + "\n".join(reversed(clarify_lines[-2:]))  # 최근 2개 Clarify 포함
-        
-        effective_query = f"{history_context} \n{user_question}" if history_context else user_question
-        normalized_query = normalize_query_style(effective_query)
-        
-        # 2. Hybrid Search + Rerank (RAG 기반)
-        print("=" * 60)
-        print(f"🔍 [단계 13-2] Hybrid Search + Rerank 시작")
-        print(f"   정규화된 쿼리: {normalized_query[:50]}...")
-        print("=" * 60)
-        base_hits = hybrid_retrieve(normalized_query, top_k=8)
-        hits = rerank(normalized_query, base_hits, top_k=6)
-        used_hits = hits[:5]
-        print(f"✅ Hybrid Search + Rerank 완료: {len(hits)}개 문서 검색")
-        await wait_for_next_step("Hybrid Search + Rerank 완료", "13-2")
-        
-        if not hits:
-            await broadcast_to("mobile", "clarify_qa_turn", {
-                "session_id": session_id,
-                "turn_id": turn_id,
-                "user_question": user_question,
-                "llm_answer": "관련 문서를 찾을 수 없습니다.",
-                "audio_content": None,
-                "audio_encoding": None,
-                "need_clarify": True,
-                "status": "error"
-            })
-            return
-        
-        # 3. RAG 기반 Evidence Check (RED/YELLOW/GREEN)
-        print("=" * 60)
-        print(f"🔍 [단계 13-3] Evidence Check 시작 (RED/YELLOW/GREEN 판단)")
-        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-        print("=" * 60)
-        need_clarify, evidence_stats = comprehensive_evidence_check(effective_query, used_hits)
-        gate_decision = evidence_stats.get("gate_decision")
-        print("=" * 60)
-        print(f"✅ [FastAPI] Evidence Check 완료")
-        print(f"   Gate Decision: {gate_decision}")
-        print(f"   Need Clarify: {need_clarify}")
-        print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-        if gate_decision == "RED":
-            print("   🔴 RED: 충분한 정보 없음 → Clarify 질문 생성 필요")
-        elif gate_decision == "YELLOW":
-            print("   🟡 YELLOW: 부분적 정보 있음 → Clarify 질문 생성 필요")
-        elif gate_decision == "GREEN":
-            print("   🟢 GREEN: 충분한 정보 있음 → GPT-4o로 최종 답변 생성")
-        print("=" * 60)
-        await wait_for_next_step("Evidence Check 완료", "13-3")
-        
-        # 히스토리를 evidence_stats에 포함 (make_clarify_prompt에서 사용)
-        evidence_stats["history"] = history
-        
-        # RED/YELLOW → Clarify 질문 생성
-        if need_clarify or gate_decision != "GREEN":
-            # RAG 기반 Clarify 질문 생성 (Gemini-Flash 사용)
-            from app.services.answerability import make_clarify_prompt
-            
-            print("=" * 60)
-            print(f"💬 [단계 13-4] Clarify 질문 생성 시작 (RED/YELLOW)")
-            print("=" * 60)
-            clarified_result = make_clarify_prompt(effective_query, used_hits, evidence_stats)
-            clarify_question = clarified_result.get("guide", "문제 상황을 구체적으로 말씀해주세요.")
-            print(f"✅ Clarify 질문 생성 완료: {clarify_question[:50]}...")
-            await wait_for_next_step("Clarify 질문 생성 완료", "13-4")
-            
-            # LLM 답변 생성 (Gemini-Flash 사용)
-            print("=" * 60)
-            print(f"🤖 [단계 13-5] LLM 답변 생성 시작 (Gemini-Flash)")
-            print("=" * 60)
-            try:
-                if genai_available:
-                    model_qa = genai.GenerativeModel("gemini-1.5-flash")
-                    
-                    qa_prompt = f"""다음 질문에 대해 간단하고 명확하게 답변해주세요.
-
-질문: {clarify_question}
-
-답변은 1-2문장으로 간결하게 작성해주세요."""
-                    
-                    qa_response = model_qa.generate_content(qa_prompt)
-                    llm_answer = qa_response.text.strip()
-                else:
-                    llm_answer = "문제 상황을 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
-            except Exception as e:
-                print(f"⚠️ LLM 답변 생성 실패: {e}")
-                llm_answer = "문제 상황을 구체적으로 말씀해주시면 더 정확한 도움을 드릴 수 있습니다."
-            print(f"✅ LLM 답변 생성 완료: {llm_answer[:50]}...")
-            await wait_for_next_step("LLM 답변 생성 완료", "13-5")
-            
-            # TTS 변환
-            print("=" * 60)
-            print(f"🔊 [단계 13-6] TTS 변환 시작")
-            print(f"   LLM 답변: {llm_answer[:50]}...")
-            print("=" * 60)
-            try:
-                tts_result = text_to_speech(llm_answer)
-                audio_content = tts_result.get("audio_content")
-                audio_encoding = tts_result.get("mime_type")
-                print(f"✅ TTS 변환 완료: {len(audio_content) if audio_content else 0} bytes")
-            except Exception as e:
-                print(f"⚠️ TTS 생성 실패: {e}")
-                audio_content = None
-                audio_encoding = None
-            await wait_for_next_step("TTS 변환 완료", "13-6")
-            
-            # Redis에 저장
-            memory.append_event(session_id, {
-                "role": "system",
-                "type": "clarify",
-                "data": {
-                    "turn_id": turn_id,
-                    "gate_decision": gate_decision,
-                    "clarify_guidance": clarify_question,
-                    "evidence_stats": evidence_stats
-                }
-            })
-            
-            # clarify_qa_turn 이벤트 전송
-            print("=" * 60)
-            print(f"📤 [단계 13-7] 모바일로 clarify_qa_turn 이벤트 전송 시작")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   Gate Decision: {gate_decision}, Need Clarify: True")
-            print(f"   작업자 질문: {user_question[:50]}...")
-            print(f"   LLM 답변: {llm_answer[:50]}...")
-            print(f"   TTS 오디오 크기: {len(audio_content) if audio_content else 0} bytes")
-            print("=" * 60)
-            await broadcast_to("mobile", "clarify_qa_turn", {
-                "session_id": session_id,
-                "turn_id": turn_id,
-                "user_question": user_question,
-                "llm_answer": llm_answer,
-                "audio_content": audio_content,
-                "audio_encoding": audio_encoding,
-                "need_clarify": True,
-                "gate_decision": gate_decision,
-                "status": "success",
-                "evidence_trace": evidence_stats.get("evidence_trace", {}),
-                "missing_info": evidence_stats.get("missing_info", [])
-            })
-            print("=" * 60)
-            print(f"✅ [단계 13-7 완료] 모바일로 clarify_qa_turn 이벤트 전송 완료")
-            print(f"   💡 모바일에서 TTS 재생 완료 후 audio_playback_completed 이벤트 수신 대기")
-            print(f"   💡 라즈베리파이 Streaming STT는 계속 실행 중 (다음 질문 대기)")
-            print("=" * 60)
-            await wait_for_next_step("모바일로 clarify_qa_turn 이벤트 전송 완료", "13-7")
-            
-            # 세션 정보 업데이트
-            clarify_sessions[session_id]["turns"].append({
-                "turn_id": turn_id,
-                "user_question": user_question,
-                "llm_answer": llm_answer,
-                "need_clarify": True,
-                "gate_decision": gate_decision
-            })
-            
-            print(f"📤 Clarify 질문/답변 턴 {turn_id} 전송 [session={session_id}]: gate_decision={gate_decision}, need_clarify=True")
-            
-        else:
-            # GREEN → 최종 답변 생성 (GPT-4o)
-            # 이미 위에서 RAG 검색 및 Evidence Check 완료됨
-            print("=" * 60)
-            print(f"✅ [단계 13-8] 최종 답변 생성 시작 (GREEN, GPT-4o)")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   💡 Gate Decision: GREEN → GPT-4o 호출하여 최종 답변 생성")
-            print("=" * 60)
-            
-            # 최종 답변 생성 (GPT-4o) - 구조화된 답변 + TTS 친화적
-            # GPT-4o 호출 시점에 Streaming STT 세션 종료 이벤트 전송
-            # 주의: 마이크는 계속 ON 상태이지만, Streaming STT 세션을 종료하여 큐에 데이터가 누적되지 않도록 함
-            print("[DEBUG] GPT-4o 호출 시점: Streaming STT 세션 종료 이벤트 전송 (Clarify GREEN)")
-            await broadcast_to("raspi", "stop_streaming_stt", {
-                "session_id": session_id,
-                "reason": "Clarify GREEN → GPT-4o 최종 답변 생성 시작"
-            })
-            
-            snippets = [h["source"]["content"] for h in used_hits]
-            print("=" * 60)
-            print(f"🤖 [FastAPI] GPT-4o 호출 시작 (최종 답변 생성)")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print("=" * 60)
-            answer_result = llm_generate_answer(effective_query, snippets, used_hits)
-            print("=" * 60)
-            print(f"✅ [FastAPI] GPT-4o 최종 답변 생성 완료")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   답변: {answer_result.get('tts_text', '')[:50]}...")
-            print("=" * 60)
-            await wait_for_next_step("최종 답변 생성 완료 (GPT-4o)", "13-8")
-            
-            # 구조화된 답변에서 TTS 텍스트 추출
-            answer_text = answer_result.get("tts_text") or answer_result.get("summary") or answer_result.get("answer", "")
-            structured_answer = answer_result  # 전체 구조화된 답변
-            
-            # TTS 생성 (TTS 친화적 텍스트 사용)
-            print("=" * 60)
-            print(f"🔊 [단계 13-9] 최종 답변 TTS 변환 시작")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   답변 텍스트: {answer_text[:50]}...")
-            print("=" * 60)
-            try:
-                tts_result = text_to_speech(answer_text)
-                audio_content = tts_result.get("audio_content")
-                audio_encoding = tts_result.get("mime_type")
-                print("=" * 60)
-                print(f"✅ [FastAPI] 최종 답변 TTS 변환 완료")
-                print(f"   오디오 크기: {len(audio_content) if audio_content else 0} bytes")
-                print(f"   오디오 인코딩: {audio_encoding}")
-                print("=" * 60)
-            except Exception as e:
-                print("=" * 60)
-                print(f"⚠️ [FastAPI] TTS 생성 실패: {e}")
-                print("=" * 60)
-                audio_content = None
-                audio_encoding = None
-            await wait_for_next_step("최종 답변 TTS 변환 완료", "13-9")
-            
-            # Redis에 저장
-            memory.append_event(session_id, {
-                "role": "assistant",
-                "type": "final_answer",
-                "data": {
-                    "answer": answer_text,
-                    "structured_answer": structured_answer,
-                    "citations": structured_answer.get("citations", [
-                        {
-                            "section": h["source"]["section"],
-                            "pages": h["source"]["pages"],
-                        }
-                        for h in used_hits[:3]
-                    ])
-                }
-            })
-            
-            # 세션 초기화
-            memory.clear_history(session_id)
-            clarify_sessions.pop(session_id, None)
-            
-            # 최종 답변 전송 (구조화된 답변 포함)
-            print("=" * 60)
-            print(f"📤 [단계 13-10] 모바일로 final_answer 이벤트 전송 시작")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   답변 텍스트: {answer_text[:50]}...")
-            print(f"   TTS 오디오 크기: {len(audio_content) if audio_content else 0} bytes")
-            print("=" * 60)
-            await broadcast_to("mobile", "final_answer", {
-                "session_id": session_id,
-                "turn_id": turn_id,
-                "status": "completed",
-                "answer": answer_text,  # TTS 친화적 텍스트
-                "structured_answer": structured_answer,  # 전체 구조화된 답변 (UI 표시용)
-                "audio_content": audio_content,
-                "audio_encoding": audio_encoding,
-                "citations": structured_answer.get("citations", [
-                    {
-                        "section": h["source"]["section"],
-                        "pages": h["source"]["pages"],
-                    }
-                    for h in used_hits[:3]
-                ])
-            })
-            print("=" * 60)
-            print(f"✅ [단계 13-10 완료] 모바일로 final_answer 이벤트 전송 완료")
-            print(f"   Session ID: {session_id}, Turn ID: {turn_id}")
-            print(f"   💡 모바일에서 모든 섹션 TTS 재생 완료 후 audio_playback_completed (type: final_answer) 이벤트 수신 대기")
-            print(f"   💡 그 후 서비스 종료 오디오 재생 및 wakeword 대기 상태로 복귀")
-            print("=" * 60)
-            await wait_for_next_step("모바일로 final_answer 이벤트 전송 완료", "13-10")
-            
-            # 주의: final_answer 전송 후 모든 섹션 재생 완료 시
-            # audio_playback_completed (type: "final_answer") 수신 후
-            # 서비스 종료 오디오 재생 요청을 보내고,
-            # 서비스 종료 오디오 재생 완료 후 audio_playback_completed (type: "service_completed") 수신 시
-            # wakeword_start_waiting을 전송합니다.
-            # 이는 handle_audio_playback_completed에서 처리됩니다.
-            
-    except Exception as e:
-        print(f"❌ Clarify 질문/답변 턴 처리 오류: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        await broadcast_to("mobile", "clarify_qa_turn", {
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "user_question": user_question,
-            "llm_answer": "",
-            "audio_content": None,
-            "audio_encoding": None,
-            "need_clarify": True,
-            "status": "error"
-        })
-
-
-# ========================================
-# Clarify 세션 시작/종료
-# ========================================
-
-async def handle_start_clarify_session(sid, data):
-    """
-    모바일에서 Clarify 세션 시작 요청
-    """
-    sender_device = device_map.get(sid, "unknown")
-    
-    if sender_device != "mobile":
-        return
-    
-    session_id = data.get("session_id")
-    if not session_id:
-        await sio.emit("error", {"msg": "session_id가 필요합니다."}, to=sid)
-        return
-    
-    clarify_sessions[session_id] = {
-        "turns": [],
-        "started_at": None
-    }
-    
-    await sio.emit("clarify_session_started", {"session_id": session_id}, to=sid)
-    print(f"✅ Clarify 세션 시작: {session_id}")
-
-
-async def handle_end_clarify_session(sid, data):
-    """
-    모바일에서 Clarify 세션 종료 요청
-    """
-    sender_device = device_map.get(sid, "unknown")
-    
-    if sender_device != "mobile":
-        return
-    
-    session_id = data.get("session_id")
-    if session_id:
-        memory.clear_history(session_id)
-        clarify_sessions.pop(session_id, None)
-        await sio.emit("clarify_session_ended", {"session_id": session_id}, to=sid)
-        print(f"✅ Clarify 세션 종료: {session_id}")
-
-
-async def handle_clarify_response(sid, data):
-    """
-    모바일에서 Clarify 질문에 대한 사용자 응답 수신
-    
-    모바일이 clarify_turn 이벤트를 받은 후 사용자가 응답을 입력하면
-    이 이벤트로 전송됨.
-    
-    Args:
-        data: {
-            "session_id": "uuid",
-            "turn_id": 1,
-            "response": "사용자 응답 텍스트",
-            "action": "continue" | "skip" | "cancel"
-        }
-    """
-    sender_device = device_map.get(sid, "unknown")
-    
-    if sender_device != "mobile":
-        print(f"⚠️ Clarify 응답은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
-        return
-    
-    session_id = data.get("session_id")
-    turn_id = data.get("turn_id")
-    response_text = data.get("response", "").strip()
-    action = data.get("action", "continue")
-    
-    if not session_id:
-        await sio.emit("error", {"msg": "session_id가 필요합니다."}, to=sid)
-        return
-    
-    if action == "cancel":
-        # 세션 취소
-        memory.clear_history(session_id)
-        clarify_sessions.pop(session_id, None)
-        await sio.emit("clarify_session_cancelled", {"session_id": session_id}, to=sid)
-        print(f"❌ Clarify 세션 취소: {session_id}")
-        return
-    
-    if action == "skip":
-        # 이 Clarify 턴 건너뛰기 (GREEN으로 강제 전환)
-        # 히스토리에서 현재 쿼리만 사용하여 재처리
-        history = memory.get_history(session_id)
-        last_query = None
-        for ev in reversed(history):
-            if ev.get("role") == "user" and ev.get("type") == "streaming_stt":
-                last_query = ev.get("data", {}).get("text", "")
-                break
-        
-        if last_query:
-            # 강제로 GREEN 처리하여 최종 답변 생성
-            await process_clarify_turn(session_id, last_query, force_green=True)
-        return
-    
-    # action == "continue": 사용자 응답을 Redis에 저장하고 다음 Clarify 턴 처리
-    if response_text:
-        memory.append_event(session_id, {
-            "role": "user",
-            "type": "clarify_response",
-            "data": {
-                "turn_id": turn_id,
-                "response": response_text,
-                "action": action
-            }
-        })
-        
-        # 사용자 응답을 히스토리와 결합하여 재처리
-        history = memory.get_history(session_id)
-        history_context = ""
-        
-        user_lines = []
-        for ev in reversed(history):
-            if ev.get("role") == "user" and ev.get("type") in ["query", "streaming_stt", "clarify_response"]:
-                text = ev.get("data", {}).get("text", "") or ev.get("data", {}).get("query", "") or ev.get("data", {}).get("response", "")
-                if text:
-                    user_lines.append(text)
-                if len(user_lines) >= 3:  # 최근 3개까지 결합
-                    break
-        
-        if user_lines:
-            history_context = " \n".join(reversed(user_lines))
-        
-        combined_query = f"{history_context}" if history_context else response_text
-        
-        # 재처리 (Clarify 턴 반복)
-        await process_clarify_turn(session_id, combined_query)
-        
-        print(f"✅ Clarify 응답 수신 [session={session_id}, turn={turn_id}]: '{response_text[:50]}...'")
-    else:
-        await sio.emit("error", {"msg": "응답 텍스트가 비어있습니다."}, to=sid)
 
 # ========================================
 # Raspberry Pi 비디오 프레임 처리
@@ -2153,28 +1461,6 @@ async def accept_communication(sid, data):
     print("📞 [통신 요청 수락] AI_Supporter/OPERATOR 기능 중지 및 WebRTC 오디오 스트리밍 시작")
     print("=" * 60)
     
-    # 현재 실행 중인 Streaming STT 세션이 있는지 확인
-    active_sessions = list(clarify_sessions.keys())
-    if active_sessions:
-        print("=" * 60)
-        print(f"⚠️ [통신 요청 수락] 실행 중인 Streaming STT 세션 발견: {len(active_sessions)}개")
-        print(f"   세션 ID: {active_sessions}")
-        print("=" * 60)
-        
-        # 모든 실행 중인 Streaming STT 세션 종료
-        for session_id in active_sessions:
-            print(f"🛑 [통신 요청 수락] Streaming STT 세션 종료: {session_id}")
-            await broadcast_to("raspi", "stop_streaming_stt", {
-                "session_id": session_id,
-                "reason": "통신 요청 수락으로 인한 중지"
-            })
-        
-        # 세션 정보 정리
-        clarify_sessions.clear()
-        print("✅ [통신 요청 수락] 모든 Streaming STT 세션 종료 완료")
-    else:
-        print("ℹ️ [통신 요청 수락] 실행 중인 Streaming STT 세션 없음")
-    
     # 주의: 마이크는 하나이며, STT 프로세스가 마이크 장치를 해제한 후 WebRTC가 시작되어야 합니다.
     # 마이크는 항상 ON 상태로 유지되며, STT 세션은 이미 종료되었거나 없을 수 있음
     # handle_audio_stream 이벤트가 브리지 서버를 통해 Python 3.10 프로세스로 전달되어
@@ -2276,29 +1562,6 @@ async def communication_close(sid, data):
 
 
 # ========================================
-# Clarify 입력 수신 (모바일 → FastAPI)
-# ========================================
-
-async def handle_clarify_input(sid, data):
-    """
-    모바일에서 전송된 Clarify 입력을 수신하여 처리
-    clarify_response 핸들러를 호출하여 처리합니다.
-    
-    Args:
-        sid: 클라이언트 세션 ID
-        data: Clarify 입력 딕셔너리
-            {
-                "text": "사용자 입력 텍스트",
-                "session_id": "세션 ID",
-                "turn_id": 1 (optional),
-                "action": "continue" | "skip" | "cancel" (optional)
-            }
-    """
-    # clarify_response 핸들러로 위임
-    await handle_clarify_response(sid, data)
-
-
-# ========================================
 # 라즈베리파이 제어 이벤트 (모바일 → 라즈베리파이)
 # ========================================
 
@@ -2310,8 +1573,8 @@ async def handle_control_raspi(sid, data):
         sid: 클라이언트 세션 ID
         data: 제어 명령 딕셔너리
             {
-                "command": "start_streaming_stt" | "set_stt_mode" | "notify_intent_done",
-                "mode": "buffered" | "streaming" (set_stt_mode일 때),
+                "command": "set_stt_mode" | "notify_intent_done",
+                "mode": "buffered" (set_stt_mode일 때),
                 "branch": "AI_SUPPORTER" | "OPERATOR" (notify_intent_done일 때)
             }
     """
