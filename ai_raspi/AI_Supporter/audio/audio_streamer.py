@@ -96,12 +96,26 @@ class AudioStreamer:
             finally:
                 self.stream = None
         
+        # [25.11.21] 스레드 종료 중복 호출 방지 수정 - 재환 
         # 스트림 스레드 종료 대기
-        if self.stream_thread and self.stream_thread.is_alive():
-            self.stream_thread.join(timeout=2.0)
+        # if self.stream_thread and self.stream_thread.is_alive():
+        #     self.stream_thread.join(timeout=2.0)
         
-        logger.info("✅ 오디오 스트림 중지 완료")
-    
+        current = threading.current_thread()
+        if self.stream_thread and self.stream_thread.is_alive():
+            # 자신을 join하면 데드락 발생 → join 스킵
+            if self.stream_thread is current:
+                return
+
+            # 안전하게 join 수행
+            try:
+                self.stream_thread.join(timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Thread join error: {e}")
+
+        # [25.11.21] 로그 주석 처리 - 재환 
+        # logger.info("✅ 오디오 스트림 중지 완료")
+
     def _stream_audio(self):
         """오디오 스트리밍 메인 루프 (별도 스레드에서 실행)"""
         # 스트림 시작 시 버퍼 인덱스 초기화
