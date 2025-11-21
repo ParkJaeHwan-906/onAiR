@@ -9,7 +9,6 @@ class SttBridgeClient:
     STT 브리지 클라이언트 (Python 3.13)
     - Python 3.10 브리지 서버(Socket.IO)로부터 STT 결과를 수신
     - FastAPI Socket.IO 서버로 전달
-    - Python 3.10으로 Streaming STT 시작 명령 전달
     """
 
     def __init__(self, bridge_url: str = "http://127.0.0.1:5050"):
@@ -263,65 +262,6 @@ class SttBridgeClient:
             self._start_reconnect_thread()
         
         return False
-
-    def emit_start_streaming_stt(self, session_id: str):
-        """
-        Python 3.10으로 Streaming STT 시작 명령 전송
-        
-        Args:
-            session_id: Clarify 세션 ID
-        
-        Returns:
-            bool: 전송 성공 여부
-        """
-        # 연결 상태 확인
-        if not self.is_connected():
-            logger.warning("⚠️ 브리지 서버에 연결되어 있지 않습니다. 재연결 시도...")
-            try:
-                # 이미 연결 시도 중이면 기다림
-                if self.sio.connected:
-                    # 연결 상태만 업데이트
-                    self.connected = True
-                else:
-                    # 재연결 시도
-                    self.sio.connect(self.bridge_url)
-                    # 연결 대기 (최대 2초)
-                    import time
-                    for _ in range(20):
-                        if self.connected:
-                            break
-                        time.sleep(0.1)
-            except Exception as e:
-                logger.error(f"❌ 브리지 서버 재연결 실패: {e}")
-                return False
-        
-        # 최종 연결 상태 확인
-        if not self.is_connected():
-            logger.error("=" * 60)
-            logger.error("❌ 브리지 서버에 연결할 수 없습니다. Streaming STT 시작 명령을 전송할 수 없습니다.")
-            logger.error("=" * 60)
-            return False
-        
-        # Streaming STT 시작 명령 전송
-        try:
-            logger.info("=" * 60)
-            logger.info(f"📤 [단계 12-1] 브리지 클라이언트: Streaming STT 시작 명령 전송")
-            logger.info(f"   Session ID: {session_id}")
-            logger.info("=" * 60)
-            
-            self.sio.emit('start_streaming_stt', {'session_id': session_id})
-            
-            logger.info("=" * 60)
-            logger.info(f"✅ [단계 12-1] 브리지 클라이언트: Streaming STT 시작 명령 전송 완료")
-            logger.info(f"   Session ID: {session_id}")
-            logger.info("=" * 60)
-            return True
-        except Exception as e:
-            logger.error("=" * 60)
-            logger.error(f"❌ [단계 12-1 실패] 브리지 서버로 Streaming STT 시작 명령 전송 실패: {e}")
-            logger.error("=" * 60)
-            self.connected = False  # 연결 상태 리셋
-            return False
 
     def connect(self):
         """브리지 서버에 연결 (부팅 시 타이밍 이슈 대응)"""
