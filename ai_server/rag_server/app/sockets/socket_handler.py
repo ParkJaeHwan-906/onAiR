@@ -165,7 +165,6 @@ def init_socketio():
     sio.on("delete-marker")(delete_marker)
     
 
-
 # === 타입별 브로드캐스트 (안전 버전) ===
 async def broadcast_to(device_types, event: str, payload: dict):
     """
@@ -534,62 +533,7 @@ async def handle_intent_audio_completed(sid, data):
                     "modules": modules,
                     "anomalies": filtered_anomalies,
                     "message": filtered_msgs
-                }
-            
-            # ========================================
-            # 테스트용 하드코딩 (주석 처리 - 테스트 시에만 사용)
-            # ========================================
-            # print("=" * 60)
-            # print("⚠️ [테스트 모드] CV 모델 실행 결과를 하드코딩 값으로 덮어씁니다.")
-            # print("   원래 로직(run_anomaly_detection)은 주석 처리되어 실행되지 않습니다.")
-            # print("=" * 60)
-            # 
-            # # 하드코딩된 테스트 값
-            # device_type = "AHU"
-            # modules = [
-            #     {
-            #         "label": "thermometer",
-            #         "confidence": 0.88,
-            #         "x1": 150,
-            #         "y1": 250,
-            #         "x2": 350,
-            #         "y2": 450
-            #     }
-            # ]
-            # anomalies = {
-            #     "gauge": {
-            #         "type": "gauge",
-            #         "status": "anomaly",
-            #         "detail": "thermo_high",
-            #         "message": "온도 과열. 현재 측정값: 85.50",
-            #         "results": {
-            #             "thermometer": {
-            #                 "angle": 280.5,
-            #                 "value": 85.5,
-            #                 "status": "anomaly",
-            #                 "message": "온도 과열"
-            #             }
-            #         }
-            #     }
-            # }
-            # has_anomaly = True  # 오류 탐지 성공
-            # is_normal = False
-            # is_anomaly = True
-            # 
-            # cv_result = {
-            #     "detected": True,
-            #     "device_type": device_type,
-            #     "modules": modules,
-            #     "anomalies": anomalies,
-            #     "message": ["온도 과열. 현재 측정값: 85.50"]
-            # }
-            # 
-            # print("=" * 60)
-            # print("✅ [테스트 모드] 하드코딩 값 설정 완료")
-            # print(f"   detected: {cv_result['detected']}")
-            # print(f"   is_normal: {is_normal}")
-            # print(f"   is_anomaly: {is_anomaly}")
-            # print("=" * 60)
+                }          
 
             # CV 결과 상세 출력
             print("=" * 60)
