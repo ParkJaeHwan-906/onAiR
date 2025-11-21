@@ -98,21 +98,6 @@ class SocketIOClient:
             """재연결 실패 시 호출"""
             logger.error(f"❌ Socket.IO 재연결 실패: {data}")
         
-        @self.sio.on("stop_streaming_stt")
-        async def handle_stop_streaming_stt(data):
-            """Streaming STT 종료 신호 수신"""
-            session_id = data.get("session_id")
-            reason = data.get("reason", "unknown")
-            logger.info("=" * 60)
-            logger.info(f"🛑 Streaming STT 종료 신호 수신: session_id={session_id}, reason={reason}")
-            logger.info("=" * 60)
-            
-            # manager를 통해 종료 신호 전달
-            # 주의: 마이크는 계속 ON 상태로 유지되며, Streaming STT 세션만 종료됨
-            if self.manager:
-                self.manager.add_stop_streaming_session(session_id)
-                logger.info("✅ Streaming STT 세션 종료 신호 전달 완료 (마이크는 계속 ON 상태)")
-        
         @self.sio.on("stop_buffered_stt")
         async def handle_stop_buffered_stt(data):
             """버퍼링 STT 세션 종료 신호 수신"""
@@ -200,12 +185,6 @@ class SocketIOClient:
                 logger.info(f"📝 STT 모드 설정 명령 수신: mode={mode}")
                 if self.manager:
                     self.manager.set_stt_mode(mode)
-                    # 스트리밍 모드로 전환 시 마이크 활성화
-                    if mode == "streaming":
-                        mic = self.manager.get_mic_stream()
-                        if mic and not mic.is_active():
-                            mic.resume()
-                            logger.info("🔊 마이크 ON (스트리밍 모드 전환)")
             
             elif command == "notify_intent_done":
                 # Intent 분기 완료 알림
@@ -532,7 +511,6 @@ class SocketIOClient:
         Args:
             stt_data: STT 결과 딕셔너리
                 예: {"type": "final", "text": "안녕하세요", "confidence": 0.95}
-                Streaming STT의 경우: {"type": "final", "text": "...", "session_id": "uuid", ...}
         """
         if not self.connected:
             logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 재연결 시도...")
@@ -552,32 +530,6 @@ class SocketIOClient:
             # 전송 실패 시 연결 상태 리셋
             self.connected = False
             return False
-    
-    async def emit_streaming_stt(self, text: str, msg_type: str = "final", confidence: float = None, session_id: str = None):
-        """
-        Streaming STT 결과를 Socket.IO 서버로 전송합니다.
-        
-        Args:
-            text: STT로 인식된 텍스트
-            msg_type: "final" | "interim" | "error" | "info"
-            confidence: 신뢰도 (선택사항)
-            session_id: Clarify 세션 ID (선택사항, 있으면 Streaming STT로 처리됨)
-        
-        Returns:
-            bool: 전송 성공 여부
-        """
-        stt_data = {
-            "type": msg_type,
-            "text": text,
-        }
-        
-        if confidence is not None:
-            stt_data["confidence"] = confidence
-        
-        if session_id:
-            stt_data["session_id"] = session_id
-        
-        return await self.emit_stt_result(stt_data)
     
     async def emit_wakeword_waiting_ready(self):
         """
