@@ -10,20 +10,11 @@ app = socketio.WSGIApp(sio)
 # 연결된 클라이언트 세션 ID 저장
 connected_clients = set()
 
-# Streaming STT 시작 콜백 (Python 3.10에서 설정)
-start_streaming_stt_callback = None
-
 # 서비스 완료 콜백 (Python 3.10에서 설정)
 service_completed_callback = None
 
 # 모바일 음성 파일 재생 완료 콜백 (Python 3.10에서 설정)
 wakeword_audio_completed_callback = None
-
-def set_start_streaming_stt_callback(callback):
-    """Streaming STT 시작 콜백 설정 (Python 3.10에서 호출)"""
-    global start_streaming_stt_callback
-    start_streaming_stt_callback = callback
-    # 로그 최소화: 콜백 등록 로그 제거
 
 def set_service_completed_callback(callback):
     """서비스 완료 콜백 설정 (Python 3.10에서 호출)"""
