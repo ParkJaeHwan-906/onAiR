@@ -25,12 +25,14 @@ class ConnectionManager:
             socketio_client: SocketIOClient 인스턴스
         """
         self.socketio_client = socketio_client
-        logger.info("✅ Socket.IO 클라이언트가 등록되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("✅ Socket.IO 클라이언트가 등록되었습니다.")
 
     def clear_socketio_client(self):
         """등록된 Socket.IO 클라이언트를 제거합니다."""
         self.socketio_client = None
-        logger.info("Socket.IO 클라이언트가 제거되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("Socket.IO 클라이언트가 제거되었습니다.")
 
     def set_stt_mode(self, mode: str):
         """
@@ -41,9 +43,11 @@ class ConnectionManager:
         """
         if mode in ["buffered", "streaming"]:
             self.stt_mode = mode
-            logger.info(f"✅ STT 모드 변경: {mode}")
-        else:
-            logger.warning(f"⚠️ 잘못된 STT 모드: {mode}")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # logger.info(f"✅ STT 모드 변경: {mode}")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # else:
+        #     logger.warning(f"⚠️ 잘못된 STT 모드: {mode}")
 
     def get_stt_mode(self) -> str:
         """현재 STT 모드를 반환합니다."""
@@ -57,7 +61,8 @@ class ConnectionManager:
             mic_stream: MicStream 인스턴스
         """
         self.mic_stream = mic_stream
-        logger.info("✅ 마이크 스트림이 등록되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("✅ 마이크 스트림이 등록되었습니다.")
 
     def get_mic_stream(self):
         """등록된 마이크 스트림 인스턴스를 반환합니다."""
@@ -75,11 +80,13 @@ class ConnectionManager:
         """
         async with self.lock:
             if self.socketio_client is None:
-                logger.warning("⚠️ Socket.IO 클라이언트가 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # logger.warning("⚠️ Socket.IO 클라이언트가 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
                 return
             
             if not self.socketio_client.is_connected():
-                logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 메시지를 전송할 수 없습니다.")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 메시지를 전송할 수 없습니다.")
                 return
             
             try:
@@ -92,10 +99,12 @@ class ConnectionManager:
                     try:
                         stt_data = json.loads(message)
                     except json.JSONDecodeError:
-                        logger.error(f"❌ 잘못된 JSON 형식: {message}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # logger.error(f"❌ 잘못된 JSON 형식: {message}")
                         return
                 else:
-                    logger.error(f"❌ 지원하지 않는 메시지 타입: {type(message)}")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # logger.error(f"❌ 지원하지 않는 메시지 타입: {type(message)}")
                     return
                 
                 # Socket.IO로 STT 결과 전송
@@ -113,7 +122,8 @@ class ConnectionManager:
             completed: 서비스 완료 여부 (기본값: True)
         """
         self.service_completed = completed
-        logger.info(f"✅ 서비스 완료 플래그 설정: {completed}")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info(f"✅ 서비스 완료 플래그 설정: {completed}")
     
     def is_service_completed(self) -> bool:
         """서비스 완료 상태 확인"""
