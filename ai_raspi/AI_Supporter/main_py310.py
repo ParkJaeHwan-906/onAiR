@@ -14,10 +14,9 @@ import subprocess
 import fcntl
 from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
-from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
 from bridge.stt_bridge_server import (
-    run_server, send_stt_result, set_start_streaming_stt_callback, 
+    run_server, send_stt_result, 
     set_service_completed_callback, send_wakeword_detected, 
     send_wakeword_waiting_ready,
     set_wakeword_audio_completed_callback,
@@ -180,7 +179,6 @@ def run_stt_loop():
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
-    streaming_stt = GcpStreamingStt()
     
     # 버퍼링 STT 실행 중 플래그 (중지 가능하도록)
     buffered_stt_running = {"running": False}
@@ -225,25 +223,6 @@ def run_stt_loop():
                     buffered_stt_running["running"] = False
                 # 버퍼링 STT 후 텍스트 전송 완료
                 # 주의: 마이크는 계속 ON 상태로 유지됨
-            else:
-                # 스트리밍 방식: 실시간 인식 (분기처리 이후)
-                logger.info("🎤 스트리밍 모드 시작 (실시간 음성 인식)")
-                # 주의: 마이크는 항상 ON 상태로 유지되므로 별도의 활성화 불필요
-                
-                # 세션 ID 생성 (Clarify 세션용)
-                import uuid
-                session_id = str(uuid.uuid4())
-                
-                logger.info(f"📤 브리지 서버를 통해 Streaming STT 전송 시작 (session_id={session_id})")
-                try:
-                    await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                except Exception as e:
-                    logger.error(f"❌ 스트리밍 STT 실행 중 오류: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    raise  # 상위로 예외 전파
-                # 스트리밍 종료 후 마이크는 켜둠 (다음 Wakeword 대기)
-                logger.info("🟢 스트리밍 모드 종료, 마이크는 계속 ON")
                 
         except Exception as e:
             logger.error(f"❌ STT 세션 오류: {e}")
@@ -257,45 +236,6 @@ def run_stt_loop():
     # 이벤트 루프 생성
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
-    # Streaming STT 시작 함수 (Python 3.13에서 호출될 수 있음)
-    # 주의: loop가 정의된 후에 등록해야 함
-    def start_streaming_stt(session_id: str):
-        """브리지 서버를 통해 받은 Streaming STT 시작 명령 처리"""
-        logger.info("=" * 60)
-        logger.info(f"📥 [라즈베리파이] Streaming STT 시작 명령 수신")
-        logger.info(f"   Session ID: {session_id}")
-        logger.info("=" * 60)
-        
-        # 마이크 활성화 (버퍼링 STT 후 OFF되었을 수 있음)
-        if not mic.is_active():
-            mic.resume()
-            logger.info("=" * 60)
-            logger.info(f"🔊 [라즈베리파이] 마이크 활성화 (Streaming STT 시작)")
-            logger.info("=" * 60)
-        
-        # Streaming STT 세션 시작 (별도 태스크로 실행)
-        async def run_streaming():
-            try:
-                logger.info("=" * 60)
-                logger.info(f"🎤 [라즈베리파이] Streaming STT 세션 시작")
-                logger.info(f"   Session ID: {session_id}")
-                logger.info(f"   💡 사용자가 말하면 침묵 1.5초 후 한 문장으로 인식하여 FastAPI로 전송")
-                logger.info("=" * 60)
-                await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                logger.info("=" * 60)
-                logger.info(f"✅ [라즈베리파이] Streaming STT 세션 종료")
-                logger.info("=" * 60)
-            except Exception as e:
-                logger.error("=" * 60)
-                logger.error(f"❌ [라즈베리파이] Streaming STT 세션 오류: {e}")
-                logger.error("=" * 60)
-        
-        # 이벤트 루프에서 실행
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(run_streaming()))
-    
-    # 브리지 서버에 Streaming STT 시작 콜백 등록
-    set_start_streaming_stt_callback(start_streaming_stt)
     
     # 버퍼링 STT 세션 종료 콜백 등록
     def handle_stop_buffered_stt(reason: str):
@@ -650,7 +590,6 @@ def run_stt_loop():
                 continue
     except KeyboardInterrupt:
         logger.info("🛑 종료 중...")
-        streaming_stt.stop()
         mic.stop()
         stop_wakeword_detector()
         logger.info("✅ 종료 완료")
