@@ -207,7 +207,7 @@ class AudioStreamer:
                 #     time.sleep(0.05)
                 # [25.11.21] 로그 주석 처리 - 재환
                 # logger.info("🔇 WebRTC 오디오 스트림 종료 (is_streaming=False)")
-                break
+                # break
                 
             except Exception as e:
                 if attempt < max_retries - 1:

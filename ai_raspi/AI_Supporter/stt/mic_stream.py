@@ -63,31 +63,36 @@ class MicStream:
         alsa_hostapi = None
         try:
             hostapis = sd.query_hostapis()
-            print("🔍 사용 가능한 호스트 API:")
+            # [25.11.21] 로그 주석 처리 - 재환 
+            # print("🔍 사용 가능한 호스트 API:")
             for idx, api in enumerate(hostapis):
                 api_name = api.get('name', 'Unknown')
                 api_index = api.get('index', idx)
-                print(f"   [{api_index}] {api_name}")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print(f"   [{api_index}] {api_name}")
                 if 'ALSA' in api_name or 'alsa' in api_name.lower():
                     alsa_hostapi = api_index
-                    print(f"✅ ALSA 호스트 API 발견: {api_name} (인덱스: {alsa_hostapi})")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print(f"✅ ALSA 호스트 API 발견: {api_name} (인덱스: {alsa_hostapi})")
                     break
-            
-            if alsa_hostapi is None:
-                print("⚠️ ALSA 호스트 API를 찾을 수 없습니다.")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # if alsa_hostapi is None:
+            #     print("⚠️ ALSA 호스트 API를 찾을 수 없습니다.")
         except Exception as e:
-            print(f"⚠️ 호스트 API 조회 실패: {e}")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # print(f"⚠️ 호스트 API 조회 실패: {e}")
             import traceback
             traceback.print_exc()
         
         # ALSA 장치 이름 문자열인 경우 (예: 'hw:0,0')
         # sounddevice는 ALSA 장치 이름 문자열을 직접 지원하지 않으므로 장치 인덱스로 변환 시도
         if isinstance(device, str):
-            print(f"🔍 ALSA 장치 이름 사용: {device}")
-            print(f"   ⚠️ sounddevice는 ALSA 장치 이름 문자열을 직접 지원하지 않습니다.")
-            print(f"   💡 ALSA 레벨에서 실제 입력 장치를 확인하세요:")
-            print(f"      $ arecord -l")
-            print(f"      $ python3.10 check_alsa_devices.py")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # print(f"🔍 ALSA 장치 이름 사용: {device}")
+            # print(f"   ⚠️ sounddevice는 ALSA 장치 이름 문자열을 직접 지원하지 않습니다.")
+            # print(f"   💡 ALSA 레벨에서 실제 입력 장치를 확인하세요:")
+            # print(f"      $ arecord -l")
+            # print(f"      $ python3.10 check_alsa_devices.py")
             
             # 장치 이름으로 검색 시도
             all_devices = sd.query_devices()
@@ -97,24 +102,32 @@ class MicStream:
                     # 장치 이름이 일치하지만 입력 채널이 있어야 함
                     if dev['max_input_channels'] > 0:
                         device_found = idx
-                        print(f"✅ 장치 이름으로 입력 장치 찾음: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']})")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"✅ 장치 이름으로 입력 장치 찾음: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']})")
                         break
             
             if device_found is not None:
                 device = device_found
             else:
-                print(f"⚠️ 장치 이름 '{device}'으로 입력 장치를 찾을 수 없음")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print(f"⚠️ 장치 이름 '{device}'으로 입력 장치를 찾을 수 없음")
                 device = None
         elif device is None:
             # 기본 입력 장치 자동 선택
             try:
-                print("🔍 마이크 장치 자동 검색 중...")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print("🔍 마이크 장치 자동 검색 중...")
+
                 all_devices = sd.query_devices()
-                print(f"   전체 장치 수: {len(all_devices)}")
+                
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print(f"   전체 장치 수: {len(all_devices)}")
                 
                 # ALSA 호스트 API가 있으면 ALSA 장치만 검색
                 if alsa_hostapi is not None:
-                    print(f"   ALSA 호스트 API 사용 (인덱스: {alsa_hostapi})")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print(f"   ALSA 호스트 API 사용 (인덱스: {alsa_hostapi})")
+
                     # ALSA 호스트 API의 모든 장치를 수집 (입력 채널이 0이어도 포함)
                     # query_devices가 잘못된 정보를 반환할 수 있으므로 모든 장치를 시도
                     alsa_devices = []
@@ -122,10 +135,11 @@ class MicStream:
                         dev_hostapi = dev.get('hostapi', None)
                         if dev_hostapi == alsa_hostapi:
                             alsa_devices.append((idx, dev))
-                            if dev['max_input_channels'] > 0:
-                                print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
-                            else:
-                                print(f"      후보: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 실제 확인 필요)")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # if dev['max_input_channels'] > 0:
+                            #     print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+                            # else:
+                            #     print(f"      후보: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 실제 확인 필요)")
                     
                     # 입력 채널이 있는 장치를 우선순위로, 없으면 모든 장치를 시도
                     input_devices_found = [d for d in alsa_devices if d[1]['max_input_channels'] > 0]
