@@ -37,7 +37,8 @@ def run_socketio_client():
     bridge_client = SttBridgeClient()
     bridge_client.set_fastapi_socketio_client(socketio_client)  # FastAPI 클라이언트 주입
     manager.bridge_client = bridge_client  # manager에 브리지 클라이언트 등록
-    logger.info("✅ 브리지 클라이언트 초기화 완료")
+    # [25.11.21] 로그 주석 처리 - 재환
+    # logger.info("✅ 브리지 클라이언트 초기화 완료")
     
     # WebRTC 오디오 스트리머 초기화 (Python 3.13에서 실행)
     try:

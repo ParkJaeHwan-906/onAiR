@@ -44,10 +44,6 @@ sio = socketio.AsyncServer(
 device_map: Dict[str, str] = {}  # { sid: "raspi" | "mobile" | "pc" }
 
 
-# Intent 결과 저장 (CV 로직 실행 대기용)
-pending_intents: Dict[str, str] = {}  # { session_id 또는 임시 키: "AI_SUPPORTER" | "OPERATOR" }
-
-
 # ========================================
 # 🐛 단계별 수동 실행 모드 (디버깅용)
 # ========================================
@@ -538,12 +534,11 @@ async def handle_stt_result(sid, data):
     stt_type = data.get("type", "unknown")
     stt_text = data.get("text", "").strip()
     confidence = data.get("confidence")
-    session_id = data.get("session_id")
     
     await wait_for_next_step("STT 결과 수신 완료", "6")
     
-    # 버퍼링 STT (type="final"이고 session_id가 없음)
-    if stt_type == "final" and not session_id:
+    # 버퍼링 STT (type="final")
+    if stt_type == "final":
         # STT 텍스트가 비어있으면 처리 불가
         if not stt_text:
             print("⚠️ STT 텍스트가 비어있습니다. Intent 분류를 수행할 수 없습니다.")

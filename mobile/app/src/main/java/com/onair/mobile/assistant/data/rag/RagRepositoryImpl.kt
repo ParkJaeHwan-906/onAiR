@@ -31,17 +31,16 @@ class RagRepositoryImpl(
      * RAG Chat API 호출
      * 
      * @param query 사용자 질문
-     * @param sessionId 세션 ID (Clarify 루프 동안 동일 ID 유지)
      * @return RAG 응답
      */
-    suspend fun chat(query: String, sessionId: String?): RagResponse {
+    suspend fun chat(query: String): RagResponse {
         return try {
-            Log.d(TAG, "📡 RAG Chat API 호출: query=$query, sessionId=$sessionId")
+            Log.d(TAG, "📡 RAG Chat API 호출: query=$query")
             
-            val request = RagRequest(query = query, session_id = sessionId)
+            val request = RagRequest(query = query)
             val response = api.chat(request)
             
-            Log.d(TAG, "✅ RAG 응답 수신: answerable=${response.answerable}, need_clarify=${response.need_clarify}")
+            Log.d(TAG, "✅ RAG 응답 수신: answerable=${response.answerable}")
             
             response
         } catch (e: Exception) {

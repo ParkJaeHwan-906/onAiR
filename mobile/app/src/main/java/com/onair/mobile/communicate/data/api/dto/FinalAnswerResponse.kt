@@ -7,8 +7,6 @@ data class FinalAnswerResponse(
     val audio_encoding: Any,
     val citations: List<Citation>,
     val cv_detection_result: CvDetectionResult,
-    val session_id: Any,
     val status: String,
-    val structured_answer: StructuredAnswer,
-    val turn_id: Int
+    val structured_answer: StructuredAnswer
 )

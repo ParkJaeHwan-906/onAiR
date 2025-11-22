@@ -5,8 +5,6 @@ package com.onair.mobile.assistant.core.model.dto
  * 최종 답변 수신
  */
 data class FinalAnswerDto(
-    val session_id: String,
-    val turn_id: Int,
     val status: String,  // "completed"
     val answer: String,
     val audio_content: String? = null,  // Base64 인코딩된 오디오

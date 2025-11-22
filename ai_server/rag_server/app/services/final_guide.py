@@ -74,9 +74,6 @@ async def generate_final_guide(
     print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
     print("=" * 60)
     await broadcast_to_func("mobile", "final_answer", {
-        "session_id": None,
-        "turn_id": 1,
-        "status": "completed",
         "answer": answer_text,
         "structured_answer": structured_answer,
         "audio_content": None,
