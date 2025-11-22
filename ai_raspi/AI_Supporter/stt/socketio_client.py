@@ -319,11 +319,10 @@ class SocketIOClient:
         @self.sio.on("service_completed")
         async def handle_service_completed(data):
             """서비스 완료 이벤트 수신 (GPT-4o 답변 생성 및 TTS 완료 후)"""
-            session_id = data.get("session_id", "")
             status = data.get("status", "")
             logger.info("=" * 60)
             logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신 (FastAPI 서버)")
-            logger.info(f"   Session ID: {session_id}, Status: {status}")
+            logger.info(f"   Status: {status}")
             logger.info("=" * 60)
             
             # 브리지 서버를 통해 Python 3.10으로 서비스 완료 신호 전달
@@ -347,7 +346,6 @@ class SocketIOClient:
                         logger.info(f"📤 [서비스 완료] 브리지 서버로 서비스 완료 신호 전송")
                         logger.info("=" * 60)
                         self.manager.bridge_client.sio.emit('service_completed', {
-                            "session_id": session_id,
                             "status": status
                         })
                         logger.info("=" * 60)
