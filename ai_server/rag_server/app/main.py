@@ -36,7 +36,6 @@ app.include_router(cv_rag_router.router)
 # 주의: 실제 서비스는 Socket.IO를 통해 통신합니다.
 # - RAG Chat: Socket.IO 이벤트로 처리 (socket_handler.py)
 # - STT: Socket.IO 이벤트로 처리 (socket_handler.py)
-# - Clarify: Socket.IO 이벤트로 처리 (socket_handler.py)
 # - AR 마커: Socket.IO 이벤트로 처리 (socket_handler.py)
 
 @app.get("/")
@@ -56,7 +55,6 @@ def root():
                 "stt_result (STT 결과 수신)",
                 "intent_audio_completed (Intent 음성 재생 완료)",
                 "audio_playback_completed (오디오 재생 완료)",
-                "clarify_turn (Clarify 턴)",
                 "final_answer (최종 답변)",
                 "cv_detection_failed (CV 탐지 실패)",
                 "cv_detection_normal (CV 탐지 정상)",

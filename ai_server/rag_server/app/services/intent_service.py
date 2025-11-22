@@ -13,7 +13,6 @@ else:
     gms_api_key = None
 
 
-# clarify_query는 llm_service.py에 있으므로 여기서는 제거
 
 
 def classify_intent(text: str) -> dict:

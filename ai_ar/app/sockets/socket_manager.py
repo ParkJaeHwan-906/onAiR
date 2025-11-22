@@ -153,7 +153,6 @@ async def handle_stt_result(sid, data):
                 "type": "final" | "interim" | "error" | "info",
                 "text": "인식된 텍스트",
                 "confidence": 0.95 (optional),
-                "session_id": "uuid" (optional)  # Streaming STT용
             }
     """
     print(f"🔔 [DEBUG] handle_stt_result 호출됨! sid={sid}, data={data}")
@@ -184,10 +183,8 @@ async def handle_stt_result(sid, data):
             fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://k13a407.p.ssafy.io/ai")
             endpoint = f"{fastapi_url}/api/stt/buffered"
             
-            # session_id 포함 (Streaming STT용)
             stt_data = {
-                **data,  # type, text, confidence
-                "session_id": data.get("session_id")  # Clarify 세션 ID (있는 경우)
+                **data  # type, text, confidence
             }
             
             print(f"📡 FastAPI 서버로 STT 결과 전달 시도: {endpoint}")
@@ -217,60 +214,6 @@ async def handle_stt_result(sid, data):
         import traceback
         traceback.print_exc()
 
-# === Clarify 입력 수신 및 FastAPI 서버로 전달 ===
-@sio.on("clarify_input")
-async def handle_clarify_input(sid, data):
-    """
-    모바일에서 전송된 Clarify 입력을 수신하여 FastAPI 서버로 전달
-    
-    Args:
-        sid: 클라이언트 세션 ID
-        data: Clarify 입력 딕셔너리
-            {
-                "text": "사용자 입력 텍스트",
-                "session_id": "세션 ID",
-                "turn_id": 1 (optional),
-                "action": "continue" | "skip" | "cancel" (optional)
-            }
-    """
-    sender_device = device_map.get(sid, "unknown")
-    
-    # 모바일에서만 받음
-    if sender_device != "mobile":
-        print(f"⚠️ Clarify 입력은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
-        return
-    
-    text = data.get("text", "")
-    session_id = data.get("session_id", "")
-    
-    print(f"💬 Clarify 입력 수신 [mobile]: text={text[:50]}..., session_id={session_id}")
-    
-    # FastAPI 서버로 전달
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            fastapi_url = os.getenv("FASTAPI_SERVER_URL", "http://k13a407.p.ssafy.io/ai")
-            endpoint = f"{fastapi_url}/api/clarify/response"
-            
-            response = await client.post(
-                endpoint,
-                json={
-                    "session_id": session_id,
-                    "turn_id": data.get("turn_id", 1),
-                    "response": text,
-                    "action": data.get("action", "continue")
-                },
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                # FastAPI에서 이미 socket_manager로 브로드캐스트하므로
-                # 여기서는 별도 브로드캐스트 불필요
-                print(f"✅ Clarify 응답 처리 완료")
-            else:
-                print(f"⚠️ FastAPI 서버 응답 오류: {response.status_code}")
-    except Exception as e:
-        print(f"❌ FastAPI 서버 전달 오류: {e}")
 
 # === 라즈베리파이 제어 이벤트 (모바일 → 라즈베리파이) ===
 @sio.on("control_raspi")

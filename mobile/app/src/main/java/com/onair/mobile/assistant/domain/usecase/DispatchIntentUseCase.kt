@@ -1,7 +1,6 @@
 package com.onair.mobile.assistant.domain.usecase
 
 import android.util.Log
-import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.core.model.dto.IntentClassificationDto
 import com.onair.mobile.assistant.core.model.dto.RagResponse
 import com.onair.mobile.assistant.domain.entity.IntentType
@@ -12,12 +11,11 @@ import com.onair.mobile.assistant.domain.repository.LlmRepository
  * 
  * 플로우:
  * - OPERATOR → RTC Start
- * - AI_SUPPORTER → RAG API 호출 → Clarify 또는 최종 답변
+ * - AI_SUPPORTER → RAG API 호출 → 최종 답변
  */
 class DispatchIntentUseCase(
     private val detectObjectUseCase: DetectObjectUseCase? = null,
-    private val llmRepository: LlmRepository? = null,
-    private val sessionManager: SessionManager
+    private val llmRepository: LlmRepository? = null
 ) {
 
     private val TAG = "DispatchIntentUseCase"
@@ -74,7 +72,7 @@ class DispatchIntentUseCase(
 
     /**
      * AI Supporter Intent 처리
-     * RAG API 호출하여 Clarify 또는 최종 답변을 받습니다.
+     * RAG API 호출하여 최종 답변을 받습니다.
      */
     private suspend fun handleAiSupporterIntent(intentResult: IntentClassificationDto): DispatchResult {
         return try {
@@ -92,41 +90,21 @@ class DispatchIntentUseCase(
                 cvSummary
             }
 
-            // 3) 세션 ID 생성 또는 가져오기
-            val sessionId = sessionManager.getOrCreateSessionId()
-            Log.d(TAG, "📝 세션 ID: $sessionId")
+            // 3) RAG API 호출
+            val ragResponse = callRagLlm(queryForRag)
 
-            // 4) RAG API 호출
-            val ragResponse = callRagLlm(queryForRag, sessionId)
-
-            // 5) 응답 타입 판단
-            if (ragResponse.need_clarify == true) {
-                // Clarify 응답
-                val clarifyGuidance = ragResponse.clarify_guidance ?: ragResponse.ask ?: ""
-                Log.i(TAG, "💬 Clarify 필요: $clarifyGuidance")
-                
-                DispatchResult.Success(
-                    type = IntentType.AI_SUPPORTER,
-                    message = "Clarify 필요",
-                    data = clarifyGuidance,
-                    isClarifyNeeded = true,
-                    options = ragResponse.options
-                )
-            } else {
-                // 최종 답변
-                val answer = ragResponse.result?.answer ?: ""
-                Log.i(TAG, "✅ 최종 답변 수신: $answer")
-                
-                DispatchResult.Success(
-                    type = IntentType.AI_SUPPORTER,
-                    message = "최종 답변",
-                    data = answer,
-                    isClarifyNeeded = false,
-                    audioContent = ragResponse.result?.audio_content,
-                    audioEncoding = ragResponse.result?.audio_encoding,
-                    mimeType = ragResponse.result?.mime_type
-                )
-            }
+            // 5) 최종 답변 처리
+            val answer = ragResponse.result?.answer ?: ""
+            Log.i(TAG, "✅ 최종 답변 수신: $answer")
+            
+            DispatchResult.Success(
+                type = IntentType.AI_SUPPORTER,
+                message = "최종 답변",
+                data = answer,
+                audioContent = ragResponse.result?.audio_content,
+                audioEncoding = ragResponse.result?.audio_encoding,
+                mimeType = ragResponse.result?.audio_encoding
+            )
         } catch (e: Exception) {
             Log.e(TAG, "❌ AI Supporter 처리 실패: ${e.message}")
             DispatchResult.Error("AI Supporter 처리 실패: ${e.message}")
@@ -162,18 +140,17 @@ class DispatchIntentUseCase(
      * FastAPI 서버로 전송 (서버에서 EC2로 전달)
      * 
      * @param query 사용자 질문 또는 CV로 추출한 에러 상황
-     * @param sessionId 세션 ID (Clarify 루프 동안 동일 ID 유지)
      * @return RAG 응답
      */
-    private suspend fun callRagLlm(query: String, sessionId: String): RagResponse {
+    private suspend fun callRagLlm(query: String): RagResponse {
         if (llmRepository == null) {
             Log.w(TAG, "⚠️ LlmRepository가 주입되지 않음")
             throw IllegalStateException("LlmRepository가 필요합니다")
         }
         
         return try {
-            Log.d(TAG, "📡 RAG Chat API 호출 중: query=$query, sessionId=$sessionId")
-            llmRepository.generateRagResponse(query, sessionId)
+            Log.d(TAG, "📡 RAG Chat API 호출 중: query=$query")
+            llmRepository.generateRagResponse(query)
         } catch (e: Exception) {
             Log.e(TAG, "❌ RAG Chat API 호출 실패: ${e.message}")
             throw e
@@ -189,8 +166,6 @@ sealed class DispatchResult {
         val type: IntentType,
         val message: String,
         val data: String,
-        val isClarifyNeeded: Boolean = false,
-        val options: List<String>? = null,
         val audioContent: String? = null,      // Base64 인코딩된 오디오
         val audioEncoding: String? = null,
         val mimeType: String? = null

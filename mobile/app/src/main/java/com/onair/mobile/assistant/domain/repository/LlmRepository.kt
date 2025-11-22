@@ -12,8 +12,7 @@ interface LlmRepository {
      * RAG Chat API 호출
      * 
      * @param query 사용자 질문
-     * @param sessionId 세션 ID (Clarify 루프 동안 동일 ID 유지)
      * @return RAG 응답
      */
-    suspend fun generateRagResponse(query: String, sessionId: String?): RagResponse
+    suspend fun generateRagResponse(query: String): RagResponse
 }
