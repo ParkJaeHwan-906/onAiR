@@ -6,10 +6,7 @@ import android.util.Log
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
-import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
-import com.onair.mobile.assistant.core.model.dto.RagResponse
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
-import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
 import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
@@ -32,30 +29,22 @@ import kotlinx.serialization.json.Json
 import livekit.org.webrtc.VideoFrame
 
 /**
- * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과 및 Clarify 응답을 수신
+ * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과를 수신
  * 
  * Socket.IO 서버에서 다음 이벤트를 수신:
  * - "stt_result": 버퍼링 STT 결과 (Intent 분류용)
  * - "intent_result": Intent 분류 결과 (Gemini-Flash)
  * - "start_sse_connection": SSE 연결 시작 요청
  * - "cv_detection_failed": CV 탐지 실패 이벤트
- * - "clarify_qa_turn": Clarify 질문/답변 턴 수신
  * - "final_answer": 최종 답변 수신
- * 
- * 주의:
- * - Clarify 입력은 모바일에서 전송하지 않음
- * - 라즈베리파이 Streaming STT → FastAPI (직접) → FastAPI가 Socket.IO 서버로 clarify_turn/final_answer 전송
  */
 class SocketIoSttClient(
     private val serverUrl: String,  // 예: "http://192.168.0.100:5000"
     private var onSttResult: ((String, String, String?) -> Unit)? = null,  // (text, type, confidence)
-    private var onClarifyResponse: ((RagResponse) -> Unit)? = null,  // Clarify 응답 콜백 (레거시)
     private var onIntentResult: ((IntentResultDto) -> Unit)? = null,  // Intent 결과 콜백 (Gemini-Flash 분류 결과)
-    private var onClarifyTurn: ((ClarifyTurnDto) -> Unit)? = null,  // Clarify 턴 콜백
     private var onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
     private var onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
     private var onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
-    private var onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
     private var onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
@@ -216,26 +205,6 @@ class SocketIoSttClient(
             }
             
             
-            // clarify_turn 이벤트 수신 (Clarify 질문/답변 턴)
-            socket?.on("clarify_turn") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val jsonString = data.toString()
-                        Log.i(TAG, "📩 Clarify 턴 수신: $jsonString")
-                        
-                        val clarifyTurn = gson.fromJson(jsonString, ClarifyTurnDto::class.java)
-                        Log.i(TAG, "   → Session ID: ${clarifyTurn.session_id}, Turn ID: ${clarifyTurn.turn_id}, Status: ${clarifyTurn.status}")
-                        onClarifyTurn?.invoke(clarifyTurn)
-                    } else {
-                        Log.w(TAG, "⚠️ Clarify 턴 수신: 데이터가 null입니다")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Clarify 턴 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
-            
             // final_answer 이벤트 수신 (최종 답변)
 //            socket?.on("final_answer") { args ->
 //                try {
@@ -245,7 +214,7 @@ class SocketIoSttClient(
 //                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
 //
 //                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
-//                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
+//                        Log.i(TAG, "   → Answer: ${finalAnswer.answer.take(100)}...")
 //                        onFinalAnswer?.invoke(finalAnswer)
 //                    } else {
 //                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
@@ -336,43 +305,6 @@ class SocketIoSttClient(
                 }
             }
 
-            // clarify_qa_turn 이벤트 수신 (Clarify 질문/답변 턴 - 작업자 질문 + LLM 답변)
-            socket?.on("clarify_qa_turn") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val jsonString = data.toString()
-                        Log.i(TAG, "📩 Clarify 질문/답변 턴 수신: $jsonString")
-                        
-                        val qaTurn = gson.fromJson(jsonString, ClarifyQaTurnDto::class.java)
-                        Log.i(TAG, "   → Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}, Need Clarify: ${qaTurn.need_clarify}")
-                        Log.i(TAG, "   → User Question: ${qaTurn.user_question?.take(50)}..., LLM Answer: ${qaTurn.llm_answer?.take(50)}...")
-                        onClarifyQaTurn?.invoke(qaTurn)
-                    } else {
-                        Log.w(TAG, "⚠️ Clarify 질문/답변 턴 수신: 데이터가 null입니다")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Clarify 질문/답변 턴 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
-            
-            // clarify_response 이벤트 수신 (Clarify 응답 - 레거시)
-            socket?.on("clarify_response") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val jsonString = data.toString()
-                        Log.d(TAG, "📩 Clarify 응답 수신 (레거시): $jsonString")
-                        
-                        val ragResponse = gson.fromJson(jsonString, RagResponse::class.java)
-                        onClarifyResponse?.invoke(ragResponse)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Clarify 응답 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
             
             // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
             socket?.on("wakeword_detected") { args ->
@@ -484,62 +416,6 @@ class SocketIoSttClient(
             Log.e(TAG, "❌ 디바이스 등록 실패: ${e.message}")
             e.printStackTrace()
         }
-    }
-    
-    /**
-     * Clarify 입력 텍스트 전송
-     * 
-     * 사용자가 텍스트로 Clarify 응답을 입력할 때 사용합니다.
-     * Socket.IO를 통해 FastAPI 서버로 전달됩니다.
-     * 
-     * @param text 사용자 입력 텍스트
-     * @param sessionId Clarify 세션 ID
-     * @param turnId 현재 Clarify 턴 ID
-     * @param action "continue" | "skip" | "cancel"
-     * @return 전송 성공 여부
-     */
-    fun sendClarifyTextResponse(
-        text: String,
-        sessionId: String,
-        turnId: Int,
-        action: String = "continue"
-    ): Boolean {
-        if (!isConnected()) {
-            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-            return false
-        }
-        
-        return try {
-            val payload = JSONObject().apply {
-                put("text", text)
-                put("session_id", sessionId)
-                put("turn_id", turnId)
-                put("action", action)
-            }
-            
-            socket?.emit("clarify_input", payload)
-            Log.i(TAG, "📤 Clarify 텍스트 응답 전송: session_id=$sessionId, turn_id=$turnId, text=$text")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Clarify 응답 전송 실패: ${e.message}")
-            e.printStackTrace()
-            false
-        }
-    }
-    
-    /**
-     * Clarify 입력 텍스트 전송 (사용하지 않음)
-     * 
-     * 방식 1 구조에서는 모바일이 Clarify 입력을 전송하지 않습니다.
-     * 라즈베리파이 Streaming STT가 FastAPI로 직접 전송되고,
-     * FastAPI가 Socket.IO 서버로 clarify_response를 전송합니다.
-     * 
-     * @deprecated 이 메서드는 사용하지 않습니다. 방식 1에서는 Clarify 입력이 라즈베리파이 Streaming STT를 통해 전달됩니다.
-     */
-    @Deprecated("방식 1에서는 Clarify 입력이 라즈베리파이 Streaming STT를 통해 FastAPI로 직접 전송됩니다")
-    fun sendClarifyInput(text: String, sessionId: String): Boolean {
-        Log.w(TAG, "⚠️ sendClarifyInput은 사용하지 않습니다. 라즈베리파이 Streaming STT가 FastAPI로 직접 전송됩니다.")
-        return false
     }
     
     /**
@@ -750,37 +626,6 @@ class SocketIoSttClient(
     }
 
     /**
-     * Clarify Q&A 턴 TTS 재생 완료 이벤트 전송
-     * 
-     * @param sessionId Clarify 세션 ID
-     * @param turnId Clarify 턴 ID
-     * @return 전송 성공 여부
-     */
-    fun sendClarifyQaTurnAudioCompleted(sessionId: String, turnId: Int): Boolean {
-        if (!isConnected()) {
-            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-            return false
-        }
-        
-        return try {
-            val payload = JSONObject().apply {
-                put("type", "clarify_qa_turn")
-                put("session_id", sessionId)
-                put("turn_id", turnId)
-                put("timestamp", System.currentTimeMillis())
-            }
-            
-            socket?.emit("audio_playback_completed", payload)
-            Log.i(TAG, "📤 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송: session_id=$sessionId, turn_id=$turnId")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 Clarify Q&A 턴 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
-            e.printStackTrace()
-            false
-        }
-    }
-    
-    /**
      * 최종 답변 TTS 재생 완료 이벤트 전송
      * 
      * @return 전송 성공 여부
@@ -876,15 +721,12 @@ class SocketIoSttClient(
     }
     fun setCallbacks(
         onSttResult: ((String, String, String?) -> Unit)? = null,  // (text, type, confidence)
-        onClarifyResponse: ((RagResponse) -> Unit)? = null,  // Clarify 응답 콜백 (레거시)
         onIntentResult: ((IntentResultDto) -> Unit)? = null,  // Intent 결과 콜백 (Gemini-Flash 분류 결과)
-        onClarifyTurn: ((ClarifyTurnDto) -> Unit)? = null,  // Clarify 턴 콜백
         onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
         onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
         onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
         onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
-        onClarifyQaTurn: ((ClarifyQaTurnDto) -> Unit)? = null,  // Clarify 질문/답변 턴 콜백
         onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
         onPlayServiceEndAudio: ((String) -> Unit)? = null,  // 서비스 종료 오디오 재생 요청 콜백
         onConnect: (() -> Unit)? = null,  // 연결 성공 콜백
@@ -892,15 +734,12 @@ class SocketIoSttClient(
         onConnectError: ((String) -> Unit)? = null  // 연결 오류 콜백
     ) {
         if (onSttResult != null) this.onSttResult = onSttResult
-        if (onClarifyResponse != null) this.onClarifyResponse = onClarifyResponse
         if (onIntentResult != null) this.onIntentResult = onIntentResult
-        if (onClarifyTurn != null) this.onClarifyTurn = onClarifyTurn
         if (onFinalAnswer != null) this.onFinalAnswer = onFinalAnswer
         if (onStartSseConnection != null) this.onStartSseConnection = onStartSseConnection
         if (onCvDetectionNormal != null) this.onCvDetectionNormal = onCvDetectionNormal
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
         if (onCvDetectionAnomaly != null) this.onCvDetectionAnomaly = onCvDetectionAnomaly
-        if (onClarifyQaTurn != null) this.onClarifyQaTurn = onClarifyQaTurn
         if (onWakewordDetected != null) this.onWakewordDetected = onWakewordDetected
         if (onPlayServiceEndAudio != null) this.onPlayServiceEndAudio = onPlayServiceEndAudio
         if (onConnect != null) this.onConnect = onConnect
