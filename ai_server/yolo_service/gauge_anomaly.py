@@ -17,6 +17,208 @@ PRESS_CONFIG = {
     "max_val": 2.0
 }
 
+def cw_delta(a, b):
+    return (a - b) % 360
+
+def detect_big_radius(img, cx, cy, r_small):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    edges = cv2.Canny(blur, 40, 120)
+
+    h, w = gray.shape
+
+    if r_small is not None:
+        R_min = int(r_small * 11.0)
+        R_max = int(r_small * 14.0)
+    else:
+        R_min = int(min(h, w) * 0.35)
+        R_max = int(min(h, w) * 0.48)
+
+    R_max = min(R_max, int(min(h, w) * 0.49))
+
+    print(f"[DEBUG] search R range: {R_min} ~ {R_max}")
+
+    thetas = np.deg2rad(np.arange(0, 360, 1))
+    distances = []
+
+    for th in thetas:
+        for r in range(R_min, R_max):
+            x = int(cx + np.cos(th) * r)
+            y = int(cy - np.sin(th) * r)
+
+            if x < 0 or x >= w or y < 0 or y >= h:
+                break
+
+            if edges[y, x] > 0:
+                distances.append(r)
+                break
+
+    if not distances:
+        print("[ERROR] big circle detection failed")
+        return None
+
+    R = int(np.median(distances))
+    print(f"[INFO] big R = {R}")
+    return R
+
+
+# -----------------------------
+# 4) Dark-only angle voting
+# -----------------------------
+def dark_only_angle_voting(gray_img, center, R, dark_thresh=120):
+    h, w = gray_img.shape
+    x0, y0 = center
+    scores = []
+
+    for ang in range(360):
+        theta = np.deg2rad(ang)
+
+        rs = np.arange(0, R, 1)
+        xs = (x0 + np.cos(theta) * rs).astype(int)
+        ys = (y0 - np.sin(theta) * rs).astype(int)
+
+        valid = (xs >= 0) & (xs < w) & (ys >= 0) & (ys < h)
+        xs = xs[valid]
+        ys = ys[valid]
+
+        if len(xs) == 0:
+            scores.append(0)
+            continue
+
+        dark_score = np.sum(gray_img[ys, xs] < dark_thresh)
+        scores.append(dark_score)
+
+    scores = np.array(scores)
+    best_angle = int(np.argmax(scores))
+    print(f"[INFO] best angle = {best_angle}°")
+
+    return best_angle, scores
+
+def angle_to_value(angle_deg, cfg):
+    min_angle = cfg["min_angle"]
+    max_angle = cfg["max_angle"]
+    min_val   = cfg["min_val"]
+    max_val   = cfg["max_val"]
+
+    sweep = cw_delta(min_angle, max_angle)
+    if sweep == 0:
+        sweep = 360
+
+    progressed = cw_delta(min_angle, angle_deg)
+    ratio = np.clip(progressed / sweep, 0, 1)
+    value = min_val + ratio * (max_val - min_val)
+    return float(value)
+
+def detect_center_hub(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+
+    circles = cv2.HoughCircles(
+        blur,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=30,
+        param1=80,
+        param2=15,
+        minRadius=5,
+        maxRadius=35
+    )
+
+    h, w = img.shape[:2]
+    cx_img, cy_img = w // 2, h // 2  # ROI 중심
+
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+
+        best = None
+        best_dist = 1e9
+
+        for c in circles[0]:
+            x, y, r = c
+            dist = (x - cx_img)**2 + (y - cy_img)**2
+
+            # 10% 허용 범위 이내인지 체크
+            dx = abs(x - cx_img)
+            dy = abs(y - cy_img)
+
+            if dx < w * 0.15 and dy < h * 0.15:   # ★ 여기만 10%로 변경
+                if dist < best_dist:
+                    best = c
+                    best_dist = dist
+
+        if best is not None:
+            cx, cy, r_small = best
+            print(f"[INFO] hub detected → ({cx}, {cy}), r={r_small}")
+            return cx, cy, int(r_small)
+
+    print("[WARN] hub not found (failed 10% rule)")
+    return None, None, None
+
+def detect_center_hub_intensity(img, debug_dir=None):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5,5), 1.2)
+
+    h, w = gray.shape
+
+    # 1) 최저 1% 픽셀(어두운 영역) 찾기
+    thresh_val = np.percentile(blur, 1)  # 하위 1% 픽셀값
+    mask = (blur <= thresh_val).astype(np.uint8) * 255
+
+    if debug_dir:
+        cv2.imwrite(f"{debug_dir}/hub_dark_mask.png", mask)
+
+    # 2) 연결된 어두운 블롭 탐지
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
+
+    if num_labels <= 1:
+        # 허브가 너무 약해서 안 보이면 이미지 중앙 fallback
+        cx, cy = w//2, h//2
+        print("[WARN] intensity hub not found → fallback to center")
+        return cx, cy, None
+
+    # 3) 가장 '해상도 높은 blob' 찾기
+    best_idx = None
+    best_score = -1
+
+    for i in range(1, num_labels):  # 0은 배경
+        area = stats[i, cv2.CC_STAT_AREA]
+
+        if area < 5 or area > 500:  # 허브 크기 제한
+            continue
+
+        # blob의 중심
+        cx_blob, cy_blob = centroids[i]
+        # ROI 중심과 가까울수록 점수 상승
+        dist_center = (cx_blob - w/2)**2 + (cy_blob - h/2)**2
+        score = -dist_center  # 중심과 가까울수록 good
+
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    if best_idx is None:
+        cx, cy = w//2, h//2
+        print("[WARN] hub not found (no blob) → fallback center")
+        return cx, cy, None
+
+    cx_hub, cy_hub = centroids[best_idx]
+    cx_hub, cy_hub = int(cx_hub), int(cy_hub)
+
+    # 4) 허브 radius 대략 구하기 (blob의 평균 반경)
+    ys, xs = np.where(labels == best_idx)
+    dists = np.sqrt((xs - cx_hub)**2 + (ys - cy_hub)**2)
+    r_small = int(np.mean(dists))
+
+    if debug_dir:
+        vis = img.copy()
+        cv2.circle(vis, (cx_hub, cy_hub), 3, (0,0,255), -1)
+        cv2.circle(vis, (cx_hub, cy_hub), r_small, (0,255,0), 2)
+        cv2.imwrite(f"{debug_dir}/hub_intensity_detected.png", vis)
+
+    print(f"[INFO] intensity hub detected → ({cx_hub},{cy_hub}), r={r_small}")
+
+    return cx_hub, cy_hub, r_small
+
 # -----------------------------
 # RAG-friendly 메시지 매핑
 # -----------------------------
@@ -37,149 +239,27 @@ GAUGE_RAG_MESSAGE = {
 # -------------------------------------
 def detect_gauge_angle_fast(roi, cfg):
     try:
-        h, w = roi.shape[:2]
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        # -----------------------
-        # 1) 중심 + 반지름 추정
-        # -----------------------
-        circles = cv2.HoughCircles(
-            blur, cv2.HOUGH_GRADIENT, 1, 200,
-            param1=100, param2=22, minRadius=50, maxRadius=0
-        )
-
-        img_center = np.array([w / 2, h / 2])
-
-        if circles is None:
-            x0, y0 = w // 2, h // 2
-            R = max(min(h, w) * 0.45, 20)
-        else:
-            circles = np.uint16(np.around(circles))[0]
-            x0, y0, R = max(
-                circles,
-                key=lambda c: (c[2] * 0.7)
-                - np.linalg.norm(np.array([c[0], c[1]]) - img_center)
-            )
-            R = max(min(R, min(h, w) * 0.45), 20)
-
-        # -----------------------
-        # 2) Edge + 바늘 몸통 mask
-        # -----------------------
-        edges = cv2.Canny(blur, 50, 150)
-
-        yy, xx = np.indices(edges.shape)
-        rr = np.sqrt((xx - x0) ** 2 + (yy - y0) ** 2)
-
-        pointer_mask = (rr > R * 0.20) & (rr < R * 0.60)
-        edges_ptr = edges.copy()
-        edges_ptr[~pointer_mask] = 0
-
-        # fallback
-        if edges_ptr.sum() < 400:
-            edges_ptr = edges
-
-        # -----------------------
-        # 3) Angle voting
-        # -----------------------
-        thetas = np.deg2rad(np.arange(0, 360, 1.5))
-        scores = []
-
-        for th in thetas:
-            xs = (x0 + np.cos(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-            ys = (y0 - np.sin(th) * np.linspace(R * 0.25, R * 0.9, 60)).astype(int)
-            xs = np.clip(xs, 0, w - 1)
-            ys = np.clip(ys, 0, h - 1)
-            scores.append(edges_ptr[ys, xs].sum())
-
-        scores = np.asarray(scores, dtype=np.float32)
-        if scores.max() < 10:
+        # 1) 중심 허브 탐지
+        cx, cy, r_small = detect_center_hub_intensity(roi)
+        if cx is None:
             return None
 
-        degs = (np.rad2deg(thetas) + 180) % 360
+        # 2) 큰 원 탐지
+        R = detect_big_radius(roi, cx, cy, r_small)
+        if R is None:
+            return None
 
-        # -----------------------
-        # 4) valid range filtering
-        # -----------------------
-        def cw(a, b): return (a - b) % 360
+        # 3) dark-only voting
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        best_angle, scores = dark_only_angle_voting(gray, (cx, cy), R)
 
-        min_angle = cfg["min_angle"]
-        max_angle = cfg["max_angle"]
-        sweep = cw(min_angle, max_angle) or 360
+        # 4) angle → value 변환
+        value = angle_to_value(best_angle, cfg)
 
-        margin = 5.0
-        valid_mask = []
-        for d in degs:
-            prog = cw(min_angle, d)
-            valid_mask.append(prog <= (sweep + margin))
-        valid_mask = np.array(valid_mask, bool)
-        scores[~valid_mask] = 0
+        return float(best_angle), float(value)
 
-        best_idx = int(np.argmax(scores))
-        angle = float(degs[best_idx] % 360)
-
-        # -----------------------
-        # 5) 몸통 두께 기반 flip correction
-        # -----------------------
-        def body_thickness(a):
-            th = np.deg2rad(a)
-            rs = np.linspace(R * 0.20, R * 0.45, 15)
-            widths = []
-
-            for r in rs:
-                x = int(x0 + np.cos(th) * r)
-                y = int(y0 - np.sin(th) * r)
-
-                line_vals = []
-                for k in range(-7, 8):
-                    xx = int(x - k * np.sin(th))
-                    yy = int(y + k * np.cos(th))
-
-                    if 0 <= xx < w and 0 <= yy < h:
-                        line_vals.append(edges[yy, xx])
-                    else:
-                        line_vals.append(0)
-
-                widths.append(sum(v > 0 for v in line_vals))
-
-            return np.mean(widths)
-
-        opp = (angle + 180) % 360
-        if body_thickness(opp) > body_thickness(angle) * 1.15:
-            angle = opp
-
-        # -----------------------
-        # 6) thermometer 전용 물리 보정
-        # -----------------------
-        def cw_delta(a, b):
-            return (a - b) % 360
-
-        angle = float(angle)
-
-        # 1) 기본값 계산
-        progressed = cw_delta(min_angle, angle)
-        ratio = float(np.clip(progressed / sweep, 0, 1))
-        value = cfg["min_val"] + ratio * (cfg["max_val"] - cfg["min_val"])
-
-        # 2) 반대각 계산 (항상 계산해둔다)
-        opp_angle = (angle + 180) % 360
-        prog_o = cw_delta(min_angle, opp_angle)
-        ratio_o = float(np.clip(prog_o / sweep, 0, 1))
-        value_o = cfg["min_val"] + ratio_o * (cfg["max_val"] - cfg["min_val"])
-
-        # ------------------------------------------------
-        # 3) 강제 보정(Override) 조건
-        # ------------------------------------------------
-        # thermometer처럼 0~100 범위인 경우만 적용
-        if cfg["max_val"] == 100:
-
-            # 누가 봐도 반대인 상황 강제 보정
-            if value <= 20 or value >= 80:
-                angle = opp_angle
-                value = value_o
-
-        return angle, value
-    except:
+    except Exception as e:
+        logger.exception(f"[gauge] fast-angle error: {e}")
         return None
 
 
