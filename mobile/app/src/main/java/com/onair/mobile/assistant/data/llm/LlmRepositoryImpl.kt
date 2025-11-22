@@ -16,10 +16,10 @@ class LlmRepositoryImpl(
     
     private val TAG = "LlmRepository"
     
-    override suspend fun generateRagResponse(query: String, sessionId: String?): RagResponse {
+    override suspend fun generateRagResponse(query: String): RagResponse {
         return try {
-            Log.d(TAG, "📡 RAG 응답 생성 요청: query=$query, sessionId=$sessionId")
-            val response = ragRepository.chat(query, sessionId)
+            Log.d(TAG, "📡 RAG 응답 생성 요청: query=$query")
+            val response = ragRepository.chat(query)
             Log.d(TAG, "✅ RAG 응답 생성 완료: answerable=${response.answerable}")
             response
         } catch (e: Exception) {

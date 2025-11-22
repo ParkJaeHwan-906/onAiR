@@ -34,7 +34,6 @@ import kotlinx.coroutines.delay
 import org.json.JSONObject
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
-import com.onair.mobile.assistant.core.common.SessionManager
 import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
 import com.onair.mobile.assistant.data.rag.RagRepositoryImpl
@@ -45,12 +44,10 @@ import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
 import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
-import com.onair.mobile.assistant.core.model.dto.ClarifyTurnDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
-import com.onair.mobile.assistant.core.model.dto.ClarifyQaTurnDto
 import com.onair.mobile.assistant.data.auth.TokenManager
 import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
@@ -75,7 +72,6 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var socketIoSttClient: SocketIoSttClient
     private lateinit var sttRepository: SttRepositoryImpl
     private lateinit var intentRepository: IntentRepositoryImpl
-    private lateinit var sessionManager: SessionManager
     private lateinit var llmRepository: LlmRepositoryImpl
     private lateinit var ttsRepository: TtsRepositoryImpl
     private lateinit var mediaPlayerController: MediaPlayerController
@@ -85,10 +81,6 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
     private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
-
-    private var isWaitingForClarification = false
-    private var currentSessionId: String? = null
-    private var currentTurnId: Int = 1
     private var aiOnDialog: AiOnDialog? = null
     private var onAirOnDialog:  OnAirOnDialog? = null
     private var isActivityResumed = false  // Activity가 resume 상태인지 추적
@@ -343,9 +335,6 @@ class WorkingActivity : AppCompatActivity() {
 
         // Intent Repository 초기화
         intentRepository = IntentRepositoryImpl(this, null)
-
-        // 세션 관리자 초기화
-        sessionManager = SessionManager()
 
         // RAG Repository 초기화
         val ragRepository = RagRepositoryImpl(FASTAPI_SERVER_URL)
@@ -643,101 +632,10 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleClarifyQaTurn(qaTurn: ClarifyQaTurnDto) {
-        Log.i(TAG, "============================================================")
-        Log.i(TAG, "📩 [모바일] Clarify 질문/답변 턴 수신")
-        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
-        Log.i(TAG, "   Gate Decision: ${qaTurn.gate_decision}")
-        Log.i(TAG, "   Need Clarify: ${qaTurn.need_clarify}")
-        Log.i(TAG, "============================================================")
-
-        lifecycleScope.launch {
-            try {
-                if (qaTurn.status == "error") {
-                    Log.e(TAG, "❌ [모바일] Clarify 질문/답변 턴 오류: ${qaTurn.user_question}")
-                    return@launch
-                }
-
-                runOnUiThread {
-//                    binding.taskName.text = "Clarify: Q) ${qaTurn.user_question}\nA) ${qaTurn.llm_answer.take(100)}..."
-                }
-
-                Log.i(TAG, "============================================================")
-                Log.i(TAG, "💬 [모바일] 작업자 질문: ${qaTurn.user_question}")
-                Log.i(TAG, "🤖 [모바일] LLM 답변: ${qaTurn.llm_answer}")
-                Log.i(TAG, "============================================================")
-
-                if (qaTurn.audio_content != null && qaTurn.audio_content.isNotBlank()) {
-                    Log.i(TAG, "============================================================")
-                    Log.i(TAG, "🔊 [모바일] TTS 재생 시작")
-                    Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
-                    Log.i(TAG, "   오디오 인코딩: ${qaTurn.audio_encoding}")
-                    Log.i(TAG, "============================================================")
-                    ttsRepository.playAudio(qaTurn.audio_content, qaTurn.audio_encoding) {
-                        Log.i(TAG, "============================================================")
-                        Log.i(TAG, "✅ [모바일] TTS 재생 완료")
-                        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
-                        Log.i(TAG, "============================================================")
-                        Log.i(TAG, "============================================================")
-                        Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
-                        Log.i(TAG, "   Type: clarify_qa_turn")
-                        Log.i(TAG, "   Session ID: ${qaTurn.session_id}, Turn ID: ${qaTurn.turn_id}")
-                        Log.i(TAG, "============================================================")
-                        val success = socketIoSttClient.sendClarifyQaTurnAudioCompleted(
-                            qaTurn.session_id ?: "",
-                            qaTurn.turn_id ?: 1
-                        )
-                        if (success) {
-                            Log.i(TAG, "============================================================")
-                            Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
-                            Log.i(TAG, "   💡 라즈베리파이 Streaming STT는 계속 실행 중 (다음 질문 대기)")
-                            Log.i(TAG, "============================================================")
-                        } else {
-                            Log.e(TAG, "============================================================")
-                            Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패")
-                            Log.e(TAG, "============================================================")
-                        }
-                    }
-                }
-
-                if (!qaTurn.need_clarify) {
-                    Log.i(TAG, "============================================================")
-                    Log.i(TAG, "✅ [모바일] 충분히 구체화됨 - 최종 답변 대기 중")
-                    Log.i(TAG, "============================================================")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "============================================================")
-                Log.e(TAG, "❌ [모바일] Clarify 질문/답변 턴 처리 실패: ${e.message}")
-                Log.e(TAG, "============================================================")
-                e.printStackTrace()
-            }
-        }
-    }
-
-    private fun handleClarifyTurn(clarifyTurn: ClarifyTurnDto) {
-        Log.i(TAG, "💬 Clarify 턴 수신: session_id=${clarifyTurn.session_id}, turn_id=${clarifyTurn.turn_id}")
-
-        if (clarifyTurn.status == "error") {
-            Log.e(TAG, "❌ Clarify 턴 오류: ${clarifyTurn.message}")
-            return
-        }
-
-        if (clarifyTurn.gate_decision == "GREEN") {
-            Log.d(TAG, "✅ Clarify 턴 GREEN - 최종 답변 대기 중")
-        } else {
-            val question = clarifyTurn.question ?: ""
-            val examples = clarifyTurn.examples ?: emptyList()
-            handleClarifyResponse(question, examples)
-            isWaitingForClarification = true
-            currentSessionId = clarifyTurn.session_id
-            currentTurnId = clarifyTurn.turn_id
-        }
-    }
 
     private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
         Log.i(TAG, "============================================================")
-        Log.i(TAG, "✅ [모바일] 최종 답변 수신 (GREEN → GPT-4o 생성 완료)")
-        Log.i(TAG, "   Session ID: ${finalAnswer.session_id}, Turn ID: ${finalAnswer.turn_id}")
+        Log.i(TAG, "✅ [모바일] 최종 답변 수신 (GPT-4o 생성 완료)")
         Log.i(TAG, "   답변: ${finalAnswer.answer.take(100)}...")
         Log.i(TAG, "============================================================")
 
@@ -795,11 +693,6 @@ class WorkingActivity : AppCompatActivity() {
                 )
             }
         }
-
-        isWaitingForClarification = false
-        sessionManager.resetSession()
-        currentSessionId = null
-        currentTurnId = 1
     }
 
     /**
@@ -969,32 +862,6 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleClarifyResponseFromSocket(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
-        if (ragResponse.need_clarify == true) {
-            val clarifyGuidance = ragResponse.clarify_guidance ?: ragResponse.ask ?: ""
-            handleClarifyResponse(clarifyGuidance, ragResponse.options)
-        } else {
-            lifecycleScope.launch {
-                handleFinalAnswer(ragResponse)
-                isWaitingForClarification = false
-                sessionManager.resetSession()
-                currentSessionId = null
-            }
-        }
-    }
-
-    private fun handleClarifyResponse(guidance: String, options: List<String>? = null) {
-        Log.i(TAG, "💬 Clarify 질문: $guidance")
-
-        runOnUiThread {
-            val clarifyMessage = if (options != null && options.isNotEmpty()) {
-                "$guidance\n옵션: ${options.joinToString(", ")}"
-            } else {
-                guidance
-            }
-//            binding.taskName.text = "Clarify: $clarifyMessage"
-        }
-    }
 
     private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
         Log.i(TAG, "============================================================")
@@ -1473,14 +1340,8 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "🧠 STT 텍스트 수신: $text")
                 sttRepository.receiveFromRaspberryPi(text)
             },
-            onClarifyResponse = { ragResponse ->
-                handleClarifyResponseFromSocket(ragResponse)
-            },
             onIntentResult = { intentResult ->
                 handleIntentResult(intentResult)
-            },
-            onClarifyTurn = { clarifyTurn ->
-                handleClarifyTurn(clarifyTurn)
             },
             onFinalAnswer = { finalAnswer ->
                 handleFinalAnswerFromSocket(finalAnswer)
@@ -1493,9 +1354,6 @@ class WorkingActivity : AppCompatActivity() {
             },
             onCvDetectionAnomaly = { cvAnomaly ->
                 handleCvDetectionAnomaly(cvAnomaly)
-            },
-            onClarifyQaTurn = { qa ->
-                handleClarifyQaTurn(qa)
             },
             onWakewordDetected = {
                 handleWakewordDetected()
@@ -1518,15 +1376,12 @@ class WorkingActivity : AppCompatActivity() {
     private fun removeCallback() {
         socketIoSttClient.setCallbacks(
             onSttResult = null,
-            onClarifyResponse = null,
             onIntentResult = null,
-            onClarifyTurn = null,
             onFinalAnswer = null,
             onStartSseConnection = null,
             onCvDetectionNormal = null,
             onCvDetectionFailed = null,
             onCvDetectionAnomaly = null,
-            onClarifyQaTurn = null,
             onWakewordDetected = null,
             onPlayServiceEndAudio = null,
         )
@@ -1561,13 +1416,7 @@ class WorkingActivity : AppCompatActivity() {
     private fun resetToWakewordWaitingState() {
         try {
             Log.i(TAG, "🔄 상태 초기화 시작")
-            
-            // 세션 상태 초기화
-            isWaitingForClarification = false
-            currentSessionId = null
-            currentTurnId = 1
-            sessionManager.resetSession()
-            
+
             // UI 초기화
             runOnUiThread {
 //                binding.taskName.text = "대기 중..."

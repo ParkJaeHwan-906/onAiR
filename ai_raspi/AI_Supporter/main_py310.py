@@ -14,10 +14,9 @@ import subprocess
 import fcntl
 from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
-from stt.gcp_stt_stream import GcpStreamingStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
 from bridge.stt_bridge_server import (
-    run_server, send_stt_result, set_start_streaming_stt_callback, 
+    run_server, send_stt_result, 
     set_service_completed_callback, send_wakeword_detected, 
     send_wakeword_waiting_ready,
     set_wakeword_audio_completed_callback,
@@ -44,98 +43,100 @@ def run_stt_loop():
     ⑦ 서비스 종료 → STT 세션 OFF (마이크는 계속 ON)
     ⑧ 대기 복귀 (마이크 ON, 다음 Wakeword 대기)
     """
+    # [25.11.21] 브릿지 서버 필요 없음 - 재환
     # 브리지 서버를 별도 스레드에서 실행 (재연결될 때까지 무한 재시도)
-    bridge_thread = None
-    bridge_retry_delay = 1.0        # TODO: 3-5 초로 증가시켜도 괜찮을 듯, 1초면 너무 자주 재시도하게 됨
-    bridge_attempt = 0
-    
-    while True:  # 재연결될 때까지 무한 재시도
-        bridge_attempt += 1
-        try:
-            # 포트 점유 확인 및 해제 시도
-            # 단순 테스트 로직, 포트 점유 확인용
-            #-------------------------------------------------------------
-            # 담당자 : 박소정 
-            # TODO: Socket.io 로 통일 필요
-            # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
-            # [] 바로 연결해보고, 예외가 발생한다면 그때 죽이고 재실행하는게 어떤지
-            #-------------------------------------------------------------
-            import socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.5)
-            result = sock.connect_ex(('127.0.0.1', 5050))
-            sock.close()
+    # bridge_thread = None
+    # bridge_retry_delay = 1.0        # TODO: 3-5 초로 증가시켜도 괜찮을 듯, 1초면 너무 자주 재시도하게 됨
+    # bridge_attempt = 0
+    # [25.11.21] 브릿지 서버 필요 없음 - 재환
+    # while True:  # 재연결될 때까지 무한 재시도
+    #     bridge_attempt += 1
+    #     try:
+    #         # 포트 점유 확인 및 해제 시도
+    #         # 단순 테스트 로직, 포트 점유 확인용
+    #         #-------------------------------------------------------------
+    #         # 담당자 : 박소정 
+    #         # TODO: Socket.io 로 통일 필요
+    #         # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
+    #         # [] 바로 연결해보고, 예외가 발생한다면 그때 죽이고 재실행하는게 어떤지
+    #         #-------------------------------------------------------------
+    #         import socket
+    #         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #         sock.settimeout(0.5)
+    #         result = sock.connect_ex(('127.0.0.1', 5050))
+    #         sock.close()
             
-            if result == 0:
-                # 포트가 이미 사용 중인 경우
-                logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... (시도 {bridge_attempt})")
-                # ---------------------------------------------------------------
-                # 담당자 : 박소정
-                # 개선 방법
-                # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
-                # 
-                # logger.info(f"이미 브리지 서버가 실행중입니다.")
-                # break;
-                # 이하 코드 불필요
-                # ---------------------------------------------------------------
-                try:
-                    # 기존 프로세스 종료 시도
-                    subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
-                    time.sleep(1)   # TODO: 마찬가지로 1초면 너무 짧음, 3초정도로 늘리면 좋을 듯
-                except Exception:
-                    pass
-                continue
-                # ---------------------------------------------------------------
-            # 브리지 서버 시작
-            bridge_thread = threading.Thread(
-                target=run_server,
-                args=('127.0.0.1', 5050),
-                daemon=True
-            )
-            bridge_thread.start()
-            logger.info("🚀 브리지 서버 시작 (포트 5050)")
+    #         if result == 0:
+    #             # 포트가 이미 사용 중인 경우
+    #             logger.warning(f"⚠️ 포트 5050이 이미 사용 중입니다. 기존 프로세스 종료 시도 중... (시도 {bridge_attempt})")
+    #             # ---------------------------------------------------------------
+    #             # 담당자 : 박소정
+    #             # 개선 방법
+    #             # [] 초기에 포트가 열려있다면, 굳이 죽이지 않고 바로 연결하면 안되는지
+    #             # 
+    #             # logger.info(f"이미 브리지 서버가 실행중입니다.")
+    #             # break;
+    #             # 이하 코드 불필요
+    #             # ---------------------------------------------------------------
+    #             try:
+    #                 # 기존 프로세스 종료 시도
+    #                 subprocess.run(['pkill', '-f', 'stt_bridge_server'], timeout=2, check=False)
+    #                 time.sleep(1)   # TODO: 마찬가지로 1초면 너무 짧음, 3초정도로 늘리면 좋을 듯
+    #             except Exception:
+    #                 pass
+    #             continue
+    #             # ---------------------------------------------------------------
+    #         # 브리지 서버 시작
+    #         bridge_thread = threading.Thread(
+    #             target=run_server,
+    #             args=('127.0.0.1', 5050),
+    #             daemon=True
+    #         )
+    #         bridge_thread.start()
+    #         logger.info("🚀 브리지 서버 시작 (포트 5050)")
             
-            # 브리지 서버가 시작될 때까지 대기 (최대 3초)
-            max_wait_time = 3
-            wait_start = time.time()
-            server_ready = False
+    #         # 브리지 서버가 시작될 때까지 대기 (최대 3초)
+    #         max_wait_time = 3
+    #         wait_start = time.time()
+    #         server_ready = False
             
-            # 3초 동안 계속해서 브리지 서버가 올라왔는지 연결 확인
-            while time.time() - wait_start < max_wait_time:
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(0.5)
-                    result = sock.connect_ex(('127.0.0.1', 5050))
-                    sock.close()
-                    if result == 0:
-                        server_ready = True
-                        break
-                except Exception:
-                    pass
-                time.sleep(0.2)
+    #         # 3초 동안 계속해서 브리지 서버가 올라왔는지 연결 확인
+    #         while time.time() - wait_start < max_wait_time:
+    #             try:
+    #                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #                 sock.settimeout(0.5)
+    #                 result = sock.connect_ex(('127.0.0.1', 5050))
+    #                 sock.close()
+    #                 if result == 0:
+    #                     server_ready = True
+    #                     break
+    #             except Exception:
+    #                 pass
+    #             time.sleep(0.2)
             
-            if server_ready:
-                logger.info("✅ 브리지 서버 시작 확인 완료")
-                break  # 성공 시 루프 종료
-            else:
-                logger.warning(f"⚠️ 브리지 서버 포트 연결 확인 실패, 재시도 중... (시도 {bridge_attempt})")
-                time.sleep(bridge_retry_delay)
-                continue
+    #         if server_ready:
+    #             logger.info("✅ 브리지 서버 시작 확인 완료")
+    #             break  # 성공 시 루프 종료
+    #         else:
+    #             logger.warning(f"⚠️ 브리지 서버 포트 연결 확인 실패, 재시도 중... (시도 {bridge_attempt})")
+    #             time.sleep(bridge_retry_delay)
+    #             continue
                     
-        except Exception as e:
-            logger.warning(f"⚠️ 브리지 서버 시작 실패, 재시도 중... (시도 {bridge_attempt}): {e}")
-            time.sleep(bridge_retry_delay)
-            continue
+    #     except Exception as e:
+    #         logger.warning(f"⚠️ 브리지 서버 시작 실패, 재시도 중... (시도 {bridge_attempt}): {e}")
+    #         time.sleep(bridge_retry_delay)
+    #         continue
     
     # WebRTC 프로세스 확인 (마이크 점유 확인)
-    webrtc_pids = []        # TODO: 이거 사용하는 곳이 없어보이는데 확인해주세요
-    try:
-        result = subprocess.run(['pgrep', '-f', 'socket_manager.py'], capture_output=True, text=True)
-        if result.returncode == 0:
-            pids = result.stdout.strip().split('\n')
-            webrtc_pids = [pid for pid in pids if pid]      # TODO: 마찬가지로 사용하는 곳이 없어요
-    except Exception as e:
-        logger.warning(f"⚠️ WebRTC 프로세스 확인 실패: {e}")
+    # [25.11.21] 안쓰는 webrtc_pids 배열 주석 처리, 안쓰는 코드 정리 - 재환
+    # webrtc_pids = []        # TODO: 이거 사용하는 곳이 없어보이는데 확인해주세요
+    # try:
+    #     result = subprocess.run(['pgrep', '-f', 'socket_manager.py'], capture_output=True, text=True)   # socket_manager.py 실행하는 프로세스 찾기 (raspi-socket.service)
+    #     if result.returncode == 0:
+    #         pids = result.stdout.strip().split('\n')
+    #         webrtc_pids = [pid for pid in pids if pid]      # TODO: 마찬가지로 사용하는 곳이 없어요
+    # except Exception as e:
+    #     logger.warning(f"⚠️ WebRTC 프로세스 확인 실패: {e}")
     
     # 주의: 마이크 점유 확인은 MicStream.start()에서 직접 수행됩니다.
     # MicStream.start()는 자동으로 장치를 선택하고 마이크를 열며,
@@ -180,7 +181,6 @@ def run_stt_loop():
     
     # STT 인스턴스 생성
     buffered_stt = GcpBufferedStt()
-    streaming_stt = GcpStreamingStt()
     
     # 버퍼링 STT 실행 중 플래그 (중지 가능하도록)
     buffered_stt_running = {"running": False}
@@ -225,25 +225,6 @@ def run_stt_loop():
                     buffered_stt_running["running"] = False
                 # 버퍼링 STT 후 텍스트 전송 완료
                 # 주의: 마이크는 계속 ON 상태로 유지됨
-            else:
-                # 스트리밍 방식: 실시간 인식 (분기처리 이후)
-                logger.info("🎤 스트리밍 모드 시작 (실시간 음성 인식)")
-                # 주의: 마이크는 항상 ON 상태로 유지되므로 별도의 활성화 불필요
-                
-                # 세션 ID 생성 (Clarify 세션용)
-                import uuid
-                session_id = str(uuid.uuid4())
-                
-                logger.info(f"📤 브리지 서버를 통해 Streaming STT 전송 시작 (session_id={session_id})")
-                try:
-                    await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                except Exception as e:
-                    logger.error(f"❌ 스트리밍 STT 실행 중 오류: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    raise  # 상위로 예외 전파
-                # 스트리밍 종료 후 마이크는 켜둠 (다음 Wakeword 대기)
-                logger.info("🟢 스트리밍 모드 종료, 마이크는 계속 ON")
                 
         except Exception as e:
             logger.error(f"❌ STT 세션 오류: {e}")
@@ -257,45 +238,6 @@ def run_stt_loop():
     # 이벤트 루프 생성
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
-    # Streaming STT 시작 함수 (Python 3.13에서 호출될 수 있음)
-    # 주의: loop가 정의된 후에 등록해야 함
-    def start_streaming_stt(session_id: str):
-        """브리지 서버를 통해 받은 Streaming STT 시작 명령 처리"""
-        logger.info("=" * 60)
-        logger.info(f"📥 [라즈베리파이] Streaming STT 시작 명령 수신")
-        logger.info(f"   Session ID: {session_id}")
-        logger.info("=" * 60)
-        
-        # 마이크 활성화 (버퍼링 STT 후 OFF되었을 수 있음)
-        if not mic.is_active():
-            mic.resume()
-            logger.info("=" * 60)
-            logger.info(f"🔊 [라즈베리파이] 마이크 활성화 (Streaming STT 시작)")
-            logger.info("=" * 60)
-        
-        # Streaming STT 세션 시작 (별도 태스크로 실행)
-        async def run_streaming():
-            try:
-                logger.info("=" * 60)
-                logger.info(f"🎤 [라즈베리파이] Streaming STT 세션 시작")
-                logger.info(f"   Session ID: {session_id}")
-                logger.info(f"   💡 사용자가 말하면 침묵 1.5초 후 한 문장으로 인식하여 FastAPI로 전송")
-                logger.info("=" * 60)
-                await streaming_stt.run(mic, broadcaster=broadcast, session_id=session_id)
-                logger.info("=" * 60)
-                logger.info(f"✅ [라즈베리파이] Streaming STT 세션 종료")
-                logger.info("=" * 60)
-            except Exception as e:
-                logger.error("=" * 60)
-                logger.error(f"❌ [라즈베리파이] Streaming STT 세션 오류: {e}")
-                logger.error("=" * 60)
-        
-        # 이벤트 루프에서 실행
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(run_streaming()))
-    
-    # 브리지 서버에 Streaming STT 시작 콜백 등록
-    set_start_streaming_stt_callback(start_streaming_stt)
     
     # 버퍼링 STT 세션 종료 콜백 등록
     def handle_stop_buffered_stt(reason: str):
@@ -650,7 +592,6 @@ def run_stt_loop():
                 continue
     except KeyboardInterrupt:
         logger.info("🛑 종료 중...")
-        streaming_stt.stop()
         mic.stop()
         stop_wakeword_detector()
         logger.info("✅ 종료 완료")
