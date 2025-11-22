@@ -72,7 +72,7 @@ class SocketIoSttClient(
     val arMarkers = _arMarkers.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
-    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
+    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>()
     val finalAnswer = _finalAnswer.asSharedFlow()
 
     private val _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
@@ -235,27 +235,7 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-            
-            // final_answer 이벤트 수신 (최종 답변)
-//            socket?.on("final_answer") { args ->
-//                try {
-//                    val data = args[0] as? JSONObject
-//                    if (data != null) {
-//                        val jsonString = data.toString()
-//                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
-//
-//                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
-//                        Log.i(TAG, "   → Session ID: ${finalAnswer.session_id}, Answer: ${finalAnswer.answer.take(100)}...")
-//                        onFinalAnswer?.invoke(finalAnswer)
-//                    } else {
-//                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
-//                    }
-//                } catch (e: Exception) {
-//                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
-//                    e.printStackTrace()
-//                }
-//            }
-            
+
             // cv_detection_failed 이벤트 수신 (CV 모델 오류 탐지 실패)
             socket?.on("cv_detection_failed") { args ->
                 Log.i(TAG, "🔔 [이벤트 수신] cv_detection_failed 이벤트 도착!")
