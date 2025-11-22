@@ -14,8 +14,6 @@ class ConnectionManager:
         self.lock = asyncio.Lock()
         self.stt_mode = "buffered"  # "buffered" 또는 "streaming"
         self.mic_stream = None  # 마이크 스트림 인스턴스
-        self.streaming_stt_instance = None  # Streaming STT 인스턴스 참조
-        self.stop_streaming_sessions = set()  # 종료할 세션 ID 집합
         self.service_completed = False  # 서비스 완료 플래그 (GPT-4o 답변 생성 및 TTS 완료 후 True)
         self.audio_streamer = None  # WebRTC 오디오 스트리머 인스턴스
 
@@ -27,12 +25,14 @@ class ConnectionManager:
             socketio_client: SocketIOClient 인스턴스
         """
         self.socketio_client = socketio_client
-        logger.info("✅ Socket.IO 클라이언트가 등록되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("✅ Socket.IO 클라이언트가 등록되었습니다.")
 
     def clear_socketio_client(self):
         """등록된 Socket.IO 클라이언트를 제거합니다."""
         self.socketio_client = None
-        logger.info("Socket.IO 클라이언트가 제거되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("Socket.IO 클라이언트가 제거되었습니다.")
 
     def set_stt_mode(self, mode: str):
         """
@@ -43,9 +43,11 @@ class ConnectionManager:
         """
         if mode in ["buffered", "streaming"]:
             self.stt_mode = mode
-            logger.info(f"✅ STT 모드 변경: {mode}")
-        else:
-            logger.warning(f"⚠️ 잘못된 STT 모드: {mode}")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # logger.info(f"✅ STT 모드 변경: {mode}")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # else:
+        #     logger.warning(f"⚠️ 잘못된 STT 모드: {mode}")
 
     def get_stt_mode(self) -> str:
         """현재 STT 모드를 반환합니다."""
@@ -59,37 +61,13 @@ class ConnectionManager:
             mic_stream: MicStream 인스턴스
         """
         self.mic_stream = mic_stream
-        logger.info("✅ 마이크 스트림이 등록되었습니다.")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info("✅ 마이크 스트림이 등록되었습니다.")
 
     def get_mic_stream(self):
         """등록된 마이크 스트림 인스턴스를 반환합니다."""
         return self.mic_stream
     
-    def set_streaming_stt_instance(self, streaming_stt_instance):
-        """
-        Streaming STT 인스턴스를 등록합니다.
-        
-        Args:
-            streaming_stt_instance: GcpStreamingStt 인스턴스
-        """
-        self.streaming_stt_instance = streaming_stt_instance
-        logger.info("✅ Streaming STT 인스턴스가 등록되었습니다.")
-    
-    def get_stop_streaming_session(self, session_id: str) -> bool:
-        """세션 ID에 대한 종료 신호 확인 및 제거"""
-        if session_id in self.stop_streaming_sessions:
-            self.stop_streaming_sessions.remove(session_id)
-            return True
-        return False
-    
-    def add_stop_streaming_session(self, session_id: str):
-        """종료할 세션 ID 추가"""
-        self.stop_streaming_sessions.add(session_id)
-        logger.info(f"🛑 Streaming STT 종료 신호 등록: session_id={session_id}")
-        
-        # Streaming STT 인스턴스에 직접 종료 신호 전달
-        if self.streaming_stt_instance:
-            self.streaming_stt_instance.stop_session(session_id)
 
     async def broadcast(self, message):
         """
@@ -102,11 +80,13 @@ class ConnectionManager:
         """
         async with self.lock:
             if self.socketio_client is None:
-                logger.warning("⚠️ Socket.IO 클라이언트가 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # logger.warning("⚠️ Socket.IO 클라이언트가 등록되지 않았습니다. 메시지를 전송할 수 없습니다.")
                 return
             
             if not self.socketio_client.is_connected():
-                logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 메시지를 전송할 수 없습니다.")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # logger.warning("⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 메시지를 전송할 수 없습니다.")
                 return
             
             try:
@@ -119,10 +99,12 @@ class ConnectionManager:
                     try:
                         stt_data = json.loads(message)
                     except json.JSONDecodeError:
-                        logger.error(f"❌ 잘못된 JSON 형식: {message}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # logger.error(f"❌ 잘못된 JSON 형식: {message}")
                         return
                 else:
-                    logger.error(f"❌ 지원하지 않는 메시지 타입: {type(message)}")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # logger.error(f"❌ 지원하지 않는 메시지 타입: {type(message)}")
                     return
                 
                 # Socket.IO로 STT 결과 전송
@@ -140,7 +122,8 @@ class ConnectionManager:
             completed: 서비스 완료 여부 (기본값: True)
         """
         self.service_completed = completed
-        logger.info(f"✅ 서비스 완료 플래그 설정: {completed}")
+        # [25.11.21] 로그 주석 처리 - 재환
+        # logger.info(f"✅ 서비스 완료 플래그 설정: {completed}")
     
     def is_service_completed(self) -> bool:
         """서비스 완료 상태 확인"""

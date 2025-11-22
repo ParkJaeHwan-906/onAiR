@@ -5,13 +5,8 @@ package com.onair.mobile.assistant.core.model.dto
  */
 data class RagResponse(
     val answerable: Boolean,
-    val need_clarify: Boolean? = null,
     val reason: String? = null,
-    val clarifier_model: String? = null,
     val generator_model: String? = null,
-    val clarify_guidance: String? = null,
-    val ask: String? = null,
-    val options: List<String>? = null,
     val result: RagResult? = null,
     val rag_stats: RagStats? = null,
     val source_sections: List<Any>? = null,

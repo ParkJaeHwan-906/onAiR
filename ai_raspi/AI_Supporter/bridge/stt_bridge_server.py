@@ -10,20 +10,11 @@ app = socketio.WSGIApp(sio)
 # 연결된 클라이언트 세션 ID 저장
 connected_clients = set()
 
-# Streaming STT 시작 콜백 (Python 3.10에서 설정)
-start_streaming_stt_callback = None
-
 # 서비스 완료 콜백 (Python 3.10에서 설정)
 service_completed_callback = None
 
 # 모바일 음성 파일 재생 완료 콜백 (Python 3.10에서 설정)
 wakeword_audio_completed_callback = None
-
-def set_start_streaming_stt_callback(callback):
-    """Streaming STT 시작 콜백 설정 (Python 3.10에서 호출)"""
-    global start_streaming_stt_callback
-    start_streaming_stt_callback = callback
-    # 로그 최소화: 콜백 등록 로그 제거
 
 def set_service_completed_callback(callback):
     """서비스 완료 콜백 설정 (Python 3.10에서 호출)"""
@@ -75,11 +66,10 @@ def handle_stop_buffered_stt(sid, data):
 @sio.on('service_completed')
 def handle_service_completed(sid, data):
     """Python 3.13에서 서비스 완료 신호 수신"""
-    session_id = data.get("session_id", "")
     status = data.get("status", "")
     logger.info("=" * 60)
     logger.info(f"📥 [서비스 완료] 브리지 서버: 서비스 완료 신호 수신")
-    logger.info(f"   Session ID: {session_id}, Status: {status}")
+    logger.info(f"   Status: {status}")
     logger.info("=" * 60)
     
     if service_completed_callback:

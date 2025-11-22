@@ -18,39 +18,7 @@ else:
 
 
 # ==============================
-# 🧩 1. Answerability Gate (Gemini Flash)
-# ==============================
-def llm_self_check(query: str, snippets: List[str]) -> bool:
-    """
-    Gemini Flash 기반 Self-Check (Clarify 단계)
-    """
-    prompt = (
-        "You are an answerability checker. "
-        "If the following snippets are sufficient to answer the query, "
-        "respond ONLY with YES, otherwise respond ONLY with NO.\n\n"
-        f"Query: {query}\n\nSnippets:\n- " + "\n- ".join(snippets[:5])
-    )
-
-    if not gms_api_key:
-        return True  # API 키가 없으면 기본값으로 True 반환
-    
-    try:
-        print(f"🔵 [Self-Check] Gemini-Flash API 호출 시작 (모델: {settings.GMS_MODEL_GATE})")
-        text = call_gemini_via_gms(
-            model=settings.GMS_MODEL_GATE,
-            prompt=prompt,
-            api_key=gms_api_key
-        ).strip().upper()
-        result = text.startswith("Y")
-        print(f"✅ [Self-Check] Gemini-Flash API 호출 성공: {result} (응답: {text[:50]})")
-        return result
-    except Exception as e:
-        print(f"❌ [Self-Check] Gemini-Flash API 호출 실패: {type(e).__name__}: {str(e)[:200]}")
-        return True
-
-
-# ==============================
-# 🧠 2. Final Generator (GPT-4o via GMS) - Structured Output + TTS 친화적
+# 🧠 Final Generator (GPT-4o via GMS) - Structured Output + TTS 친화적
 # ==============================
 
 def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Dict[str, Any]]) -> str:
@@ -274,32 +242,44 @@ def llm_generate_answer(
 
 입력된 error_code와 RAG 문서를 기반으로 
 
-반드시 아래 Markdown 형식을 지켜서 정비 가이드를 출력하세요.
+반드시 아래 두 가지 형식의 Markdown을 모두 출력하세요:
 
+1. 요약형 (모바일 화면용 - 간결하게):
 # 🔧 {error_code}
 
 ## 🟥 원인
-
-- bullet 형태의 원인 나열 (최소 3개)
+- 핵심 원인만 간결하게 (1-2개)
 
 ## 🛠 조치
+1. 핵심 조치만 간결하게 (1-2개)
 
-1. 단계별 조치 (현장 실무자가 바로 수행할 수 있게)
+## ⚠ 주의사항
+- 핵심 주의사항만 간결하게 (1개)
 
+---
+
+2. 상세형 (TTS용 - 문장형으로 상세하게):
+# 🔧 {error_code} (상세)
+
+## 🟥 원인
+- bullet 형태의 원인 나열 (최소 3개, 문장형으로 상세 설명)
+
+## 🛠 조치
+1. 단계별 조치 (현장 실무자가 바로 수행할 수 있게, 문장형으로 상세 설명)
 2. 숫자 목록으로 정리
 
 ## ⚠ 주의사항
-
-- 반드시 지켜야 하는 주의사항 bullet로 정리
+- 반드시 지켜야 하는 주의사항 bullet로 정리 (문장형으로 상세 설명)
 
 규칙:
 
+- 요약형과 상세형을 구분선(---)으로 분리하여 모두 출력
+- 요약형은 모바일 화면에 표시되므로 간결하고 핵심만
+- 상세형은 TTS로 재생되므로 듣는 사람이 이해하기 쉽게 문장형으로 상세하게
 - 반드시 원인/조치/주의사항 3개 섹션을 모두 포함
-- 각 섹션(원인/조치/주의사항)별로 하나의 답변만 반환
 - Markdown 문법 유지
 - RAG 문서 내용을 우선적으로 반영
 - 불필요한 서론/요약/추가 내용 금지
-- 각 섹션별(원인/조치/주의사항)로 한 개의 항목씩만 출력
 """
     
     # ----------------------------
@@ -342,10 +322,58 @@ def llm_generate_answer(
                 text = parts[1].replace("markdown", "").strip()
         
         # ----------------------------
-        # 6) Markdown 파싱 (TTS용 텍스트 추출 + 섹션별 마크다운 추출)
+        # 6) 요약형과 상세형 분리
         # ----------------------------
         import re
-        lines = text.split("\n")
+        
+        # 구분선(---)으로 요약형과 상세형 분리
+        if "---" in text:
+            parts = text.split("---", 1)
+            summary_text = parts[0].strip()
+            detailed_text = parts[1].strip() if len(parts) > 1 else text.strip()
+        else:
+            # 구분선이 없으면 전체를 상세형으로, 요약형은 상세형에서 추출
+            summary_text = None
+            detailed_text = text.strip()
+        
+        # ----------------------------
+        # 7) 요약형 마크다운 파싱 (모바일 화면용)
+        # ----------------------------
+        summary_markdown = summary_text if summary_text else None
+        summary_causes = []
+        summary_actions = []
+        summary_warnings = []
+        
+        if summary_text:
+            summary_lines = summary_text.split("\n")
+            section = None
+            for line in summary_lines:
+                if line.startswith("## 🟥 원인"):
+                    section = "cause"
+                    continue
+                if line.startswith("## 🛠 조치"):
+                    section = "act"
+                    continue
+                if line.startswith("## ⚠ 주의사항"):
+                    section = "warn"
+                    continue
+                if line.startswith("#"):
+                    section = None
+                    continue
+                
+                if section == "cause" and line.strip().startswith("-"):
+                    summary_causes.append(line.replace("-", "").strip())
+                elif section == "act":
+                    m = re.match(r"^\d+[\.\)]\s*(.+)", line)
+                    if m:
+                        summary_actions.append(m.group(1).strip())
+                elif section == "warn" and line.strip().startswith("-"):
+                    summary_warnings.append(line.replace("-", "").strip())
+        
+        # ----------------------------
+        # 8) 상세형 마크다운 파싱 (TTS용 텍스트 추출 + 섹션별 마크다운 추출)
+        # ----------------------------
+        lines = detailed_text.split("\n")
         
         # 원인 섹션 마크다운 추출
         causes_markdown_lines = []
@@ -406,16 +434,22 @@ def llm_generate_answer(
         warnings_markdown = "\n".join(warnings_markdown_lines).strip()
         
         # ----------------------------
-        # 7) 구조화된 JSON 생성
+        # 9) 구조화된 JSON 생성
         # ----------------------------
         result = {
             "error_code": error_code,
-            "markdown_text": text,  # 전체 마크다운
-            # TTS 변환용 (리스트 형태)
+            # 모바일 화면용 요약형 마크다운 (간결)
+            "markdown_text": summary_markdown if summary_markdown else detailed_text,  # 요약형 우선, 없으면 상세형
+            "markdown_text_detailed": detailed_text,  # 상세형 (백업용)
+            # 요약형 데이터 (모바일 화면용)
+            "summary_causes": summary_causes if summary_causes else causes[:2],  # 요약형 원인, 없으면 상세형에서 2개만
+            "summary_actions": summary_actions if summary_actions else actions[:2],  # 요약형 조치, 없으면 상세형에서 2개만
+            "summary_warnings": summary_warnings if summary_warnings else warnings[:1],  # 요약형 주의사항, 없으면 상세형에서 1개만
+            # TTS 변환용 (리스트 형태) - 상세형 사용
             "possible_causes": causes,
             "recommended_actions": [{"action": a, "priority": "medium"} for a in actions],
             "safety_warnings": warnings,
-            # 모바일 렌더링용 (마크다운 형태)
+            # 모바일 렌더링용 (마크다운 형태) - 상세형 사용
             "possible_causes_markdown": causes_markdown,  # "## 🟥 원인\n- 필터 막힘...\n- 댐퍼..."
             "recommended_actions_markdown": actions_markdown,  # "## 🛠 조치\n1. 프리필터...\n2. 댐퍼..."
             "safety_warnings_markdown": warnings_markdown,  # "## ⚠ 주의사항\n- 압력 1.5bar..."
@@ -423,7 +457,9 @@ def llm_generate_answer(
             "citations": citations
         }
         
-        print(f"✅ [Generator] 답변 생성 완료: error_code={error_code}, 원인={len(causes)}개, 조치={len(actions)}개, 주의사항={len(warnings)}개")
+        print(f"✅ [Generator] 답변 생성 완료: error_code={error_code}")
+        print(f"   요약형: 원인={len(result['summary_causes'])}개, 조치={len(result['summary_actions'])}개, 주의사항={len(result['summary_warnings'])}개")
+        print(f"   상세형: 원인={len(causes)}개, 조치={len(actions)}개, 주의사항={len(warnings)}개")
         
         # ----------------------------
         # 8) TTS friendly 변환
