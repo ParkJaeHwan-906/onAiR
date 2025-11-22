@@ -10,7 +10,6 @@ import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -19,7 +18,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.viewModelScope
 import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
@@ -59,7 +57,6 @@ import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -170,17 +167,6 @@ class WorkingActivity : AppCompatActivity() {
                 Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
             }
         }
-        // WorkingActivity가 foreground에 있을 때만 Socket.IO 연결 시작
-//        Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
-//        try {
-//            if (::socketIoSttClient.isInitialized) {
-//                socketIoSttClient.connect()
-//                Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
-//            }
-//        } catch (e: Exception) {
-//            Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
-//            e.printStackTrace()
-//        }
     }
 
     override fun onPause() {
@@ -238,8 +224,6 @@ class WorkingActivity : AppCompatActivity() {
                     value.let {
                         val bitmap = it.toBitmap()
                         val cropped = bitmap?.toBottomCropped()
-//                        Log.d("Demonstrate Activity", bitmap.toString())
-//                        Log.d("CheckBitmap", "Size: ${bitmap?.width} x ${bitmap?.height}, ByteCount: ${bitmap?.byteCount}")
                         binding.videoView.setImageBitmap(cropped)
                     }
                 }
@@ -377,46 +361,6 @@ class WorkingActivity : AppCompatActivity() {
         socketIoSttClient = SocketHolder.socketClient
 
         setCallBack()
-//        socketIoSttClient = SocketIoSttClient(
-//            serverUrl = FASTAPI_SERVER_URL,
-//            onSttResult = { text, type, confidence ->
-//                Log.i(TAG, "🧠 STT 텍스트 수신: type=$type, text=$text")
-//                sttRepository.receiveFromRaspberryPi(text)
-//            },
-//            onClarifyResponse = { ragResponse ->
-//                handleClarifyResponseFromSocket(ragResponse)
-//            },
-//            onIntentResult = { intentResult ->
-//                handleIntentResult(intentResult)
-//            },
-//            onClarifyTurn = { clarifyTurn ->
-//                handleClarifyTurn(clarifyTurn)
-//            },
-//            onFinalAnswer = { finalAnswer ->
-//                handleFinalAnswerFromSocket(finalAnswer)
-//            },
-//            onStartSseConnection = { text ->
-//                handleStartSseConnection(text)
-//            },
-//            onCvDetectionFailed = { cvFailed ->
-//                handleCvDetectionFailed(cvFailed)
-//            },
-//            onClarifyQaTurn = { qaTurn ->
-//                handleClarifyQaTurn(qaTurn)
-//            },
-//            onWakewordDetected = {
-//                handleWakewordDetected()
-//            },
-//            onConnect = {
-//                Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
-//            },
-//            onDisconnect = {
-//                Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
-//            },
-//            onConnectError = { error ->
-//                Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
-//            }
-//        )
 
         // 라즈베리파이 제어 API 초기화
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
@@ -502,12 +446,6 @@ class WorkingActivity : AppCompatActivity() {
 
                     IntentType.OPERATOR -> {
                         Log.i(TAG, "✅ OPERATOR 분기 처리 시작")
-
-                        // UI 업데이트: "통신 중..." 표시
-                        runOnUiThread {
-//                            binding.taskName.text = "통신 중..."
-                        }
-
                         // 로컬 음성 파일 재생: "통신 연결을 시작합니다."
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
                         // 모달 표시
