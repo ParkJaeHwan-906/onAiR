@@ -2,8 +2,7 @@
 라즈베리파이 메인 프로그램 (Python 3.10용)
 - Wakeword 감지 (Python 3.10에서만 동작)
 - 버퍼링/스트리밍 STT 실행 (Python 3.10에서만 동작)
-- 브리지 서버 실행 (STT 결과를 Python 3.13으로 전달)
-- STT 결과를 브리지 서버로 전송
+- FastAPI Socket.IO 서버에 직접 연결하여 이벤트 전송
 """
 import threading
 import asyncio
@@ -15,14 +14,7 @@ import fcntl
 from stt.mic_stream import MicStream
 from stt.gcp_stt_buffered import GcpBufferedStt
 from stt.wakeword_hook import wait_for_wakeword, init_wakeword_detector, stop_wakeword_detector
-from bridge.stt_bridge_server import (
-    run_server, send_stt_result, 
-    set_service_completed_callback, send_wakeword_detected, 
-    send_wakeword_waiting_ready,
-    set_wakeword_audio_completed_callback,
-    set_wakeword_start_waiting_callback, set_mic_off_callback, set_mic_on_callback,
-    set_mic_release_callback, set_mic_acquire_callback, set_stop_buffered_stt_callback
-)
+from stt.socketio_client import SocketIOClient
 from server.app import manager  # ConnectionManager 인스턴스
 from config import settings
 
@@ -185,21 +177,56 @@ def run_stt_loop():
     # 버퍼링 STT 실행 중 플래그 (중지 가능하도록)
     buffered_stt_running = {"running": False}
     
+    # Socket.IO 클라이언트 초기화 및 연결 (별도 스레드에서 실행)
+    socketio_client = SocketIOClient(manager=manager)
+    manager.set_socketio_client(socketio_client)
+    
+    # Socket.IO 연결을 위한 이벤트 루프 (별도 스레드에서 실행)
+    def run_socketio_loop():
+        """Socket.IO 클라이언트 연결 및 이벤트 루프 실행"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(socketio_client.connect())
+            logger.info("✅ FastAPI Socket.IO 서버 연결 완료")
+            # 연결 유지
+            loop.run_forever()
+        except Exception as e:
+            logger.error(f"❌ Socket.IO 연결 오류: {e}")
+    
+    socketio_thread = threading.Thread(target=run_socketio_loop, daemon=True)
+    socketio_thread.start()
+    
+    # Socket.IO 연결 대기 (최대 10초)
+    max_wait_time = 10
+    wait_start = time.time()
+    while time.time() - wait_start < max_wait_time:
+        if socketio_client.is_connected():
+            logger.info("✅ Socket.IO 연결 확인 완료")
+            break
+        time.sleep(0.5)
+    else:
+        logger.warning("⚠️ Socket.IO 연결 대기 시간 초과 (계속 진행)")
+    
     async def broadcast(msg):
-        """STT 결과를 브리지 서버(Socket.IO)로 전송 (재연결될 때까지 무한 재시도)"""
+        """STT 결과를 FastAPI Socket.IO 서버로 전송 (재연결될 때까지 무한 재시도)"""
         retry_delay = 0.5  # 초기 재시도 간격 (0.5초)
         max_retry_delay = 10  # 최대 재시도 간격 (10초)
         attempt = 0
         
         while True:  # 재연결될 때까지 무한 재시도
             attempt += 1
-            success = send_stt_result(msg)
-            if success:
-                return  # 전송 성공
+            if socketio_client.is_connected():
+                try:
+                    success = await socketio_client.emit_stt_result(msg)
+                    if success:
+                        return  # 전송 성공
+                except Exception as e:
+                    logger.warning(f"⚠️ STT 결과 전송 오류: {e}")
             
             # 지수 백오프로 재시도 간격 증가 (최대 10초)
             wait_time = min(retry_delay * (2 ** min(attempt - 1, 4)), max_retry_delay)
-            logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
+            logger.warning(f"⚠️ FastAPI Socket.IO 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
             await asyncio.sleep(wait_time)
     
     async def stt_session():
@@ -239,18 +266,18 @@ def run_stt_loop():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    # 버퍼링 STT 세션 종료 콜백 등록
-    def handle_stop_buffered_stt(reason: str):
-        """버퍼링 STT 세션 종료 처리"""
-        # 로그 최소화: 정상 처리 시 로그 제거
-        pass
+    # 서비스 완료 플래그 (전역 변수로 관리)
+    service_completed_flag_global = {"completed": False}
     
-    set_stop_buffered_stt_callback(handle_stop_buffered_stt)
+    # 서비스 진행 중 플래그 (서비스 진행 중에는 wakeword 감지 비활성화)
+    service_in_progress = {"in_progress": False}
     
-    # Wakeword 감지 대기 시작 콜백 등록
-    def handle_wakeword_start_waiting():
-        """Wakeword 감지 대기 시작 처리 (CV 탐지 성공 시 FastAPI에서 wakeword_start_waiting 이벤트로 호출)"""
-        # 서비스 진행 중 플래그 해제 (CV 탐지 성공 시 정상 완료이므로 새로운 wakeword 감지 허용)
+    # Socket.IO 이벤트 핸들러 등록 (FastAPI에서 오는 이벤트 처리)
+    # AsyncClient를 사용하므로 이벤트 핸들러는 async 함수여야 함
+    @socketio_client.sio.on("wakeword_start_waiting")
+    async def on_wakeword_start_waiting(data):
+        """Wakeword 감지 대기 시작 처리 (CV 탐지 성공 시 FastAPI에서 호출)"""
+        # 서비스 진행 중 플래그 해제
         service_in_progress["in_progress"] = False
         
         # 마이크 상태 확인 및 활성화
@@ -266,89 +293,49 @@ def run_stt_loop():
         buffered_stt_running["running"] = False
         
         # CV 탐지 성공 시 wakeword_start_waiting 이벤트로 서비스 완료 처리
-        # (메인 루프가 service_completed 이벤트를 기다리는 동안 이 이벤트가 오는 경우)
         service_completed_flag_global["completed"] = True
         
         # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송 (YOLO 서버 API 요청 트리거용)
-        try:
-            send_wakeword_waiting_ready()
-            # 로그 최소화: 정상 전송 시 로그 제거
-        except Exception as e:
-            # 로그 최소화: 무시 가능한 오류는 로그 제거
-            pass
+        if socketio_client.is_connected():
+            await socketio_client.emit_wakeword_waiting_ready()
     
-    set_wakeword_start_waiting_callback(handle_wakeword_start_waiting)
-    
-    # STT 목적 음성 수집 중지 콜백 등록
-    def handle_mic_off():
+    @socketio_client.sio.on("mic_off")
+    async def on_mic_off(data):
         """STT 목적 음성 수집 중지 처리"""
-        # 로그 최소화: 정상 처리 시 로그 제거
         mic.pause()
     
-    set_mic_off_callback(handle_mic_off)
-    
-    # STT 목적 음성 수집 재개 콜백 등록
-    def handle_mic_on():
+    @socketio_client.sio.on("mic_on")
+    async def on_mic_on(data):
         """STT 목적 음성 수집 재개 처리"""
-        # 로그 최소화: 정상 처리 시 로그 제거
         if not mic.is_active():
             mic.resume()
     
-    set_mic_on_callback(handle_mic_on)
-    
-    # 마이크 장치 해제 콜백 등록 (WebRTC 프로세스가 마이크를 사용할 수 있도록)
-    def handle_mic_release():
+    @socketio_client.sio.on("mic_release")
+    async def on_mic_release(data):
         """마이크 장치 해제 처리 (WebRTC 프로세스가 마이크를 사용할 수 있도록)"""
-        # Wakeword 감지기 일시 중지 (마이크 해제 중에는 wakeword 감지 불가)
         if wakeword_detector and wakeword_detector.interpreter is not None:
             wakeword_detector.pause()
-            mic.disable_wakeword_callback()  # Wakeword 콜백 비활성화
-        
-        mic.release()  # 마이크 스트림을 완전히 닫아서 장치를 해제
-        # 로그 최소화: 정상 처리 시 로그 제거
+            mic.disable_wakeword_callback()
+        mic.release()
     
-    set_mic_release_callback(handle_mic_release)
-    
-    # 서비스 완료 플래그 (전역 변수로 관리하여 handle_mic_acquire에서 접근 가능하도록)
-    service_completed_flag_global = {"completed": False}
-    
-    # 서비스 진행 중 플래그 (서비스 진행 중에는 wakeword 감지 비활성화)
-    service_in_progress = {"in_progress": False}
-    
-    # 마이크 장치 재점유 콜백 등록 (WebRTC 프로세스가 마이크를 해제한 후)
-    def handle_mic_acquire():
+    @socketio_client.sio.on("mic_acquire")
+    async def on_mic_acquire(data):
         """마이크 장치 재점유 처리 (WebRTC 프로세스가 마이크를 해제한 후)"""
-        # 서비스 진행 중 플래그 해제 (통신 종료 시 정상 완료이므로 새로운 wakeword 감지 허용)
         service_in_progress["in_progress"] = False
-        
-        mic.acquire()  # 마이크 스트림을 다시 시작해서 장치를 재점유
-        # 재점유 후 논리적으로도 ON 상태로 설정
+        mic.acquire()
         if mic.is_paused:
             mic.resume()
         
-        # 마이크 재점유 후 Wakeword 감지 대기 상태로 복귀
         if wakeword_detector and wakeword_detector.interpreter is not None:
-            wakeword_detector.resume()  # Wakeword 감지기 재개
+            wakeword_detector.resume()
             mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
-        else:
-            logger.warning("⚠️ Wakeword 감지기가 초기화되지 않았습니다")
         
-        # 버퍼링 STT 실행 상태 리셋 (혹시 실행 중이었다면)
         buffered_stt_running["running"] = False
-        
-        # Operator 분기에서 통신 종료 시 service_completed 플래그를 True로 설정
-        # (메인 루프가 service_completed 이벤트를 기다리는 동안 통신이 종료된 경우)
         service_completed_flag_global["completed"] = True
         
-        # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송 (YOLO 서버 API 요청 트리거용)
-        try:
-            send_wakeword_waiting_ready()
-            # 로그 최소화: 정상 전송 시 로그 제거
-        except Exception as e:
-            # 로그 최소화: 무시 가능한 오류는 로그 제거
-            pass
-    
-    set_mic_acquire_callback(handle_mic_acquire)
+        # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송
+        if socketio_client.is_connected():
+            await socketio_client.emit_wakeword_waiting_ready()
     
     logger.info("🎧 STT 루프 시작 (Wakeword 감지 대기 중)")
     
@@ -380,10 +367,15 @@ def run_stt_loop():
                         wakeword_detector.resume()
                         mic.enable_wakeword_callback(wakeword_detector.process_audio_chunk)
                     # FastAPI로 Wakeword 대기 준비 완료 이벤트 전송
-                    try:
-                        send_wakeword_waiting_ready()
-                    except Exception as e:
-                        pass
+                    if socketio_client.is_connected():
+                        loop = socketio_client.loop
+                        if loop:
+                            try:
+                                asyncio.run_coroutine_threadsafe(
+                                    socketio_client.emit_wakeword_waiting_ready(), loop
+                                )
+                            except Exception as e:
+                                pass
                 
                 # 별도 스레드에서 지연 해제 실행 (비동기)
                 import threading
@@ -412,11 +404,16 @@ def run_stt_loop():
             # allow_new_service=True인 경우에만 즉시 전송 (정상 완료 시)
             # allow_new_service=False인 경우는 2초 후 별도 스레드에서 전송
             if allow_new_service:
-                try:
-                    send_wakeword_waiting_ready()
-                except Exception as e:
-                    # 로그 최소화: 전송 실패는 무시 가능하므로 로그 제거
-                    pass
+                if socketio_client.is_connected():
+                    loop = socketio_client.loop
+                    if loop:
+                        try:
+                            asyncio.run_coroutine_threadsafe(
+                                socketio_client.emit_wakeword_waiting_ready(), loop
+                            )
+                        except Exception as e:
+                            # 로그 최소화: 전송 실패는 무시 가능하므로 로그 제거
+                            pass
         except Exception as e:
             logger.error(f"❌ Wakeword 대기 상태 복귀 중 오류: {e}")
     
@@ -475,7 +472,7 @@ def run_stt_loop():
                     reset_to_wakeword_waiting(f"Wakeword 감지 오류: {e}", allow_new_service=False)
                     continue
                 
-                # Wakeword 감지 이벤트를 브리지 서버로 전송 (Python 3.13 → FastAPI → 모바일)
+                # Wakeword 감지 이벤트를 FastAPI Socket.IO 서버로 직접 전송
                 # FastAPI 연결 상태 확인 및 전송 시도 (재연결될 때까지 무한 재시도)
                 retry_delay = 2  # 초기 재시도 간격 (2초)
                 max_retry_delay = 10  # 최대 재시도 간격 (10초)
@@ -485,16 +482,20 @@ def run_stt_loop():
                     while True:  # 재연결될 때까지 무한 재시도
                         attempt += 1
                         try:
-                            result = send_wakeword_detected()
+                            if socketio_client.is_connected():
+                                loop = socketio_client.loop
+                                if loop:
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        socketio_client.emit_wakeword_detected(), loop
+                                    )
+                                    result = future.result(timeout=5)
+                                    if result:
+                                        break  # 전송 성공 시 루프 종료
                             
-                            if result:
-                                break  # 전송 성공 시 루프 종료
-                            else:
-                                # 브리지 클라이언트가 연결되지 않음
-                                # 지수 백오프로 재시도 간격 증가 (최대 10초)
-                                wait_time = min(retry_delay * (2 ** min(attempt - 1, 3)), max_retry_delay)
-                                logger.warning(f"⚠️ 브리지 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
-                                time.sleep(wait_time)
+                            # 지수 백오프로 재시도 간격 증가 (최대 10초)
+                            wait_time = min(retry_delay * (2 ** min(attempt - 1, 3)), max_retry_delay)
+                            logger.warning(f"⚠️ FastAPI Socket.IO 서버 연결 실패, 재시도 중... (시도 {attempt}, {wait_time:.1f}초 후)")
+                            time.sleep(wait_time)
                         except Exception as e:
                             # 지수 백오프로 재시도 간격 증가 (최대 10초)
                             wait_time = min(retry_delay * (2 ** min(attempt - 1, 3)), max_retry_delay)
@@ -505,14 +506,14 @@ def run_stt_loop():
                     reset_to_wakeword_waiting(f"Wakeword 이벤트 전송 예외: {e}", allow_new_service=False)
                     continue
                 
-                # 모바일 음성 파일 재생 완료 콜백 등록 (버퍼링 STT와 병렬로 대기)
+                # 모바일 음성 파일 재생 완료 대기 (버퍼링 STT와 병렬로 대기)
                 wakeword_audio_completed_flag = {"completed": False}
                 
-                def on_wakeword_audio_completed():
-                    """모바일 음성 파일 재생 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                # Socket.IO 이벤트 핸들러 등록 (wakeword_audio_completed 이벤트 수신)
+                @socketio_client.sio.on("wakeword_audio_completed")
+                async def on_wakeword_audio_completed(data):
+                    """모바일 음성 파일 재생 완료 이벤트 수신"""
                     wakeword_audio_completed_flag["completed"] = True
-                
-                set_wakeword_audio_completed_callback(on_wakeword_audio_completed)
                 
                 # ③~⑦ STT 세션 실행 (모드에 따라 버퍼링/스트리밍)
                 # 주의: 버퍼링 STT는 모바일 음성 파일 재생 완료를 기다리지 않고 즉시 시작
@@ -545,12 +546,11 @@ def run_stt_loop():
                 service_completed_flag_global["completed"] = False  # 플래그 리셋
                 service_completed_flag = service_completed_flag_global  # 전역 플래그 사용
                 
-                def on_service_completed():
-                    """서비스 완료 콜백 (브리지 서버를 통해 호출됨)"""
+                # Socket.IO 이벤트 핸들러 등록 (service_completed 이벤트 수신)
+                @socketio_client.sio.on("service_completed")
+                async def on_service_completed(data):
+                    """서비스 완료 이벤트 수신"""
                     service_completed_flag["completed"] = True
-                
-                # 서비스 완료 콜백 등록
-                set_service_completed_callback(on_service_completed)
                 
                 # 첫 이벤트 타임아웃: 7초 (Intent 분류 후 첫 이벤트가 오지 않으면 타임아웃)
                 first_event_timeout = 7  # 7초

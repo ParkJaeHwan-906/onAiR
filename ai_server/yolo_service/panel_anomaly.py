@@ -30,7 +30,7 @@ def led_color_status(roi):
     ratios = {k: (m > 0).mean() for k, m in masks.items()}
 
     dominant = max(ratios, key=ratios.get)
-    is_on = ratios[dominant] > 0.18
+    is_on = ratios[dominant] > 0.12
 
     return is_on, dominant, ratios
 
