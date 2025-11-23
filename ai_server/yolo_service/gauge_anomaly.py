@@ -17,32 +17,48 @@ PRESS_CONFIG = {
     "max_val": 1.0
 }
 
+
 def cw_delta(a, b):
     return (a - b) % 360
 
+
+# -----------------------------
+# ROI normalize (고정 크기)
+# -----------------------------
+def normalize_roi(roi):
+    return cv2.resize(roi, (300, 300))
+
+
+# -----------------------------
+# 단순 허브 중심 추정 (ROI 중심)
+# -----------------------------
+def detect_center_hub_new(img):
+    h, w = img.shape[:2]
+    cx = w // 2
+    cy = h // 2
+    return cx, cy
+
+
+# -----------------------------
+# 기존 big radius 대신 개선된 버전
+# -----------------------------
 def detect_big_radius(img, cx, cy, r_small):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
     edges = cv2.Canny(blur, 40, 120)
 
-    h, w = gray.shape
+    h, w = gray.shape[:2]
+    Rmin = int(min(h, w) * 0.38)
+    Rmax = int(min(h, w) * 0.49)
 
-    if r_small is not None:
-        R_min = int(r_small * 11.0)
-        R_max = int(r_small * 14.0)
-    else:
-        R_min = int(min(h, w) * 0.35)
-        R_max = int(min(h, w) * 0.48)
+    print(f"[DEBUG] search R range: {Rmin} ~ {Rmax}")
 
-    R_max = min(R_max, int(min(h, w) * 0.49))
-
-    print(f"[DEBUG] search R range: {R_min} ~ {R_max}")
-
-    thetas = np.deg2rad(np.arange(0, 360, 1))
+    thetas = range(0, 360, 2)
     distances = []
 
-    for th in thetas:
-        for r in range(R_min, R_max):
+    for ang in thetas:
+        th = np.deg2rad(ang)
+        for r in range(Rmin, Rmax):
             x = int(cx + np.cos(th) * r)
             y = int(cy - np.sin(th) * r)
 
@@ -94,11 +110,12 @@ def dark_only_angle_voting(gray_img, center, R, dark_thresh=120):
 
     return best_angle, scores
 
+
 def angle_to_value(angle_deg, cfg):
     min_angle = cfg["min_angle"]
     max_angle = cfg["max_angle"]
-    min_val   = cfg["min_val"]
-    max_val   = cfg["max_val"]
+    min_val = cfg["min_val"]
+    max_val = cfg["max_val"]
 
     sweep = cw_delta(min_angle, max_angle)
     if sweep == 0:
@@ -108,6 +125,7 @@ def angle_to_value(angle_deg, cfg):
     ratio = np.clip(progressed / sweep, 0, 1)
     value = min_val + ratio * (max_val - min_val)
     return float(value)
+
 
 def detect_center_hub(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -135,13 +153,12 @@ def detect_center_hub(img):
 
         for c in circles[0]:
             x, y, r = c
-            dist = (x - cx_img)**2 + (y - cy_img)**2
+            dist = (x - cx_img) ** 2 + (y - cy_img) ** 2
 
-            # 10% 허용 범위 이내인지 체크
             dx = abs(x - cx_img)
             dy = abs(y - cy_img)
 
-            if dx < w * 0.15 and dy < h * 0.15:   # ★ 여기만 10%로 변경
+            if dx < w * 0.15 and dy < h * 0.15:
                 if dist < best_dist:
                     best = c
                     best_dist = dist
@@ -154,70 +171,62 @@ def detect_center_hub(img):
     print("[WARN] hub not found (failed 10% rule)")
     return None, None, None
 
+
 def detect_center_hub_intensity(img, debug_dir=None):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 1.2)
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
 
     h, w = gray.shape
 
-    # 1) 최저 1% 픽셀(어두운 영역) 찾기
-    thresh_val = np.percentile(blur, 5)  # 하위 1% 픽셀값
+    thresh_val = np.percentile(blur, 3)
     mask = (blur <= thresh_val).astype(np.uint8) * 255
 
-    if debug_dir:
-        cv2.imwrite(f"{debug_dir}/hub_dark_mask.png", mask)
-
-    # 2) 연결된 어두운 블롭 탐지
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
 
     if num_labels <= 1:
-        # 허브가 너무 약해서 안 보이면 이미지 중앙 fallback
-        cx, cy = w//2, h//2
+        cx, cy = w // 2, h // 2
         print("[WARN] intensity hub not found → fallback to center")
         return cx, cy, None
 
-    # 3) 가장 '해상도 높은 blob' 찾기
     best_idx = None
     best_score = -1
 
-    for i in range(1, num_labels):  # 0은 배경
+    for i in range(1, num_labels):
         area = stats[i, cv2.CC_STAT_AREA]
 
-        if area < 5 or area > 500:  # 허브 크기 제한
+        if area < 5 or area > 500:
             continue
 
-        # blob의 중심
         cx_blob, cy_blob = centroids[i]
-        # ROI 중심과 가까울수록 점수 상승
-        dist_center = (cx_blob - w/2)**2 + (cy_blob - h/2)**2
-        score = -dist_center  # 중심과 가까울수록 good
+        dist_center = (cx_blob - w / 2) ** 2 + (cy_blob - h / 2) ** 2
+        score = -dist_center
 
         if score > best_score:
             best_score = score
             best_idx = i
 
     if best_idx is None:
-        cx, cy = w//2, h//2
+        cx, cy = w // 2, h // 2
         print("[WARN] hub not found (no blob) → fallback center")
         return cx, cy, None
 
     cx_hub, cy_hub = centroids[best_idx]
     cx_hub, cy_hub = int(cx_hub), int(cy_hub)
 
-    # 4) 허브 radius 대략 구하기 (blob의 평균 반경)
     ys, xs = np.where(labels == best_idx)
-    dists = np.sqrt((xs - cx_hub)**2 + (ys - cy_hub)**2)
+    dists = np.sqrt((xs - cx_hub) ** 2 + (ys - cy_hub) ** 2)
     r_small = int(np.mean(dists))
 
     if debug_dir:
         vis = img.copy()
-        cv2.circle(vis, (cx_hub, cy_hub), 3, (0,0,255), -1)
-        cv2.circle(vis, (cx_hub, cy_hub), r_small, (0,255,0), 2)
+        cv2.circle(vis, (cx_hub, cy_hub), 3, (0, 0, 255), -1)
+        cv2.circle(vis, (cx_hub, cy_hub), r_small, (0, 255, 0), 2)
         cv2.imwrite(f"{debug_dir}/hub_intensity_detected.png", vis)
 
     print(f"[INFO] intensity hub detected → ({cx_hub},{cy_hub}), r={r_small}")
 
     return cx_hub, cy_hub, r_small
+
 
 # -----------------------------
 # RAG-friendly 메시지 매핑
@@ -234,28 +243,26 @@ GAUGE_RAG_MESSAGE = {
     "unknown": "게이지 종류를 판단할 수 없습니다."
 }
 
+
 # -------------------------------------
 # FAST GAUGE ANGLE + VALUE
 # -------------------------------------
 def detect_gauge_angle_fast(roi, cfg):
     try:
-        # 1) 중심 허브 탐지
-        cx, cy, r_small = detect_center_hub_intensity(roi)
-        if cx is None:
-            return None
+        roi = normalize_roi(roi)
 
-        # 2) 큰 원 탐지
+        cx, cy = detect_center_hub_new(roi)
+        r_small = 10
+
         R = detect_big_radius(roi, cx, cy, r_small)
         if R is None:
             return None
 
-        # 3) dark-only voting
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         best_angle, scores = dark_only_angle_voting(gray, (cx, cy), R)
 
-        # 4) angle → value 변환
         value = angle_to_value(best_angle, cfg)
-
+        logger.info(f"angle={best_angle:.2f}°, value={value:.2f}")
         return float(best_angle), float(value)
 
     except Exception as e:
@@ -272,8 +279,8 @@ def judge_abnormal(gauge_type, value):
     if "thermometer" in gauge_type or "thermo" in gauge_type:
         if value > 40:
             return "온도 과열", "thermo_high"
-        if value < 20:
-            return "온도 과열", "thermo_high"
+        if value < 10:
+            return "온도 낮음", "thermo_low"
         return "정상", "normal"
 
     if "pressure" in gauge_type:
@@ -323,8 +330,7 @@ async def analyze_gauge(frame, gauge_boxes):
 
             label = box["label"].lower()
 
-            # config 결정
-            if "thermo" in label or "temperature" in label:
+            if "thermometer" in label:
                 cfg = THERMO_CONFIG
             elif "pressure" in label:
                 cfg = PRESS_CONFIG

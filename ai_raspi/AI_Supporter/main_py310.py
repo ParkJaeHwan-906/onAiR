@@ -34,20 +34,20 @@ if __name__ == "__main__":
         logger.info("=" * 60)
         
         logger.info("1️⃣ 마이크 초기화 시작...")
-        mic = MicStream()
+    mic = MicStream()
         logger.info("✅ 마이크 초기화 완료")
 
         logger.info("2️⃣ 오디오 스트리머 초기화 시작...")
-        audio_streamer = AudioStreamer(socketio_client=None)  
+    audio_streamer = AudioStreamer(socketio_client=None)  
         logger.info("✅ 오디오 스트리머 초기화 완료")
 
         logger.info("3️⃣ 마이크 매니저 생성 시작...")
-        manager = AudioModeManager(mic, audio_streamer)
+    manager = AudioModeManager(mic, audio_streamer)
         logger.info("✅ 마이크 매니저 생성 완료")
 
         logger.info("4️⃣ STT Core 초기화 시작 (Wakeword 모델 로드 중)...")
-        stt_core = STTCore(manager)
-        manager.stt_core = stt_core
+    stt_core = STTCore(manager)
+    manager.stt_core = stt_core
         logger.info("✅ STT Core 초기화 완료 (Wakeword 모델 로드 완료)")
     except Exception as e:
         logger.error(f"❌ 초기화 중 오류 발생: {e}")
@@ -100,8 +100,8 @@ if __name__ == "__main__":
 
     # 메인 스레드는 대기 상태 유지
     try:
-        while True:
-            time.sleep(1)
+    while True:
+        time.sleep(1)
     except KeyboardInterrupt:
         logger.info("🛑 종료 신호 수신")
     except Exception as e:
