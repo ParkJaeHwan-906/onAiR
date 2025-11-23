@@ -324,6 +324,7 @@ async def handle_intent_audio_completed(sid, data):
 
             detected = cv_raw.get("detected", False)
             has_anomaly = cv_raw.get("has_anomaly", False)
+            modules_detected = cv_raw.get("modules_detected", False)  # ★ 모듈 탐지 여부
             device_type = cv_raw.get("device_type", "unknown")
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})     # ★ 이미 정제됨
@@ -333,6 +334,7 @@ async def handle_intent_audio_completed(sid, data):
             print(f"📊 [CV 탐지 결과 분석]")
             print(f"   detected: {detected}")
             print(f"   has_anomaly: {has_anomaly}")
+            print(f"   modules_detected: {modules_detected}")  # ★ 추가
             print(f"   device_type: {device_type}")
             print(f"   modules 개수: {len(modules)}")
             print(f"   anomalies 개수: {len(anomalies)}")
@@ -346,16 +348,19 @@ async def handle_intent_audio_completed(sid, data):
                 "device_type": device_type,
                 "modules": modules,
                 "anomalies": anomalies,
-                "message": messages
+                "message": messages,
+                "modules_detected": modules_detected  # ★ 추가
             }
 
             # -------------------------
-            # 1) 탐지 실패 (AHU 아님 / YOLO 없음 / 프레임 없음 등)
+            # 1) 탐지 실패 (모듈 탐지 실패 / AHU 아님 / YOLO 없음 / 프레임 없음 등)
+            # ★ detected = modules_detected이므로 detected=False는 모듈 탐지 실패를 의미
             # -------------------------
             if not detected:
                 print("=" * 80)
-                print("❌ [CV 탐지 실패] detected=False")
+                print("❌ [CV 탐지 실패] detected=False (모듈 탐지 실패 또는 시스템 오류)")
                 print(f"   device_type: {device_type}")
+                print(f"   modules_detected: {modules_detected}")
                 print(f"   message: {cv_raw.get('message', 'N/A')}")
                 print("=" * 80)
                 _pending_cv_detection = cv_result
@@ -365,11 +370,12 @@ async def handle_intent_audio_completed(sid, data):
                 return
 
             # -------------------------
-            # 2) 정상 (탐지 OK + 이상 없음)
+            # 2) 정상 (모듈 탐지 OK + 이상 없음)
+            # ★ detected = modules_detected = True인 경우
             # -------------------------
             if detected and not has_anomaly:
                 print("=" * 80)
-                print("✅ [CV 탐지 정상] detected=True, has_anomaly=False")
+                print("✅ [CV 탐지 정상] detected=True, modules_detected=True, has_anomaly=False")
                 print(f"   device_type: {device_type}")
                 print(f"   anomalies 개수: {len(anomalies)}")
                 print("=" * 80)
@@ -417,8 +423,7 @@ async def handle_intent_audio_completed(sid, data):
             # 모바일로 anomaly 전송
             await broadcast_to("mobile", "cv_detection_anomaly", payload)
 
-            # 라즈베리파이로 anomaly 성공 전송
-            await broadcast_to("raspi", "cv_detection_success", messages)
+            # ⚠️ 주의: cv_detection_success는 generate_final_guide에서 전송됨 (중복 방지)
 
         except Exception as e:
             print(f"❌ CV 모델 실행 오류: {e}")
@@ -466,17 +471,22 @@ async def handle_audio_playback_completed(sid, data):
             _pending_cv_detection = None
         elif audio_type == "cv_detection_anomaly":
             # CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
-            if _pending_cv_detection is None:
-                print("⚠️ _pending_cv_detection이 None입니다. 전체 정비 가이드를 생성할 수 없습니다.")
-            else:
-                device_type = _pending_cv_detection["device_type"]
-                modules = _pending_cv_detection["modules"]
-                anomalies = _pending_cv_detection["anomalies"]
-                cv_result = _pending_cv_detection["cv_result"]
-                
-                # 전체 정비 가이드 생성 및 전송 (서비스 사용)
-                await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
-                _pending_cv_detection = None
+            # _pending_cv_detection은 line 463에서 이미 None 체크 완료
+            device_type = _pending_cv_detection["device_type"]
+            modules = _pending_cv_detection["modules"]
+            anomalies = _pending_cv_detection["anomalies"]
+            # cv_result는 generate_final_guide에서 message만 사용하므로 message만 전달
+            cv_result = {"message": _pending_cv_detection.get("message", [])}
+            
+            print("=" * 80)
+            print("📚 [GPT 답변 생성 시작] CV 탐지 이상 → 전체 정비 가이드 생성")
+            print(f"   device_type: {device_type}")
+            print(f"   anomalies: {anomalies}")
+            print("=" * 80)
+            
+            # 전체 정비 가이드 생성 및 전송 (서비스 사용)
+            await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
+            _pending_cv_detection = None
         
     elif audio_type == "sections_completed":
         # AI_Supporter 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
