@@ -34,6 +34,16 @@ class WorkingViewModel(
     val cvAnswer = SocketHolder.socketClient.cvAnswer
     val endService = SocketHolder.socketClient.endService
 
+    init {
+        viewModelScope.launch {
+            SocketHolder.socketClient.wakewordFlow.collect {
+                if (_onAirState.value == OnAirState.Waiting) {
+                    _onAirState.value = OnAirState.Started
+                }
+            }
+        }
+    }
+
 
     fun endTask(taskId: Long, solution: String) {
         viewModelScope.launch {
