@@ -1441,6 +1441,21 @@ class WorkingActivity : AppCompatActivity() {
         try {
 
             withContext(Dispatchers.Main) {
+                binding.aiResultCause.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+                binding.aiResultAction.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+                binding.aiResultWarning.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+            }
+
+            withContext(Dispatchers.Main) {
                 showOnModal()
                 mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
                     hideOnModal()
