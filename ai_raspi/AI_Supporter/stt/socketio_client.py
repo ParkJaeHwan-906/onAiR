@@ -54,6 +54,7 @@ class SocketIOClient:
         self.connected = False
         self.sid = None
         self.manager = manager  # ConnectionManager 참조
+        self.loop = None  # 이벤트 루프 참조 (외부에서 설정)
         
         # 이벤트 핸들러 등록
         self._setup_handlers()
@@ -456,6 +457,9 @@ class SocketIOClient:
         if self.connected:
             logger.warning("⚠️ 이미 Socket.IO 서버에 연결되어 있습니다.")
             return True
+        
+        # 이벤트 루프 저장
+        self.loop = asyncio.get_event_loop()
         
         # HTTPS인 경우 인증서 정보 확인 (디버깅용)
         if self.server_url.startswith('https://'):
