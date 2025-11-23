@@ -12,7 +12,7 @@ LATEST_TS_KEY    = "cv:frame:latest:ts"
 FRAME_BUFFER_KEY = "cv:frame:buffer:jpg"
 TS_BUFFER_KEY     = "cv:frame:buffer:ts"
 
-BUFFER_SIZE = 30
+BUFFER_SIZE = 60
 
 
 async def add_frame(frame, timestamp=None):
