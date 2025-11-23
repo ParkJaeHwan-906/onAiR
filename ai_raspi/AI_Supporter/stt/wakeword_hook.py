@@ -8,15 +8,18 @@ _detector = None
 
 def init_wakeword_detector(model_path=None):
     """
-    Wakeword 감지기 초기화 및 시작
+    Wakeword 감지기 초기화 (시작은 하지 않음)
     
     Args:
         model_path: TFLite 모델 경로 (None이면 기본 경로 사용)
+    
+    Note:
+        start()는 stt_core.py에서 명시적으로 호출됩니다.
     """
     global _detector
     if _detector is None:
         _detector = WakewordDetector(model_path)
-        _detector.start()
+        # start()는 stt_core.py에서 명시적으로 호출하므로 여기서는 호출하지 않음
     return _detector
 
 def wait_for_wakeword(timeout=None):
