@@ -336,6 +336,7 @@ async def analyze_gauge(frame, gauge_boxes):
                 continue
 
             angle, value = angle_val
+            logger.info(f"[GAUGE] {label} angle={angle:.2f}°, value={value:.2f}")
             msg, detail_code = judge_abnormal(label, value)
 
             results[box["label"]] = {
