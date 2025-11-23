@@ -31,7 +31,6 @@ class SocketIOClient:
         self.sio.on("wakeword_audio_completed", self.on_wakeword_audio_completed)
         self.sio.on("handle_audio_stream", self.on_handle_audio_stream)
         self.sio.on("wakeword_start_waiting", self.on_wakeword_start_waiting)
-        self.sio.on("reset_wakeword_count", self.on_reset_wakeword_count)
 
     # ============================================================
     # 🔌 연결 이벤트
@@ -169,19 +168,6 @@ class SocketIOClient:
             self.manager.stt_core.reset_to_initial_state()
         else:
             logger.warning("⚠️ reset_to_initial_state 메서드가 없습니다.")
-
-    async def on_reset_wakeword_count(self):
-        """
-        wakeword_count 초기화 이벤트 (서버 요청)
-        """
-        try:
-            with self.manager.lock:
-                self.manager.wakeword_count = 0
-            logger.info("🔄 wakeword_count 초기화 완료 (0으로 리셋됨)")
-
-        except Exception as e:
-            logger.error(f"❌ wakeword_count reset 오류: {e}")
-
 
     # ============================================================
     # 🔁 서버 연결 제어
