@@ -29,11 +29,10 @@ def classify_state(cur_mag, avg_mag, ratio, delta, prev_state, std_motion):
     # 감속
     if ratio > ACCEL_RATIO and delta_norm > STABLE_TOL:
         state = "E_FAN_SLOWDOWN"
-
     # 가속
     elif ratio < DECEL_RATIO and delta_norm < -STABLE_TOL and abs(delta) > 1.0:
         state = "E_FAN_ACCELERATE"
-
+    # 정상
     else:
         state = "E_NORMAL"
 
@@ -44,10 +43,8 @@ def classify_state(cur_mag, avg_mag, ratio, delta, prev_state, std_motion):
     # 히스테리시스
     if prev_state == "E_FAN_SLOWDOWN" and ratio > 0.95:
         state = "E_FAN_SLOWDOWN"
-
     elif prev_state == "E_FAN_ACCELERATE" and ratio < 1.05:
         state = "E_FAN_ACCELERATE"
-
     elif prev_state == "E_FAN_VIBRATION" and std_motion > 0.04:
         state = "E_FAN_VIBRATION"
 
@@ -65,55 +62,91 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
                 "results": {}
             }
 
-        gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
-        results = {}
+        if not fan_belt_boxes:
+            return {
+                "type": "fan_belt",
+                "status": "error",
+                "detail": "no_yolo_box",
+                "message": "YOLO 박스 없음",
+                "results": {}
+            }
 
-        # YOLO 박스 하나만 고정 기준으로 사용
+        # BGR -> Gray 변환
+        gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
+        H, W = gray_frames[0].shape
+
+        # YOLO 박스 하나만 사용 (고정 ROI)
         box = fan_belt_boxes[0]
-        x1, y1, x2, y2 = box["x1"], box["y1"], box["x2"], box["y2"]
+        x1, y1, x2, y2 = int(box["x1"]), int(box["y1"]), int(box["x2"]), int(box["y2"])
+
+        # 안전하게 클램프
+        x1 = max(0, min(x1, W - 1))
+        x2 = max(0, min(x2, W))
+        y1 = max(0, min(y1, H - 1))
+        y2 = max(0, min(y2, H))
+
+        if x2 <= x1 or y2 <= y1:
+            return {
+                "type": "fan_belt",
+                "status": "error",
+                "detail": "invalid_roi",
+                "message": "ROI 잘못된 좌표",
+                "results": {}
+            }
 
         mag_buf = deque(maxlen=SMOOTH_WINDOW)
         trend_buf = deque(maxlen=TREND_WINDOW)
-        hist = deque(maxlen=STATE_SMOOTH)
+        state_hist = deque(maxlen=STATE_SMOOTH)
 
         prev_state = "E_NORMAL"
-        state_seq = []
+        results = []
         mag_global = []
 
+        prev_gray = gray_frames[0]
+        frame_idx = 1
+
         for i in range(1, len(gray_frames)):
-            prev_roi = gray_frames[i - 1][y1:y2, x1:x2]
-            curr_roi = gray_frames[i][y1:y2, x1:x2]
+            gray = gray_frames[i]
 
-            if prev_roi.size == 0 or curr_roi.size == 0:
-                continue
+            if frame_idx % 2 == 0:
+                prev_roi = prev_gray[y1:y2, x1:x2]
+                roi_gray = gray[y1:y2, x1:x2]
 
-            mag = estimate_motion(prev_roi, curr_roi)
-            mag_valid = mag[mag > MAG_THRESH]
-            mag_mean = np.mean(mag_valid) if mag_valid.size > 0 else 0
+                if prev_roi.size == 0 or roi_gray.size == 0:
+                    prev_gray = gray
+                    frame_idx += 1
+                    continue
 
-            mag_global.append(mag_mean)
-            mag_buf.append(mag_mean)
-            smooth_mag = np.mean(mag_buf)
-            std_motion = np.std(mag_buf)
+                mag = estimate_motion(prev_roi, roi_gray)
+                mag_valid = mag[mag > MAG_THRESH]
+                mag_mean = np.mean(mag_valid) if mag_valid.size > 0 else 0
 
-            trend_buf.append(smooth_mag)
-            avg_mag = np.mean(trend_buf)
+                mag_global.append(mag_mean)
+                mag_buf.append(mag_mean)
+                smooth_mag = np.mean(mag_buf)
+                std_motion = np.std(mag_buf)
 
-            ratio = smooth_mag / (avg_mag + 1e-5)
-            delta = smooth_mag - avg_mag
+                trend_buf.append(smooth_mag)
+                avg_mag = np.mean(trend_buf)
 
-            if i <= INIT_IGNORE:
-                state = "E_NORMAL"
-            else:
-                raw = classify_state(smooth_mag, avg_mag, ratio, delta, prev_state, std_motion)
-                hist.append(raw)
-                state = Counter(hist).most_common(1)[0][0]
+                ratio = smooth_mag / (avg_mag + 1e-5)
+                delta = smooth_mag - avg_mag
 
-            prev_state = state
-            state_seq.append(state)
+                if frame_idx <= INIT_IGNORE:
+                    state = "E_NORMAL"
+                else:
+                    raw = classify_state(smooth_mag, avg_mag, ratio, delta, prev_state, std_motion)
+                    state_hist.append(raw)
+                    state = Counter(state_hist).most_common(1)[0][0]
 
-        cnt = Counter(state_seq)
-        total = max(len(state_seq), 1)
+                prev_state = state
+                results.append(state)
+
+            prev_gray = gray
+            frame_idx += 1
+
+        cnt = Counter(results)
+        total = max(len(results), 1)
 
         normal = cnt.get("E_NORMAL", 0) / total * 100
         slow = cnt.get("E_FAN_SLOWDOWN", 0) / total * 100
@@ -122,7 +155,6 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
 
         dom = max(cnt, key=cnt.get)
 
-        # vibration 보정
         if (normal <= 20 and abs(slow - accel) <= 20) or vib >= 25:
             dom = "E_FAN_VIBRATION"
 
