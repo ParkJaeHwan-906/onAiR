@@ -31,6 +31,7 @@ class WorkingViewModel(
     val finalAnswer = SocketHolder.socketClient.finalAnswer
     val cvAnswer = SocketHolder.socketClient.cvAnswer
     val onAirState = SocketHolder.socketClient.onAirState
+    val endService = SocketHolder.socketClient.endService
 
 
     fun endTask(taskId: Long, solution: String) {
