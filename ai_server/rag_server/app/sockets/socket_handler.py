@@ -21,7 +21,8 @@ from app.services.cv_service import run_anomaly_detection
 from app.services.final_guide import generate_final_guide
 from app.services.gesture_service import process_gesture
 
-BUTTON_RECT = (20, 20, 170, 120) # 모바일 내에 고정된 버튼 좌표(프레임 기준)
+# 서비스 종료 버튼 좌표 (left=1800, top=90, right=1950, bottom=240)
+SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
 
 try:
     import google.generativeai as genai
@@ -410,8 +411,7 @@ async def handle_audio_playback_completed(sid, data):
     - type="cv_detection_failed": CV 탐지 실패 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="cv_detection_normal": CV 탐지 정상 음성 파일 재생 완료 → WebRTC 오디오 스트리밍 대기 상태
     - type="cv_detection_anomaly": CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
-    - type="final_answer": 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
-    - type="service_completed": 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
+    - type="sections_completed": 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
     """
     # CV 탐지 관련 오디오 재생 완료 처리
     # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
@@ -445,17 +445,25 @@ async def handle_audio_playback_completed(sid, data):
                 await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
                 _pending_cv_detection = None
         
-    elif audio_type == "final_answer":
-        # AI_Supporter 최종 답변의 모든 섹션 TTS 재생 완료 → 서비스 종료 오디오 재생 요청
-        await broadcast_to("mobile", "play_service_end_audio", {
-            "audio_file": "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+    elif audio_type == "sections_completed":
+        # AI_Supporter 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
+        print("=" * 80)
+        print("✅ [섹션별 TTS 재생 완료] 서비스 종료 버튼 활성화 요청")
+        print("=" * 80)
+        
+        await broadcast_to("mobile", "enable_service_end_button", {
+            "button_rect": {
+                "left": 1800,
+                "top": 90,
+                "right": 1950,
+                "bottom": 240
+            },
+            "center": {
+                "x": 1875,
+                "y": 165
+            }
         })
-        await wait_for_next_step("서비스 종료 오디오 재생 요청 전송 완료", "14-1")
-    
-    elif audio_type == "service_completed":
-        # 서비스 종료 오디오 재생 완료 → Wakeword 감지 대기 상태로 복귀
-        await broadcast_to("raspi", "wakeword_start_waiting", {})
-        await wait_for_next_step("Wakeword 감지 대기 상태 복귀 완료", "14-2")
+        await wait_for_next_step("서비스 종료 버튼 활성화 요청 전송 완료", "14-1")
 
 
 # ========================================
@@ -618,14 +626,22 @@ async def handle_video_frame(sid, data):
         ar_markers[:] = updated
         await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
-    # gesture로 servcie_on/off 이벤트 전송 
-    gesture_result = process_gesture(frame, BUTTON_RECT)
+    # gesture로 서비스 종료 버튼 클릭 감지
+    gesture_result = process_gesture(frame, SERVICE_END_BUTTON_RECT)
 
-    if gesture_result == "service_on_trigger":
-        await broadcast_to("mobile", "service_on", {})
-
-    elif gesture_result == "service_off_trigger":
-        await broadcast_to("mobile", "service_off", {})
+    if gesture_result == "service_end_button_clicked":
+        print("=" * 80)
+        print("✅ [Gesture 감지] 서비스 종료 버튼 클릭 감지")
+        print("=" * 80)
+        
+        # 모바일로 서비스 종료 요청 전송
+        await broadcast_to("mobile", "service_end_requested", {
+            "timestamp": int(time.time() * 1000)
+        })
+        
+        # 모바일 응답 대기 없이 바로 raspi로 초기 상태 복귀 이벤트 전송
+        await broadcast_to("raspi", "wakeword_start_waiting", {})
+        await wait_for_next_step("서비스 종료 요청 및 초기 상태 복귀 이벤트 전송 완료", "14-2")
 
 
     # PC로 프레임 전송 (timestamp 포함)
