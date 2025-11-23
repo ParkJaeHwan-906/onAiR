@@ -248,13 +248,13 @@ def llm_generate_answer(
 # 🔧 {error_code}
 
 ## 🟥 원인
-- 핵심 원인만 간결하게 (1-2개)
+- 핵심 원인 1개만 간결하게
 
 ## 🛠 조치
-1. 핵심 조치만 간결하게 (1-2개)
+1. 핵심 조치 1개만 간결하게
 
 ## ⚠ 주의사항
-- 핵심 주의사항만 간결하게 (1개)
+- 핵심 주의사항 1개만 간결하게
 
 ---
 
@@ -343,6 +343,9 @@ def llm_generate_answer(
         summary_causes = []
         summary_actions = []
         summary_warnings = []
+        summary_causes_markdown_lines = []
+        summary_actions_markdown_lines = []
+        summary_warnings_markdown_lines = []
         
         if summary_text:
             summary_lines = summary_text.split("\n")
@@ -350,25 +353,47 @@ def llm_generate_answer(
             for line in summary_lines:
                 if line.startswith("## 🟥 원인"):
                     section = "cause"
+                    summary_causes_markdown_lines.append(line)
                     continue
                 if line.startswith("## 🛠 조치"):
                     section = "act"
+                    summary_actions_markdown_lines.append(line)
                     continue
                 if line.startswith("## ⚠ 주의사항"):
                     section = "warn"
+                    summary_warnings_markdown_lines.append(line)
                     continue
                 if line.startswith("#"):
                     section = None
                     continue
                 
-                if section == "cause" and line.strip().startswith("-"):
-                    summary_causes.append(line.replace("-", "").strip())
+                if section == "cause":
+                    # 첫 번째 원인만 추출
+                    if line.strip().startswith("-") and len(summary_causes) == 0:
+                        summary_causes_markdown_lines.append(line)
+                        summary_causes.append(line.replace("-", "").strip())
+                    elif len(summary_causes) == 0:
+                        summary_causes_markdown_lines.append(line)
                 elif section == "act":
+                    # 첫 번째 조치만 추출
                     m = re.match(r"^\d+[\.\)]\s*(.+)", line)
-                    if m:
+                    if m and len(summary_actions) == 0:
+                        summary_actions_markdown_lines.append(line)
                         summary_actions.append(m.group(1).strip())
-                elif section == "warn" and line.strip().startswith("-"):
-                    summary_warnings.append(line.replace("-", "").strip())
+                    elif len(summary_actions) == 0:
+                        summary_actions_markdown_lines.append(line)
+                elif section == "warn":
+                    # 첫 번째 주의사항만 추출
+                    if line.strip().startswith("-") and len(summary_warnings) == 0:
+                        summary_warnings_markdown_lines.append(line)
+                        summary_warnings.append(line.replace("-", "").strip())
+                    elif len(summary_warnings) == 0:
+                        summary_warnings_markdown_lines.append(line)
+        
+        # 요약형 섹션별 마크다운 생성
+        summary_causes_markdown = "\n".join(summary_causes_markdown_lines).strip() if summary_causes_markdown_lines else ""
+        summary_actions_markdown = "\n".join(summary_actions_markdown_lines).strip() if summary_actions_markdown_lines else ""
+        summary_warnings_markdown = "\n".join(summary_warnings_markdown_lines).strip() if summary_warnings_markdown_lines else ""
         
         # ----------------------------
         # 8) 상세형 마크다운 파싱 (TTS용 텍스트 추출 + 섹션별 마크다운 추출)
@@ -438,18 +463,22 @@ def llm_generate_answer(
         # ----------------------------
         result = {
             "error_code": error_code,
-            # 모바일 화면용 요약형 마크다운 (간결)
+            # 모바일 화면용 요약형 마크다운 (간결) - 전체 마크다운
             "markdown_text": summary_markdown if summary_markdown else detailed_text,  # 요약형 우선, 없으면 상세형
             "markdown_text_detailed": detailed_text,  # 상세형 (백업용)
-            # 요약형 데이터 (모바일 화면용)
+            # 요약형 데이터 (모바일 화면용) - 리스트 형태
             "summary_causes": summary_causes if summary_causes else causes[:2],  # 요약형 원인, 없으면 상세형에서 2개만
             "summary_actions": summary_actions if summary_actions else actions[:2],  # 요약형 조치, 없으면 상세형에서 2개만
             "summary_warnings": summary_warnings if summary_warnings else warnings[:1],  # 요약형 주의사항, 없으면 상세형에서 1개만
-            # TTS 변환용 (리스트 형태) - 상세형 사용
+            # 요약형 마크다운 (모바일 화면용) - 섹션별 마크다운
+            "summary_causes_markdown": summary_causes_markdown if summary_causes_markdown else (causes_markdown if not summary_causes else ""),  # 요약형 원인 마크다운
+            "summary_actions_markdown": summary_actions_markdown if summary_actions_markdown else (actions_markdown if not summary_actions else ""),  # 요약형 조치 마크다운
+            "summary_warnings_markdown": summary_warnings_markdown if summary_warnings_markdown else (warnings_markdown if not summary_warnings else ""),  # 요약형 주의사항 마크다운
+            # TTS 변환용 (리스트 형태) - 상세형 사용 (원본 문장)
             "possible_causes": causes,
             "recommended_actions": [{"action": a, "priority": "medium"} for a in actions],
             "safety_warnings": warnings,
-            # 모바일 렌더링용 (마크다운 형태) - 상세형 사용
+            # 상세형 마크다운 (백업용, TTS 변환용 텍스트 추출에 사용)
             "possible_causes_markdown": causes_markdown,  # "## 🟥 원인\n- 필터 막힘...\n- 댐퍼..."
             "recommended_actions_markdown": actions_markdown,  # "## 🛠 조치\n1. 프리필터...\n2. 댐퍼..."
             "safety_warnings_markdown": warnings_markdown,  # "## ⚠ 주의사항\n- 압력 1.5bar..."
@@ -501,11 +530,11 @@ def llm_generate_answer(
         # ----------------------------
         from app.services.tts_service import text_to_speech
         
-        # possible_causes TTS
+        # possible_causes TTS (첫 번째 원인만 사용)
         causes_audio = None
         causes_audio_encoding = None
-        if causes:
-            causes_text = "가능한 원인은 다음과 같습니다. " + ". ".join(causes)
+        if causes and len(causes) > 0:
+            causes_text = f"가능한 원인은 다음과 같습니다. {causes[0]}"
             try:
                 causes_tts = text_to_speech(format_for_tts(causes_text))
                 causes_audio = causes_tts.get("audio_content")
@@ -513,19 +542,11 @@ def llm_generate_answer(
             except Exception as e:
                 print(f"⚠️ possible_causes TTS 변환 실패: {e}")
         
-        # recommended_actions TTS
+        # recommended_actions TTS (첫 번째 조치만 사용)
         actions_audio = None
         actions_audio_encoding = None
-        if actions:
-            actions_text = "조치 방법은 다음과 같습니다. "
-            step_number_map = {
-                1: "첫 번째", 2: "두 번째", 3: "세 번째", 4: "네 번째",
-                5: "다섯 번째", 6: "여섯 번째", 7: "일곱 번째", 8: "여덟 번째",
-                9: "아홉 번째", 10: "열 번째"
-            }
-            for i, action in enumerate(actions, 1):
-                step_word = step_number_map.get(i, f"{i}번째")
-                actions_text += f"{step_word}로, {action}. "
+        if actions and len(actions) > 0:
+            actions_text = f"조치 방법은 다음과 같습니다. {actions[0]}"
             try:
                 actions_tts = text_to_speech(format_for_tts(actions_text))
                 actions_audio = actions_tts.get("audio_content")
@@ -533,11 +554,11 @@ def llm_generate_answer(
             except Exception as e:
                 print(f"⚠️ recommended_actions TTS 변환 실패: {e}")
         
-        # safety_warnings TTS
+        # safety_warnings TTS (첫 번째 주의사항만 사용)
         warnings_audio = None
         warnings_audio_encoding = None
-        if warnings:
-            warnings_text = "중요한 주의사항입니다. " + ". ".join(warnings)
+        if warnings and len(warnings) > 0:
+            warnings_text = f"중요한 주의사항입니다. {warnings[0]}"
             try:
                 warnings_tts = text_to_speech(format_for_tts(warnings_text))
                 warnings_audio = warnings_tts.get("audio_content")
