@@ -14,10 +14,11 @@
         android:layout_gravity="center"/>
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="match_parent"
         android:padding="15dp"
-        android:background="@android:color/transparent" >
+        android:background="@android:color/transparent"
+        app:layout_constraintDimensionRatio="4:3">
         <com.google.android.material.card.MaterialCardView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -220,6 +221,25 @@
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
+        <Button
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:id="@+id/onair_button"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:layout_margin="30dp"
+            android:background="@drawable/white_background_logo"
+            android:gravity="center"
+            />
+        <Button
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:id="@+id/service_end_button"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:layout_margin="30dp"
+            android:gravity="center"
+            />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </FrameLayout>
