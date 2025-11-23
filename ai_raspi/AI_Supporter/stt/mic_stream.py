@@ -151,31 +151,39 @@ class MicStream:
                         # 첫 번째 장치를 선택 (실제로 열어보고 실패하면 다음 장치 시도)
                         device = input_devices_found[0][0]
                         dev_name = input_devices_found[0][1]['name']
-                        print(f"✅ ALSA 입력 장치 선택: {dev_name} (인덱스: {device})")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"✅ ALSA 입력 장치 선택: {dev_name} (인덱스: {device})")
+
                         # 여러 장치가 있으면 나중에 시도할 수 있도록 저장
                         if len(input_devices_found) > 1:
                             self._fallback_devices = [d[0] for d in input_devices_found[1:]]
                         else:
                             self._fallback_devices = []
                     else:
-                        print("⚠️ ALSA 호스트 API에서 장치를 찾을 수 없음")
-                        print("   💡 ALSA 레벨에서 마이크 확인:")
-                        print("      $ arecord -l")
-                        print("      $ python3.10 check_alsa_devices.py")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print("⚠️ ALSA 호스트 API에서 장치를 찾을 수 없음")
+                        # print("   💡 ALSA 레벨에서 마이크 확인:")
+                        # print("      $ arecord -l")
+                        # print("      $ python3.10 check_alsa_devices.py")
+
                         # 일반 검색으로 fallback
                         input_devices = [dev for dev in all_devices if dev['max_input_channels'] > 0]
-                        print(f"   입력 장치 수 (수동 필터링): {len(input_devices)}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"   입력 장치 수 (수동 필터링): {len(input_devices)}")
+
                         self._fallback_devices = []
                 else:
                     # ALSA 호스트 API가 없으면 일반 검색
                     # 입력 장치만 필터링 (kind='input' 사용)
                     try:
                         input_devices = sd.query_devices(kind='input')
-                        print(f"   입력 장치 수: {len(input_devices)}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"   입력 장치 수: {len(input_devices)}")
                     except Exception:
                         # kind='input'이 지원되지 않는 경우 수동 필터링
                         input_devices = [dev for dev in all_devices if dev['max_input_channels'] > 0]
-                        print(f"   입력 장치 수 (수동 필터링): {len(input_devices)}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"   입력 장치 수 (수동 필터링): {len(input_devices)}")
                 
                 # 기본 입력 장치 인덱스 가져오기
                 try:
@@ -201,22 +209,29 @@ class MicStream:
                             default_input = all_devices[default_input_idx]
                             if default_input['max_input_channels'] > 0:
                                 device = default_input_idx
-                                print(f"✅ 기본 입력 장치 자동 선택: {default_input['name']} (인덱스: {device})")
+                                # [25.11.21] 로그 주석 처리 - 재환
+                                # print(f"✅ 기본 입력 장치 자동 선택: {default_input['name']} (인덱스: {device})")
                             else:
-                                print(f"⚠️ 기본 입력 장치 [{default_input_idx}]는 입력 채널이 없습니다.")
+                                # [25.11.21] 로그 주석 처리 - 재환
+                                # print(f"⚠️ 기본 입력 장치 [{default_input_idx}]는 입력 채널이 없습니다.")
                                 raise ValueError("기본 입력 장치가 입력을 지원하지 않음")
                         else:
-                            print(f"⚠️ 기본 입력 장치 인덱스 [{default_input_idx}]가 범위를 벗어남")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"⚠️ 기본 입력 장치 인덱스 [{default_input_idx}]가 범위를 벗어남")
                             raise ValueError("기본 입력 장치 인덱스가 유효하지 않음")
                     else:
-                        print(f"⚠️ 기본 입력 장치가 설정되지 않음 (인덱스: {default_input_idx}, 타입: {type(default_input_idx)})")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"⚠️ 기본 입력 장치가 설정되지 않음 (인덱스: {default_input_idx}, 타입: {type(default_input_idx)})")
                         raise ValueError("기본 입력 장치가 설정되지 않음")
                 except (AttributeError, ValueError, IndexError, TypeError) as e:
-                    print(f"⚠️ 기본 장치 선택 실패: {e}")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print(f"⚠️ 기본 장치 선택 실패: {e}")
                     # 기본 장치를 찾을 수 없으면 입력 가능한 첫 번째 장치 선택
                     # (ALSA 호스트 API를 사용한 검색에서 이미 device가 설정되었으면 건너뜀)
                     if device is None:
-                        print("   입력 가능한 장치 검색 중...")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print("   입력 가능한 장치 검색 중...")
+
                         input_devices_found = []
                         
                         # 입력 장치 목록에서 찾기
@@ -225,7 +240,9 @@ class MicStream:
                             for idx, dev in enumerate(all_devices):
                                 if dev['name'] == input_dev['name'] and dev['max_input_channels'] > 0:
                                     input_devices_found.append((idx, dev))
-                                    print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+                                    # [25.11.21] 로그 주석 처리 - 재환
+                                    # print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+
                                     break
                         
                         # 입력 장치 목록이 비어있으면 전체 장치에서 다시 검색
@@ -233,13 +250,16 @@ class MicStream:
                             for idx, dev in enumerate(all_devices):
                                 if dev['max_input_channels'] > 0:
                                     input_devices_found.append((idx, dev))
-                                    print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+                                    # [25.11.21] 로그 주석 처리 - 재환
+                                    # print(f"      발견: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
                         
                         if input_devices_found:
                             # 첫 번째 입력 장치 선택
                             device = input_devices_found[0][0]
                             dev_name = input_devices_found[0][1]['name']
-                            print(f"✅ 입력 가능한 장치 선택: {dev_name} (인덱스: {device})")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"✅ 입력 가능한 장치 선택: {dev_name} (인덱스: {device})")
+
                         else:
                             raise RuntimeError("입력 가능한 마이크 장치를 찾을 수 없습니다.")
             except Exception as e:
@@ -280,35 +300,40 @@ class MicStream:
                             except:
                                 pass
                             
-                            print(f"      [{idx}] {dev['name']}")
-                            print(f"          타입: {', '.join(device_type) if device_type else '없음'}")
-                            print(f"          입력 채널: {dev['max_input_channels']}, 출력 채널: {dev['max_output_channels']}")
-                            print(f"          샘플레이트: {dev['default_samplerate']}Hz{marker}")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"      [{idx}] {dev['name']}")
+                            # print(f"          타입: {', '.join(device_type) if device_type else '없음'}")
+                            # print(f"          입력 채널: {dev['max_input_channels']}, 출력 채널: {dev['max_output_channels']}")
+                            # print(f"          샘플레이트: {dev['default_samplerate']}Hz{marker}")
                             
                             if is_input:
                                 input_found = True
                         
                         if not input_found:
-                            print("      ❌ 입력 가능한 장치가 없습니다!")
-                            print()
-                            print("   문제 해결 방법:")
-                            print("   1. ALSA 레벨에서 마이크 확인:")
-                            print("      $ python3.10 check_alsa_devices.py")
-                            print("      $ arecord -l")
-                            print("   2. ALSA 장치 이름을 직접 사용:")
-                            print("      config/settings.py에서 DEVICE_INDEX = 'hw:0,0' 설정")
-                            print("      (arecord -l 결과에서 확인한 장치 이름 사용)")
-                            print("   4. 마이크가 연결되어 있는지 확인")
-                            print("   5. 권한 확인: $ sudo usermod -a -G audio $USER")
-                            print("   6. 재로그인 후 다시 시도")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print("      ❌ 입력 가능한 장치가 없습니다!")
+                            # print()
+                            # print("   문제 해결 방법:")
+                            # print("   1. ALSA 레벨에서 마이크 확인:")
+                            # print("      $ python3.10 check_alsa_devices.py")
+                            # print("      $ arecord -l")
+                            # print("   2. ALSA 장치 이름을 직접 사용:")
+                            # print("      config/settings.py에서 DEVICE_INDEX = 'hw:0,0' 설정")
+                            # print("      (arecord -l 결과에서 확인한 장치 이름 사용)")
+                            # print("   4. 마이크가 연결되어 있는지 확인")
+                            # print("   5. 권한 확인: $ sudo usermod -a -G audio $USER")
+                            # print("   6. 재로그인 후 다시 시도")
+                            pass
                 except Exception as debug_e:
                     print(f"      ❌ 장치 목록 조회 실패: {debug_e}")
                 
-                print()
-                print("   💡 ALSA 장치 이름을 직접 사용할 수 있습니다:")
-                print("      config/settings.py에서 DEVICE_INDEX = 'hw:0,0' 설정")
-                print("      (arecord -l 결과에서 확인한 장치 이름 사용)")
-                print()
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print()
+                # print("   💡 ALSA 장치 이름을 직접 사용할 수 있습니다:")
+                # print("      config/settings.py에서 DEVICE_INDEX = 'hw:0,0' 설정")
+                # print("      (arecord -l 결과에서 확인한 장치 이름 사용)")
+                # print()
+
                 raise RuntimeError(f"마이크 장치를 찾을 수 없습니다. config/settings.py에서 DEVICE_INDEX를 설정하거나 ALSA 장치 이름을 사용하세요.")
         
         try:
@@ -335,25 +360,33 @@ class MicStream:
                             dev_hostapi = dev.get('hostapi', None)
                             if dev_hostapi == alsa_hostapi and dev['max_input_channels'] > 0:
                                 device_idx = idx
-                                print(f"✅ ALSA 입력 장치 찾음: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']})")
+                                # [25.11.21] 로그 주석 처리 - 재환
+                                # print(f"✅ ALSA 입력 장치 찾음: [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']})")
+
                                 break
                         
                         if device_idx is not None:
                             stream_kwargs['device'] = device_idx
                         else:
-                            print("⚠️ ALSA 호스트 API에서 입력 장치를 찾을 수 없음")
-                            print("   💡 실제 입력 장치를 확인하세요:")
-                            print("      $ arecord -l")
-                            print("      $ python3.10 check_alsa_devices.py")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print("⚠️ ALSA 호스트 API에서 입력 장치를 찾을 수 없음")
+                            # print("   💡 실제 입력 장치를 확인하세요:")
+                            # print("      $ arecord -l")
+                            # print("      $ python3.10 check_alsa_devices.py")
+
                             # 입력 채널이 0인 장치는 사용하지 않음 (채널 오류 방지)
                             stream_kwargs['device'] = device
                     else:
                         stream_kwargs['device'] = device
                 else:
-                    print("⚠️ ALSA 호스트 API를 찾을 수 없음, 기본 설정 사용")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print("⚠️ ALSA 호스트 API를 찾을 수 없음, 기본 설정 사용")
+
                     stream_kwargs['device'] = device
             except Exception as e:
-                print(f"⚠️ ALSA 호스트 API 확인 실패: {e}, 기본 설정 사용")
+                # [25.11.21] 로그 주석 처리 - 재환
+                # print(f"⚠️ ALSA 호스트 API 확인 실패: {e}, 기본 설정 사용")
+
                 stream_kwargs['device'] = device
             
             # 입력 채널이 0인 장치도 실제로 열어보고 확인
@@ -364,12 +397,17 @@ class MicStream:
                     if device_info['max_input_channels'] == 0:
                         # 입력 채널이 0으로 보고되더라도 실제로 열 수 있는지 확인
                         # hw:0,0 같은 ALSA 장치는 입력 채널이 있지만 query_devices가 잘못 보고할 수 있음
-                        if 'hw:' in device_info['name'] or 'plughw:' in device_info['name'] or 'googlevoicehat' in device_info['name'].lower():
-                            print(f"⚠️ 장치 [{stream_kwargs['device']}] {device_info['name']}는 입력 채널이 0으로 보고되지만 실제로 열어보겠습니다.")
-                        else:
+
+                        # [25.11.21] 간단하게 조건문 정리 - 재환
+                        # if 'hw:' in device_info['name'] or 'plughw:' in device_info['name'] or 'googlevoicehat' in device_info['name'].lower():
+                        #     print(f"⚠️ 장치 [{stream_kwargs['device']}] {device_info['name']}는 입력 채널이 0으로 보고되지만 실제로 열어보겠습니다.")
+                        # else:
+                        #     raise RuntimeError(f"장치 [{stream_kwargs['device']}] {device_info['name']}는 입력 채널이 0개입니다. 입력 장치를 사용하세요.")
+                        
+                        if not ('hw:' in device_info['name'] or 'plughw:' in device_info['name'] or 'googlevoicehat' in device_info['name'].lower()):
                             raise RuntimeError(f"장치 [{stream_kwargs['device']}] {device_info['name']}는 입력 채널이 0개입니다. 입력 장치를 사용하세요.")
-                except (KeyError, IndexError, TypeError):
-                    pass  # 장치 정보를 가져올 수 없으면 그냥 시도
+                except (KeyError, IndexError, TypeError): # 장치 정보를 가져올 수 없으면 그냥 시도
+                    pass
             
             # 실제로 장치를 열어보고 입력 채널이 있는지 확인
             # 여러 장치를 시도할 수 있도록 루프로 처리
@@ -400,7 +438,8 @@ class MicStream:
                                 alsa_device_plughw = f'plughw:{card_num},{device_num}'
                                 if alsa_device_plughw not in [str(d) for d in devices_to_try if d is not None]:
                                     devices_to_try.append(alsa_device_plughw)
-                                    print(f"   💡 ALSA 장치 추가: {alsa_device_plughw} (arecord -l에서 확인, plughw 형식)")
+                                    # [25.11.21] 로그 주석 처리 - 재환
+                                    # print(f"   💡 ALSA 장치 추가: {alsa_device_plughw} (arecord -l에서 확인, plughw 형식)")
             except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
                 print(f"   ⚠️ arecord 확인 실패 (무시 가능): {e}")
             
@@ -416,7 +455,9 @@ class MicStream:
                     if isinstance(device_idx, str):
                         if 'hw:' in device_idx and 'plughw:' not in device_idx:
                             # hw: 형식은 sounddevice가 지원하지 않을 수 있으므로 건너뜀
-                            print(f"⚠️ 장치 [{device_idx}]는 hw: 형식입니다. sounddevice가 지원하지 않을 수 있어 건너뜁니다.")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"⚠️ 장치 [{device_idx}]는 hw: 형식입니다. sounddevice가 지원하지 않을 수 있어 건너뜁니다.")
+
                             if device_idx != devices_to_try[-1]:
                                 continue
                         test_kwargs['device'] = device_idx
@@ -428,11 +469,14 @@ class MicStream:
                             device_name = device_info.get('name', f'인덱스 {device_idx}')
                         except:
                             device_name = f'인덱스 {device_idx}'
-                    
-                    print(f"🔍 장치 [{device_idx}] {device_name} 열기 시도 중...")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print(f"🔍 장치 [{device_idx}] {device_name} 열기 시도 중...")
+
                     self.stream = sd.InputStream(**test_kwargs)
                     self.stream.start()
-                    print(f"✅ 장치 [{device_idx}] {device_name} 열기 성공!")
+                    # [25.11.21] 로그 주석 처리 - 재환
+                    # print(f"✅ 장치 [{device_idx}] {device_name} 열기 성공!")
+
                     stream_kwargs['device'] = device_idx  # 성공한 장치로 업데이트
                     break
                 except Exception as stream_error:
@@ -448,31 +492,45 @@ class MicStream:
                     
                     error_str = str(stream_error)
                     if 'Invalid number of channels' in error_str or 'channels' in error_str.lower():
-                        print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: 입력 채널이 없거나 잘못되었습니다.")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: 입력 채널이 없거나 잘못되었습니다.")
+                        
                         if device_idx != devices_to_try[-1]:  # 마지막 장치가 아니면 다음 장치 시도
-                            print(f"   다음 장치 시도 중...")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"   다음 장치 시도 중...")
+
                             continue
                     elif 'No input device matching' in error_str or 'device matching' in error_str.lower():
-                        print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: sounddevice가 이 장치를 인식하지 못합니다.")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: sounddevice가 이 장치를 인식하지 못합니다.")
+
                         if device_idx != devices_to_try[-1]:  # 마지막 장치가 아니면 다음 장치 시도
-                            print(f"   다음 장치 시도 중...")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"   다음 장치 시도 중...")
+
                             continue
                     else:
-                        print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: {stream_error}")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"⚠️ 장치 [{device_idx}] {device_name} 열기 실패: {stream_error}")
+
                         if device_idx != devices_to_try[-1]:  # 마지막 장치가 아니면 다음 장치 시도
-                            print(f"   다음 장치 시도 중...")
+                            # [25.11.21] 로그 주석 처리 - 재환
+                            # print(f"   다음 장치 시도 중...")
+
                             continue
                     
                     # 마지막 장치 시도 실패
                     if device_idx == devices_to_try[-1]:
-                        print(f"❌ 모든 장치 열기 실패")
-                        print(f"   마지막 오류: {last_error}")
-                        print(f"   💡 ALSA 레벨에서 마이크 확인:")
-                        print(f"      $ arecord -l")
-                        print(f"      $ python3.10 check_alsa_devices.py")
-                        print(f"   💡 다른 프로세스가 마이크를 점유하고 있는지 확인:")
-                        print(f"      $ lsof | grep -i audio")
-                        print(f"      $ fuser /dev/snd/*")
+                        # [25.11.21] 로그 주석 처리 - 재환
+                        # print(f"❌ 모든 장치 열기 실패")
+                        # print(f"   마지막 오류: {last_error}")
+                        # print(f"   💡 ALSA 레벨에서 마이크 확인:")
+                        # print(f"      $ arecord -l")
+                        # print(f"      $ python3.10 check_alsa_devices.py")
+                        # print(f"   💡 다른 프로세스가 마이크를 점유하고 있는지 확인:")
+                        # print(f"      $ lsof | grep -i audio")
+                        # print(f"      $ fuser /dev/snd/*")
+                        
                         raise RuntimeError(f"모든 ALSA 장치를 열 수 없습니다. ALSA 레벨에서 마이크를 확인하세요.") from last_error
             
             if self.stream is None:
@@ -486,18 +544,23 @@ class MicStream:
                     device_name = device_info['name'] if device_info else f"인덱스 {device}"
                 except:
                     device_name = f"인덱스 {device}" if device is not None else "기본 장치"
-            print(f"🔊 마이크 ON (활성 상태) - 샘플레이트: {self.mic_rate}Hz, 장치: {device_name}")
+            # [25.11.21] 로그 주석 처리 - 재환
+            # print(f"🔊 마이크 ON (활성 상태) - 샘플레이트: {self.mic_rate}Hz, 장치: {device_name}")
+
         except Exception as e:
-            print(f"❌ 마이크 스트림 시작 실패: {e}")
-            print(f"   device_index: {device}")
-            print("   사용 가능한 입력 장치 목록:")
-            try:
-                devices = sd.query_devices()
-                for idx, dev in enumerate(devices):
-                    if dev['max_input_channels'] > 0:
-                        print(f"      [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
-            except:
-                pass
+            # [25.11.21] 로그 주석 처리 - 재환
+            # print(f"❌ 마이크 스트림 시작 실패: {e}")
+            # print(f"   device_index: {device}")
+            # print("   사용 가능한 입력 장치 목록:")
+            
+            # [25.11.21] 의미없는 코드 - 재환
+            # try:
+            #     devices = sd.query_devices()
+            #     for idx, dev in enumerate(devices):
+            #         if dev['max_input_channels'] > 0:
+            #             print(f"      [{idx}] {dev['name']} (입력 채널: {dev['max_input_channels']}, 샘플레이트: {dev['default_samplerate']}Hz)")
+            # except:
+            #     pass
             raise
 
     def read(self, timeout=None):
@@ -533,15 +596,26 @@ class MicStream:
             self.is_paused = True
             print("🔇 마이크 OFF (대기 상태)")
 
+    def flush_queue(self):
+        """마이크 큐에 쌓인 오래된 오디오 데이터 제거"""
+        cleared_count = 0
+        while not self.q.empty():
+            try:
+                self.q.get_nowait()
+                cleared_count += 1
+            except queue.Empty:
+                break
+        if cleared_count > 0:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"🧹 마이크 큐 비움: {cleared_count}개 청크 제거")
+        return cleared_count
+    
     def resume(self):
         """마이크 입력 재개"""
         if self.stream and self.is_paused:
             # 이전 데이터 제거
-            while not self.q.empty():
-                try:
-                    self.q.get_nowait()
-                except queue.Empty:
-                    break
+            self.flush_queue()
             self.is_paused = False
             print("🔊 마이크 ON (활성 상태)")
 
@@ -576,13 +650,23 @@ class MicStream:
     
     def acquire(self):
         """마이크 장치 재점유 (WebRTC 프로세스가 마이크를 해제한 후)"""
-        if self.stream is None:
+        # stream이 None이거나 비활성 상태면 재시작
+        if self.stream is None or not (hasattr(self.stream, 'active') and self.stream.active):
             try:
-                print("🔊 마이크 장치 재점유 중...")
+                # 기존 stream이 있으면 먼저 정리
+                if self.stream is not None:
+                    try:
+                        self.stream.stop()
+                        self.stream.close()
+                    except:
+                        pass
+                    self.stream = None
+                
                 self.start()  # 마이크 스트림 다시 시작
-                print("✅ 마이크 장치 재점유 완료")
             except Exception as e:
                 print(f"❌ 마이크 재점유 실패: {e}")
                 raise
         else:
-            print("ℹ️ 마이크가 이미 점유되어 있습니다.")
+            # stream이 활성 상태면 resume만 호출
+            if self.is_paused:
+                self.resume()
