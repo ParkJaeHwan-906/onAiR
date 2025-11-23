@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +13,7 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -44,13 +46,10 @@ import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
 import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
-import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
-import com.onair.mobile.assistant.data.auth.TokenManager
-import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
-import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
+import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.CompletableDeferred
@@ -78,8 +77,8 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var ttsRepository: TtsRepositoryImpl
     private lateinit var mediaPlayerController: MediaPlayerController
     private lateinit var raspberryPiControlRepository: RaspberryPiControlRepository
-    private lateinit var tokenManager: TokenManager
-    private lateinit var webRtcRepository: WebRtcRepository
+//    private lateinit var tokenManager: TokenManager
+//    private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
     private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
@@ -100,7 +99,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
-    private val SPRING_SERVER_URL = "https://onair.ai.kr/api"
+//    private val SPRING_SERVER_URL = "https://onair.ai.kr/api"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,6 +158,11 @@ class WorkingActivity : AppCompatActivity() {
                 isActivityResumed = true
             } else {
                 Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
+            }
+        }
+        lifecycleScope.launch {
+            workingViewModel.endService.collect {
+                handleServiceEnd()
             }
         }
     }
@@ -362,10 +366,10 @@ class WorkingActivity : AppCompatActivity() {
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
 
         // 토큰 관리자 초기화
-        tokenManager = TokenManager(this)
+//        tokenManager = TokenManager(this)
 
         // WebRTC Repository 초기화
-        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
+//        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
 
         // 토큰 갱신
         lifecycleScope.launch {
@@ -426,7 +430,7 @@ class WorkingActivity : AppCompatActivity() {
                             
                             // 2초 대기 후 FastAPI 서버로 재생 완료 이벤트 전송
                             lifecycleScope.launch {
-                                kotlinx.coroutines.delay(2000)
+                                delay(2000)
                                 
                                 val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
                                 if (success) {
@@ -463,24 +467,24 @@ class WorkingActivity : AppCompatActivity() {
 
                             // intent_audio_completed 이벤트 전송 직후 WebRTC 요청 API 호출
                             lifecycleScope.launch {
-                                val accessToken = authRepository.getAccessToken()
-                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                                if (accessToken.isNotEmpty()) {
-                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                                    val receiverAccountId = -1L
-                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                                    if (success) {
-                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                                    } else {
-                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                                    }
-                                } else {
-                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                                }
-                                
+//                                val accessToken = authRepository.getAccessToken()
+//                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+//
+//                                if (accessToken.isNotEmpty()) {
+//                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                                    val receiverAccountId = -1L
+//                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                                    if (success) {
+//                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                                    } else {
+//                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                                    }
+//                                } else {
+//                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                                }
+                                workingViewModel.requestCall()
                                 // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (CV 탐지 실패/정상과 동일한 로직)
                                 raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                             }
@@ -490,7 +494,6 @@ class WorkingActivity : AppCompatActivity() {
                     else -> {
                         Log.w(TAG, "⚠️ 알 수 없는 Intent 타입: $intentType")
                         runOnUiThread {
-//                            binding.taskName.text = "처리할 수 없는 요청입니다."
                         }
                     }
                 }
@@ -529,23 +532,24 @@ class WorkingActivity : AppCompatActivity() {
 
                     // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
-                        val accessToken = authRepository.getAccessToken()
-                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                        if (accessToken.isNotEmpty()) {
-                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                            val receiverAccountId = -1L
-                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                            if (success) {
-                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                            } else {
-                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                            }
-                        } else {
-                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                        }
+//                        val accessToken = authRepository.getAccessToken()
+//                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+//
+//                        if (accessToken.isNotEmpty()) {
+//                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                            val receiverAccountId = -1L
+//                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                            if (success) {
+//                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                            } else {
+//                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                            }
+//                        } else {
+//                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                        }
+                        workingViewModel.requestCall()
                         
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                         raspberryPiControlRepository.notifyIntentDone("OPERATOR")
@@ -604,24 +608,23 @@ class WorkingActivity : AppCompatActivity() {
 
                     // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
-                        val accessToken = authRepository.getAccessToken()
-                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                        if (accessToken.isNotEmpty()) {
-                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                            val receiverAccountId = -1L
-                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                            if (success) {
-                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                            } else {
-                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                            }
-                        } else {
-                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                        }
-                        
+                        workingViewModel.requestCall()
+//
+//                        if (accessToken.isNotEmpty()) {
+//                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                            val receiverAccountId = -1L
+//                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                            if (success) {
+//                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                            } else {
+//                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                            }
+//                        } else {
+//                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                        }
+//
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                         raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
@@ -1240,11 +1243,11 @@ class WorkingActivity : AppCompatActivity() {
                 playAudio(audioBase64)
             }
         }
-        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+//        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
         // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
-        withContext(Dispatchers.Main) {
-            cardView.visibility = View.GONE
-        }
+//        withContext(Dispatchers.Main) {
+//            cardView.visibility = View.GONE
+//        }
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
         val markwon = Markwon.create(textView.context)
@@ -1406,7 +1409,6 @@ class WorkingActivity : AppCompatActivity() {
 
             // UI 초기화
             runOnUiThread {
-//                binding.taskName.text = "대기 중..."
                 hideModal()
             }
             
