@@ -47,6 +47,15 @@ class WorkingViewModel(
             }
         }
     }
+    fun requestCall() {
+        viewModelScope.launch {
+            workingRepository.requestCall { result ->
+                result.onSuccess {  }.onFailure { exception ->
+                    Log.e("request call", exception.message.toString())
+                }
+            }
+        }
+    }
     fun getLiveKitToken(data: JSONObject) {
         val acceptConnect = data.getBoolean("acceptConnection")
         if (acceptConnect) {

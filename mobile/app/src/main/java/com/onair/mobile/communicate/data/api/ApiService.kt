@@ -2,6 +2,7 @@ package com.onair.mobile.communicate.data.api
 
 import com.onair.mobile.communicate.data.api.dto.LoginRequest
 import com.onair.mobile.communicate.data.api.dto.ApiResponse
+import com.onair.mobile.communicate.data.api.dto.CallRequestRequest
 import com.onair.mobile.communicate.data.api.dto.CallResponseRequestDto
 import com.onair.mobile.communicate.data.api.dto.RefreshRequest
 import com.onair.mobile.communicate.data.api.dto.EndTaskRequest
@@ -40,5 +41,10 @@ interface ApiService {
     @POST("webrtc/response")
     fun responseCall(
         @Body body: CallResponseRequestDto
+    ): Call<ApiResponse<RtcResponse>>
+
+    @POST("webrtc/request")
+    fun requestCall(
+        @Body body: CallRequestRequest
     ): Call<ApiResponse<RtcResponse>>
 }
