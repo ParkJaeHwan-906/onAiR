@@ -9,10 +9,9 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.google.gson.Gson
-import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
-import com.onair.mobile.communicate.data.socket.dto.VideoFrameResponse
+import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import com.onair.mobile.communicate.presentation.ui.WorkingViewModel.OnAirState
 import io.socket.client.IO
 import io.socket.client.Socket
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import livekit.org.webrtc.VideoFrame
 
 /**
  * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과를 수신
@@ -68,6 +66,9 @@ class SocketIoSttClient(
     val callEnd = _callEnd.receiveAsFlow()
     private val _finalAnswer = MutableSharedFlow<StructuredAnswer>()
     val finalAnswer = _finalAnswer.asSharedFlow()
+
+    private val _endService = Channel<Unit>(Channel.BUFFERED)
+    val endService = _endService.receiveAsFlow()
 
     private val _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
     val cvAnswer = _cvAnswer.asSharedFlow()
@@ -348,7 +349,9 @@ class SocketIoSttClient(
                 } catch (e: Exception) {
                 Log.e(TAG, "❌ AI 답변 응답 처리 오류: ${e.message}")
             }
-
+            socket?.on("enable_service_end_button") { args ->
+                _endService.trySend(Unit)
+            }
 
             }
             socket?.on("video_frame") { args ->
@@ -377,8 +380,8 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-//            socket?.emit("audio_playbck_completed")
-            socket?.on("enable_service_end_button") {
+//            socket?.emit("audio_playback_completed")
+            socket?.on("enable_service_end_button") { args ->
 
             }
 

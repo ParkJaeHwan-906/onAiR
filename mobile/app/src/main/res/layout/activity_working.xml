@@ -71,10 +71,10 @@
                 android:layout_height="wrap_content"
                 android:maxWidth="300dp"
                 android:backgroundTint="#80FF445D"
-                android:layout_marginBottom="15dp"
+                android:layout_marginBottom="5dp"
                 android:id="@+id/ai_result_cause"
                 android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/ai_result_action"
                 app:layout_constraintStart_toStartOf="parent">
                 <TextView
                     android:layout_width="wrap_content"
@@ -96,10 +96,10 @@
                 android:layout_height="wrap_content"
                 android:maxWidth="300dp"
                 android:backgroundTint="#8055C264"
-                android:layout_marginBottom="15dp"
+                android:layout_marginBottom="5dp"
                 android:id="@+id/ai_result_action"
                 android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/ai_result_warning"
                 app:layout_constraintStart_toStartOf="parent">
                 <TextView
                     android:layout_width="wrap_content"

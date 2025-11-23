@@ -146,6 +146,7 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
+    sio.on("reset_wakeword_count")(reset_wakeword_count)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -343,13 +344,18 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 80)
 
             # 최종 구조
+            # ★ message는 final_guide.py에서 문자열로 사용되므로 messages 리스트를 문자열로 변환
+            # messages가 비어있으면 빈 문자열, 아니면 첫 번째 메시지 사용
+            message_str = messages[0] if messages and isinstance(messages, list) else (messages if isinstance(messages, str) else "")
+            
             cv_result = {
                 "detected": detected,
                 "device_type": device_type,
                 "modules": modules,
                 "anomalies": anomalies,
-                "message": messages,
-                "modules_detected": modules_detected  # ★ 추가
+                "message": message_str,  # ★ 문자열로 통일
+                "messages": messages,    # ★ 리스트도 보존 (필요시 사용)
+                "modules_detected": modules_detected
             }
 
             # -------------------------
@@ -476,7 +482,8 @@ async def handle_audio_playback_completed(sid, data):
             modules = _pending_cv_detection["modules"]
             anomalies = _pending_cv_detection["anomalies"]
             # cv_result는 generate_final_guide에서 message만 사용하므로 message만 전달
-            cv_result = {"message": _pending_cv_detection.get("message", [])}
+            # message는 문자열로 저장되어 있음
+            cv_result = {"message": _pending_cv_detection.get("message", "")}
             
             print("=" * 80)
             print("📚 [GPT 답변 생성 시작] CV 탐지 이상 → 전체 정비 가이드 생성")
@@ -846,3 +853,6 @@ async def delete_marker(sid, data):
             idx += 1
     
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+
+async def reset_wakeword_count(sid):
+    await broadcast_to('raspi', "reset_wakeword_count", {})
