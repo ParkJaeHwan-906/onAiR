@@ -300,176 +300,108 @@ async def handle_intent_audio_completed(sid, data):
     global _pending_cv_detection
     
     sender_device = device_map.get(sid, "unknown")
-    
+
     # 모바일에서만 받음
     if sender_device != "mobile":
         print(f"⚠️ Intent 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
     
     intent = data.get("intent", "").upper()
-    
-    # AI_SUPPORTER인 경우 CV 모델 실행
+
+    # ---------------------------------------------------------
+    # AI_SUPPORTER → CV 분석 실행
+    # ---------------------------------------------------------
     if intent == "AI_SUPPORTER":
         try:
-            # CV 모델 실행
             cv_raw = await run_anomaly_detection()
-            
-            modules = cv_raw.get("modules", [])
-            anomalies = cv_raw.get("anomalies", {})
+
             detected = cv_raw.get("detected", False)
             has_anomaly = cv_raw.get("has_anomaly", False)
+            device_type = cv_raw.get("device_type", "unknown")
+            modules = cv_raw.get("modules", [])
+            anomalies = cv_raw.get("anomalies", {})     # ★ 이미 정제됨
+            messages = cv_raw.get("messages", [])       # ★ 이미 정제됨
 
-            filtered_anomalies = {
-                k: v for k, v in anomalies.items()
-                if v.get("results") and len(v.get("results")) > 0
-            }      
+            # 최종 구조
+            cv_result = {
+                "detected": detected,
+                "device_type": device_type,
+                "modules": modules,
+                "anomalies": anomalies,
+                "message": messages
+            }
 
-            raw_messages = cv_raw.get("messages", [])
-            filtered_msgs = [
-                msg for msg in raw_messages
-                if not any(kw in msg for kw in ("미검출", "없음", "없어", "못했습"))
-            ]
-            
-            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
-            has_real_anomaly = len(filtered_anomalies) > 0 or len(filtered_msgs) > 0
-            
-            has_thermo = any(m["label"] == "thermometer" for m in modules)
-            if has_thermo:
-                cv_result = {
-                    "detected": True,
-                    "has_anomaly": True,
-                    "device_type": "AHU",
-                    "timestamp": cv_raw.get("timestamp"),
-                    "modules":[
-                        {
-                            "label": "thermometer",
-                            "confidence": 0.88,
-                            "x1": 150,
-                            "y1": 250,
-                            "x2": 350,
-                            "y2": 450
-                        }
-                    ],
-                    "anomalies": {
-                        "gauge": {
-                            "type": "gauge",
-                            "status": "anomaly",
-                            "detail": "thermo_high",
-                            "message": "온도 과열. 현재 측정값: 85.50",
-                            "results": {
-                                "thermometer": {
-                                    "angle": 280.5,
-                                    "value": 85.5,
-                                    "status": "anomaly",
-                                    "message": "온도 과열"
-                                }
-                            }
-                        }
-                    },
-                    "yolo_count": cv_raw.get("yolo_count"),
-                    "message": "thermometer 과열"
-                }
-            else:
-                cv_result = {
-                    "detected": detected,
-                    "device_type": cv_raw.get("device_type"),
-                    "modules": modules,
-                    "anomalies": filtered_anomalies,
-                    "message": filtered_msgs
-                }          
-
-            detected = bool(cv_result["detected"])
-            device_type = cv_result.get("device_type", "unknown")
-            anomalies = cv_result.get("anomalies", {})
-            messages = cv_result.get("message", [])
-            
-            # 실제 이상이 있는지 확인 (anomalies와 messages가 모두 비어있으면 이상 없음)
-            has_real_anomaly = len(anomalies) > 0 or len(messages) > 0
-            
-            # 3가지 케이스로 분기
+            # -------------------------
+            # 1) 탐지 실패 (AHU 아님 / YOLO 없음 / 프레임 없음 등)
+            # -------------------------
             if not detected:
-                # 케이스 1: detected = False + modules 없음 → 탐지 실패(failed)
-                _pending_cv_detection = {
-                    "device_type": device_type,
-                    "modules": modules,
-                    "anomalies": anomalies,
-                    "cv_result": cv_result
-                }
+                _pending_cv_detection = cv_result
                 await broadcast_to("mobile", "cv_detection_failed", {
                     "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                 })
-            elif detected and not has_real_anomaly:
-                # 케이스 2: detected = True + modules 있음 + 실제 이상 없음 → 정상(normal)
-                _pending_cv_detection = {
-                    "device_type": device_type,
-                    "modules": modules,
-                    "anomalies": anomalies,
-                    "cv_result": cv_result
-                }
+                return
+
+            # -------------------------
+            # 2) 정상 (탐지 OK + 이상 없음)
+            # -------------------------
+            if detected and not has_anomaly:
+                _pending_cv_detection = cv_result
                 await broadcast_to("mobile", "cv_detection_normal", {
                     "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
                 })
-            else:
-                # CV 모델이 오류(=anomaly)를 탐지한 경우
-                await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
-                
-                # 간단한 탐지 알림 메시지 생성 및 전송
-                notification_text = generate_cv_detection_notification(device_type, anomalies)
-                
-                # TTS 변환
-                try:
-                    notification_tts = text_to_speech(notification_text)
-                    notification_audio = notification_tts.get("audio_content")
-                    notification_audio_encoding = notification_tts.get("mime_type")
-                except Exception as e:
-                    print(f"⚠️ 탐지 알림 TTS 변환 실패: {e}")
-                    notification_audio = None
-                    notification_audio_encoding = None
-                
-                # _pending_cv_detection 저장
-                _pending_cv_detection = {
-                    "device_type": device_type,
-                    "modules": modules,
-                    "anomalies": anomalies,
-                    "cv_result": cv_result
-                }
-                
-                # 모바일로 탐지 알림 전송
-                payload = {
-                    "message": notification_text,
-                    "audio_content": notification_audio,
-                    "audio_encoding": notification_audio_encoding,
-                    "cv_detection_result": {
-                        "device_type": device_type,
-                        "modules": modules,
-                        "anomalies": anomalies,
-                        "message": cv_result.get('message', '')
-                    }
-                }
-                
-                try:
-                    await broadcast_to("mobile", "cv_detection_anomaly", payload)
-                except Exception as e:
-                    print(f"❌ 모바일로 CV 탐지 알림 전송 실패: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # 라즈베리파이로 CV 탐지 성공 알림
-                await broadcast_to("raspi", "cv_detection_success", cv_result.get('message', ''))
+                return
+
+            # -------------------------
+            # 3) 이상 (anomaly)
+            # -------------------------
+            await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+
+            # 알림 메시지 생성
+            notification_text = generate_cv_detection_notification(device_type, anomalies)
+
+            # TTS 변환
+            try:
+                tts_res = text_to_speech(notification_text)
+                audio_data = tts_res.get("audio_content")
+                audio_type = tts_res.get("mime_type")
+            except Exception as e:
+                print(f"⚠️ 탐지 알림 TTS 변환 실패: {e}")
+                audio_data = None
+                audio_type = None
+
+            # pending 저장
+            _pending_cv_detection = cv_result
+
+            # anomaly payload
+            payload = {
+                "message": notification_text,
+                "audio_content": audio_data,
+                "audio_encoding": audio_type,
+                "cv_detection_result": cv_result
+            }
+
+            # 모바일로 anomaly 전송
+            await broadcast_to("mobile", "cv_detection_anomaly", payload)
+
+            # 라즈베리파이로 anomaly 성공 전송
+            await broadcast_to("raspi", "cv_detection_success", messages)
+
         except Exception as e:
             print(f"❌ CV 모델 실행 오류: {e}")
             import traceback
             traceback.print_exc()
-    
-            # CV 모델 오류 시에도 탐지 실패로 처리 (Operator와 동일하게 처리)
-            # ⚠️ 중요: 예외 발생 시 함수를 즉시 종료하여 중복 이벤트 전송 방지
+
             await broadcast_to("mobile", "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
             })
-            return  # 함수 즉시 종료하여 중복 이벤트 전송 방지
+            return
+
+    # ---------------------------------------------------------
+    # OPERATOR → WebRTC 오디오 송출 대기
+    # ---------------------------------------------------------
     elif intent == "OPERATOR":
-        # OPERATOR인 경우 WebRTC 오디오 스트리밍 대기 상태
         pass
+
 
 
 async def handle_audio_playback_completed(sid, data):
