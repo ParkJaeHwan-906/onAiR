@@ -161,7 +161,7 @@ def detect_center_hub_intensity(img, debug_dir=None):
     h, w = gray.shape
 
     # 1) 최저 1% 픽셀(어두운 영역) 찾기
-    thresh_val = np.percentile(blur, 1)  # 하위 1% 픽셀값
+    thresh_val = np.percentile(blur, 5)  # 하위 1% 픽셀값
     mask = (blur <= thresh_val).astype(np.uint8) * 255
 
     if debug_dir:
