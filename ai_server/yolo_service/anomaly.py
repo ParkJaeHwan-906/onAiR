@@ -3,7 +3,10 @@ import numpy as np
 from loguru import logger
 from ultralytics import YOLO
 
-from ai_server.yolo_service.redis_client import get_device_state, get_latest_yolo_result, get_latest_frame, get_cv_buffer_frames
+from ai_server.yolo_service.redis_client import (
+    get_device_state, get_latest_yolo_result,
+    get_latest_frame, get_cv_buffer_frames
+)
 from ai_server.yolo_service.fan_belt_anomaly import analyze_fan_belt
 from ai_server.yolo_service.gauge_anomaly import analyze_gauge
 from ai_server.yolo_service.panel_anomaly import analyze_panel
@@ -23,36 +26,51 @@ SHARPNESS_FRAMES = 10
 FAN_BELT_CLASSES = ("belt", "fan")
 
 
-def calc_sharpness(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    return cv2.Laplacian(gray, cv2.CV_64F).var()
+# -----------------------------------------------------
+# ★ 정제 로직 (status 기반)
+# -----------------------------------------------------
+def _filter_anomalies(anomalies: dict):
+    """status not_found/error/unknown 제거, 의미 있는 anomaly만 유지"""
+    filtered = {}
+    for key, item in anomalies.items():
+        status = item.get("status")
+
+        if status in ("not_found", "error", "unknown"):
+            continue
+
+        filtered[key] = item
+
+    return filtered
 
 
-def format_boxes(results, names):
-    boxes = []
-    for r in results:
-        for box in r.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            conf = float(box.conf)
-            label = names[int(box.cls)]
-            area = (x2 - x1) * (y2 - y1)
+def _collect_messages(anomalies: dict):
+    """정상/이상 상태만 message 추출"""
+    msgs = []
+    for key, item in anomalies.items():
+        status = item.get("status")
 
-            boxes.append({
-                "label": label,
-                "confidence": conf,
-                "x1": x1, "y1": y1,
-                "x2": x2, "y2": y2,
-                "area": area
-            })
-    return boxes
+        if status in ("not_found", "error", "unknown"):
+            continue
+
+        msg = item.get("message")
+        if msg:
+            msgs.append(msg)
+
+    return msgs
 
 
-
+# -----------------------------------------------------
+# ★ 메인 로직
+# -----------------------------------------------------
 async def run_anomaly_detection():
     logger.info("🚀 anomaly_detection() 시작")
 
+    # -------------------------
+    # 0) Device 확인
+    # -------------------------
     device = await get_device_state()
     device_label = device["label"] if device else None
+
     if device_label != "AHU":
         return {
             "detected": False,
@@ -63,6 +81,9 @@ async def run_anomaly_detection():
             "message": "AHU가 아님"
         }
 
+    # -------------------------
+    # 1) YOLO 결과
+    # -------------------------
     yolo_data = await get_latest_yolo_result()
     if not yolo_data:
         return {
@@ -77,17 +98,17 @@ async def run_anomaly_detection():
     raw_boxes = yolo_data.get("boxes", [])
     latest_ts = yolo_data.get("frame_ts")
 
-    # belt 또는 fan 하나라도 있으면 flow 분석 실행
+    # 예측된 모듈들
     fan_belt_boxes = [b for b in raw_boxes if b["label"] in FAN_BELT_CLASSES]
-
-    # gauge / panel
-    gauge_boxes = [b for b in raw_boxes if b["label"] in ("pressure_gauge","thermometer")]
-    panel_boxes = [b for b in raw_boxes if b["label"] in ("control_panel")]
+    gauge_boxes = [b for b in raw_boxes if b["label"] in ("pressure_gauge", "thermometer")]
+    panel_boxes = [b for b in raw_boxes if b["label"] == "control_panel"]
     panel_parts_boxes = [b for b in raw_boxes if b["label"] in PANEL_parts]
 
     anomalies = {}
 
-    # ▶ 팬/벨트 Flow 분석
+    # -------------------------
+    # 2) Fan/Belt 분석
+    # -------------------------
     if fan_belt_boxes:
         frames = await get_cv_buffer_frames(30)
         if len(frames) < 10:
@@ -101,9 +122,11 @@ async def run_anomaly_detection():
         else:
             anomalies["fan_belt"] = await analyze_fan_belt(frames, fan_belt_boxes)
     else:
-        anomalies["fan_belt"] = { "status": "not_found" }
+        anomalies["fan_belt"] = {"status": "not_found"}
 
-    # 최신 프레임
+    # -------------------------
+    # 3) 최신 프레임 확보
+    # -------------------------
     latest_frame, _ = await get_latest_frame()
     if latest_frame is None:
         return {
@@ -115,27 +138,43 @@ async def run_anomaly_detection():
             "message": "프레임 없음"
         }
 
-    # ▶ Gauge 분석
+    # -------------------------
+    # 4) Gauge 분석
+    # -------------------------
     if gauge_boxes:
         anomalies["gauge"] = await analyze_gauge(latest_frame, gauge_boxes)
     else:
-        anomalies["gauge"] = { "status": "not_found" }
+        anomalies["gauge"] = {"status": "not_found"}
 
-    # ▶ Panel 분석
+    # -------------------------
+    # 5) Panel 분석
+    # -------------------------
     if panel_boxes:
         anomalies["panel"] = await analyze_panel(latest_frame, panel_boxes, panel_parts_boxes)
     else:
-        anomalies["panel"] = { "status": "not_found" }
+        anomalies["panel"] = {"status": "not_found"}
 
-    # anomaly 판단
+    # -------------------------
+    # 6) 이상 판단
+    # -------------------------
     has_anomaly = any(v.get("status") == "anomaly" for v in anomalies.values())
 
+    # -------------------------
+    # 7) ★ 여기서 정제 수행
+    # -------------------------
+    filtered_anomalies = _filter_anomalies(anomalies)
+    filtered_messages = _collect_messages(filtered_anomalies)
+
+    # -------------------------
+    # 8) 최종 반환 (기존 포맷 유지)
+    # -------------------------
     return {
         "detected": True,
         "has_anomaly": has_anomaly,
         "device_type": device_label,
         "timestamp": latest_ts,
         "modules": raw_boxes,
-        "anomalies": anomalies,
+        "anomalies": filtered_anomalies,   # 정제된 anomaly
+        "messages": filtered_messages,     # 정제된 메시지
         "message": "OK"
     }
