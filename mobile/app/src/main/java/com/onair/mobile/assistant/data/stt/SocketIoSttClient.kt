@@ -13,6 +13,7 @@ import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
 import com.onair.mobile.communicate.data.socket.dto.VideoFrameResponse
+import com.onair.mobile.communicate.presentation.ui.WorkingViewModel.OnAirState
 import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
@@ -22,7 +23,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -57,6 +60,8 @@ class SocketIoSttClient(
     private var socket: Socket? = null
     private var isConnected = false
     private val gson = Gson()
+    private val _onAirState = MutableStateFlow(OnAirState.WAITING_WAKEWORD)
+    val onAirState = _onAirState.asStateFlow()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
@@ -308,6 +313,10 @@ class SocketIoSttClient(
             
             // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
             socket?.on("wakeword_detected") { args ->
+                if (_onAirState.value != OnAirState.WAITING_WAKEWORD) {
+                    return@on
+                }
+                _onAirState.value = OnAirState.WAKEWORD_DETECTED
                 try {
                     val data = args[0] as? JSONObject
                     Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
@@ -321,6 +330,7 @@ class SocketIoSttClient(
                 Log.d(TAG, "연결 종료 이벤트 수신")
 //                _callEnd.tryEmit(true)
                 _callEnd.trySend(Unit)
+                _onAirState.value = OnAirState.WAITING_WAKEWORD
             }
 
             socket?.on("final_answer") { args ->
@@ -366,6 +376,10 @@ class SocketIoSttClient(
                     Log.e(TAG, "❌ 서비스 종료 오디오 재생 요청 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
+            }
+//            socket?.emit("audio_playbck_completed")
+            socket?.on("enable_service_end_button") {
+
             }
 
             // 서버 메시지 수신 (디버깅용)
@@ -630,27 +644,27 @@ class SocketIoSttClient(
      * 
      * @return 전송 성공 여부
      */
-    fun sendFinalAnswerAudioCompleted(): Boolean {
-        if (!isConnected()) {
-            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-            return false
-        }
-        
-        return try {
-            val payload = JSONObject().apply {
-                put("type", "final_answer")
-                put("timestamp", System.currentTimeMillis())
-            }
-            
-            socket?.emit("audio_playback_completed", payload)
-            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
-            e.printStackTrace()
-            false
-        }
-    }
+//    fun sendFinalAnswerAudioCompleted(): Boolean {
+//        if (!isConnected()) {
+//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+//            return false
+//        }
+//
+//        return try {
+//            val payload = JSONObject().apply {
+//                put("type", "final_answer")
+//                put("timestamp", System.currentTimeMillis())
+//            }
+//
+//            socket?.emit("audio_playback_completed", payload)
+//            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
+//            true
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
+//            e.printStackTrace()
+//            false
+//        }
+//    }
     
     /**
      * 서비스 종료 오디오 재생 완료 이벤트 전송
