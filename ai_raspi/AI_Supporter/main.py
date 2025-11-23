@@ -1,5 +1,9 @@
 """
-라즈베리파이 메인 프로그램 (Python 3.13용)
+⚠️ 사용 중단 (DEPRECATED) - 이 파일은 더 이상 사용되지 않습니다.
+
+현재는 main_py310.py를 사용합니다 (Python 3.10에서 직접 Socket.IO 연결).
+
+라즈베리파이 메인 프로그램 (Python 3.13용) - 레거시 코드
 - Socket.IO 클라이언트 실행 (Python 3.13에서만 동작)
 - 브리지 서버 실행 (Python 3.10에서 오는 STT 결과 수신)
 - 브리지 클라이언트 실행 (STT 결과를 Socket.IO로 전송)
@@ -104,15 +108,17 @@ def run_socketio_client():
 
 if __name__ == "__main__":
     """
-    라즈베리파이 메인 프로그램 (Python 3.13용)
-    - Socket.IO 클라이언트 실행 (Python 3.13에서만 동작)
-    - 브리지 서버 실행 (Python 3.10에서 오는 STT 결과 수신)
-    - 브리지 클라이언트 실행 (STT 결과를 Socket.IO로 전송)
+    ⚠️ 사용 중단 (DEPRECATED)
     
-    실행 방법:
-    1. Python 3.13에서 이 파일 실행: python3.13 main.py
-    2. Python 3.10에서 main_py310.py 실행: python3.10 main_py310.py
+    현재는 main_py310.py를 사용하세요:
+    $ python3.10 main_py310.py
+    
+    이 파일은 더 이상 사용되지 않습니다.
     """
-    # Socket.IO 클라이언트 및 브리지 클라이언트 실행
-    # 참고: 브리지 서버는 Python 3.10에서 실행됩니다 (main_py310.py)
-    run_socketio_client()
+    print("⚠️ 이 파일은 사용 중단되었습니다.")
+    print("   대신 다음 명령을 사용하세요:")
+    print("   $ python3.10 main_py310.py")
+    exit(1)
+    
+    # 아래 코드는 실행되지 않음 (레거시 코드)
+    # run_socketio_client()

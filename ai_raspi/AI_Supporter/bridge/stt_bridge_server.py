@@ -66,10 +66,11 @@ def handle_stop_buffered_stt(sid, data):
 @sio.on('service_completed')
 def handle_service_completed(sid, data):
     """Python 3.13에서 서비스 완료 신호 수신"""
+    session_id = data.get("session_id", "")
     status = data.get("status", "")
     logger.info("=" * 60)
     logger.info(f"📥 [서비스 완료] 브리지 서버: 서비스 완료 신호 수신")
-    logger.info(f"   Status: {status}")
+    logger.info(f"   Session ID: {session_id}, Status: {status}")
     logger.info("=" * 60)
     
     if service_completed_callback:
