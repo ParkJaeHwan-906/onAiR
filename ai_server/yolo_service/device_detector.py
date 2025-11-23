@@ -7,7 +7,7 @@ from ai_server.yolo_service.redis_client import (
     save_device_state, get_device_state, get_latest_frame, save_yolo_result
 )
 from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, DEVICE_CLASSES
-from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG
+from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG, PRESS_CONFIG
 
 DETECTION_INTERVAL = 2.0
 CONF_THRESHOLD = 0.75
@@ -61,12 +61,22 @@ async def device_detector_loop():
                         if angle_val is not None:
                             angle, value = angle_val
                             temp_value = round(float(value), 1)
-                            if temp_value < 20 or temp_value > 40:
+                            if temp_value > 40:
                                 is_anomaly = True
 
-                            # # 라벨에 온도 표시 붙이기
-                            # display_label = f"thermometer({temp_value})"
+                            
+                    elif label == "pressure_gauge":
+                        roi = frame[y1:y2, x1:x2]
+                        angle_val = detect_gauge_angle_fast(roi, PRESS_CONFIG)
+                        if angle_val is not None:
+                            angle, value = angle_val
+                            press_value = round(float(value), 2)
 
+                            # 임계 판정
+                            if press_value > 0.8 or press_value < 0.2:
+                                is_anomaly = True
+
+                            logger.info(f"[PRESS] angle={angle:.2f}°, value={press_value:.2f}")
 
                     all_boxes.append({
                         "label": display_label,
@@ -75,8 +85,7 @@ async def device_detector_loop():
                         "y1": y1,
                         "x2": x2,
                         "y2": y2,
-                        "anomaly" : is_anomaly,
-                        "temperature": temp_value     # 필요하면 나중에 서버에서 활용
+                        "anomaly" : is_anomaly
                     })
             await save_yolo_result(ts, all_boxes)
 

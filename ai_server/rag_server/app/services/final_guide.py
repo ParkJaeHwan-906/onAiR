@@ -37,45 +37,85 @@ async def generate_final_guide(
     query = _build_rag_query(device_type, anomalies)
     print(f"   Query: {query}")
     
-    # RAG 검색
-    try:
-        base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
-        hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
-        used_hits = hits[:5]
-        
-        if not used_hits:
-            print("⚠️ RAG 검색 결과가 없습니다.")
-            structured_answer = _create_empty_answer(query)
-        else:
-            print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
-            
-            # GPT-4o로 최종 답변 생성
-            print("=" * 60)
-            print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
-            print("=" * 60)
-            
-            snippets = [h["source"]["content"] for h in used_hits]
-            error_code = _extract_error_code(anomalies)
-            
-            structured_answer = llm_generate_answer(
-                query, snippets, error_code=error_code, hits=used_hits
-            )
-            print(f"✅ 전체 정비 가이드 생성 완료")
-    except Exception as e:
-        print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
-        import traceback
-        traceback.print_exc()
+    # anomalies 검증: anomaly 상태인 모듈이 있는지 확인
+    anomaly_count = sum(1 for v in anomalies.values() if isinstance(v, dict) and v.get("status") == "anomaly")
+    print(f"   Anomaly 개수: {anomaly_count}")
+    
+    if anomaly_count == 0:
+        print("⚠️ anomalies에 status='anomaly'인 모듈이 없습니다. 빈 답변 생성")
         structured_answer = _create_empty_answer(query)
+    else:
+        # RAG 검색
+        try:
+            base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
+            hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
+            used_hits = hits[:5]
+            
+            if not used_hits:
+                print("⚠️ RAG 검색 결과가 없습니다.")
+                structured_answer = _create_empty_answer(query)
+            else:
+                print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+                
+                # GPT-4o로 최종 답변 생성
+                print("=" * 60)
+                print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
+                print("=" * 60)
+                
+                snippets = [h["source"]["content"] for h in used_hits]
+                error_code = _extract_error_code(anomalies)
+                
+                if not error_code:
+                    print("⚠️ error_code 추출 실패. query를 error_code로 사용")
+                    error_code = query
+                
+                structured_answer = llm_generate_answer(
+                    query, snippets, error_code=error_code, hits=used_hits
+                )
+                print(f"✅ 전체 정비 가이드 생성 완료")
+        except Exception as e:
+            print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            structured_answer = _create_empty_answer(query)
     
     answer_text = structured_answer.get("tts_text") or structured_answer.get("summary") or structured_answer.get("answer", "")
+    
+    # 모바일로 전송할 structured_answer 구성
+    # 요약형 마크다운 + 원본 기반 TTS 오디오만 전송
+    mobile_structured_answer = {
+        "error_code": structured_answer.get("error_code", ""),
+        "markdown_text": structured_answer.get("markdown_text", ""),  # 요약형 전체 마크다운
+        "query": structured_answer.get("query", ""),
+        "citations": structured_answer.get("citations", []),
+        # 요약형 마크다운 (모바일 화면 표시용)
+        "possible_causes_markdown": structured_answer.get("summary_causes_markdown", ""),
+        "recommended_actions_markdown": structured_answer.get("summary_actions_markdown", ""),
+        "safety_warnings_markdown": structured_answer.get("summary_warnings_markdown", ""),
+        # 원본 기반 TTS 오디오 (요약 전 문장으로 생성된 오디오)
+        "possible_causes_audio": structured_answer.get("possible_causes_audio"),
+        "possible_causes_audio_encoding": structured_answer.get("possible_causes_audio_encoding", ""),
+        "recommended_actions_audio": structured_answer.get("recommended_actions_audio"),
+        "recommended_actions_audio_encoding": structured_answer.get("recommended_actions_audio_encoding", ""),
+        "safety_warnings_audio": structured_answer.get("safety_warnings_audio"),
+        "safety_warnings_audio_encoding": structured_answer.get("safety_warnings_audio_encoding", ""),
+        # TTS 텍스트 (원본 기반)
+        "tts_text": structured_answer.get("tts_text", ""),
+        # 리스트 형태는 모바일에서 사용하지 않지만 호환성을 위해 빈 리스트로 전송
+        "possible_causes": [],
+        "recommended_actions": [],
+        "safety_warnings": []
+    }
     
     # 모바일로 전체 정비 가이드 전송
     print("=" * 60)
     print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
     print("=" * 60)
+    print(f"   요약형 마크다운 전송 (모바일 화면 표시용)")
+    print(f"   원본 기반 TTS 오디오 전송 (요약 전 문장으로 생성)")
     await broadcast_to_func("mobile", "final_answer", {
         "answer": answer_text,
-        "structured_answer": structured_answer,
+        "structured_answer": mobile_structured_answer,
         "audio_content": None,
         "audio_encoding": None,
         "citations": structured_answer.get("citations", []),

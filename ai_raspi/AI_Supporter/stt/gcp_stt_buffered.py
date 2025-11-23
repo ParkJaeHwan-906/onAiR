@@ -376,7 +376,7 @@ class GcpBufferedStt:
         # =============================
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=self.rate,
+            sample_rate_hertz=self.rate,   # MicStream과 동일: 16000
             language_code=self.language,
             enable_automatic_punctuation=True,
             use_enhanced=True,
