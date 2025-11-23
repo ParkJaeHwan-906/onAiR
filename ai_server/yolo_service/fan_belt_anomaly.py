@@ -139,6 +139,13 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
                     state_hist.append(raw)
                     state = Counter(state_hist).most_common(1)[0][0]
 
+                    print(
+                        f"Frame {frame_idx:04d}: "
+                        f"mag={smooth_mag:.3f}, "
+                        f"ratio={ratio:.2f}, "
+                        f"std={std_motion:.3f} → {state}"
+                    )
+                    
                 prev_state = state
                 results.append(state)
 
