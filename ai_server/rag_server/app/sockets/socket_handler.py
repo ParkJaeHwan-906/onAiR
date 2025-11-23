@@ -19,7 +19,7 @@ from app.ar import motion_core
 from app.services.yolo_overlay import get_latest_yolo_result
 from app.services.cv_service import run_anomaly_detection
 from app.services.final_guide import generate_final_guide
-from app.services.gesture_service import process_gesture
+# from app.services.gesture_service import process_gesture
 
 #BUTTON_RECT = (20, 20, 170, 120) # 모바일 내에 고정된 버튼 좌표(프레임 기준)
 
