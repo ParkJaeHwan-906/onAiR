@@ -209,7 +209,7 @@ class DemonstrateActivity : AppCompatActivity() {
             blueprintTrack?.let {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
+                        .align(Alignment.CenterStart)
                         .padding(16.dp)
                         .size(width = 220.dp, height = 160.dp)
                         .clip(RoundedCornerShape(16.dp))
@@ -423,7 +423,7 @@ class DemonstrateActivity : AppCompatActivity() {
 
         val scale by transition.animateFloat(
             initialValue = marker.info.size,
-            targetValue = marker.info.size*2.0f,
+            targetValue = marker.info.size * 2.0f,
             animationSpec = infiniteRepeatable(
                 animation = tween(1200, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart

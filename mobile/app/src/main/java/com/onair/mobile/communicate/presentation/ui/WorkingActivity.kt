@@ -280,6 +280,15 @@ class WorkingActivity : AppCompatActivity() {
                     showAiAnswer(answer)
                 }
             }
+            launch {
+                workingViewModel.onAirState.collect { onAirState ->
+                    when (onAirState) {
+                        OnAirState.Started -> TODO()
+                        OnAirState.Processing -> TODO()
+                        OnAirState.Waiting -> TODO()
+                    }
+                }
+            }
         }
     }
     private fun showCallRequestCard(data: JSONObject) {
