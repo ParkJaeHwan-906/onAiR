@@ -139,12 +139,12 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
                     state_hist.append(raw)
                     state = Counter(state_hist).most_common(1)[0][0]
 
-                    print(
-                        f"Frame {frame_idx:04d}: "
-                        f"mag={smooth_mag:.3f}, "
-                        f"ratio={ratio:.2f}, "
-                        f"std={std_motion:.3f} → {state}"
-                    )
+                print(
+                    f"Frame {frame_idx:04d}: "
+                    f"mag={smooth_mag:.3f}, "
+                    f"ratio={ratio:.2f}, "
+                    f"std={std_motion:.3f} → {state}"
+                )
                     
                 prev_state = state
                 results.append(state)
@@ -167,11 +167,25 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
 
         final_state = dom
         status = "anomaly" if final_state != "E_NORMAL" else "normal"
+        
+        # detail 필드 추가 (다른 모듈과 일관성 유지)
+        detail = final_state if status == "anomaly" else "normal"
+        
+        # 메시지 생성
+        message_map = {
+            "E_NORMAL": "팬 벨트가 정상 상태입니다",
+            "E_FAN_SLOWDOWN": "팬 벨트가 감속 중입니다",
+            "E_FAN_ACCELERATE": "팬 벨트가 가속 중입니다",
+            "E_FAN_VIBRATION": "팬 벨트에 진동이 감지되었습니다"
+        }
+        message = message_map.get(final_state, f"팬 벨트 상태: {final_state}")
 
         return {
             "type": "fan_belt",
             "status": status,
-            "result": final_state,
+            "detail": detail,  # ✅ detail 필드 추가 (다른 모듈과 일관성)
+            "result": final_state,  # 하위 호환성을 위해 유지
+            "message": message,  # ✅ message 필드 추가
             "percent": {
                 "normal": normal,
                 "slow": slow,
