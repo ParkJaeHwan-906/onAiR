@@ -146,7 +146,6 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
-    sio.on("reset_wakeword_count")(reset_wakeword_count)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -478,9 +477,9 @@ async def handle_audio_playback_completed(sid, data):
         elif audio_type == "cv_detection_anomaly":
             # CV 탐지 알림 TTS 재생 완료 → 전체 정비 가이드 생성 시작
             # _pending_cv_detection은 line 463에서 이미 None 체크 완료
-            device_type = _pending_cv_detection["device_type"]
-            modules = _pending_cv_detection["modules"]
-            anomalies = _pending_cv_detection["anomalies"]
+                device_type = _pending_cv_detection["device_type"]
+                modules = _pending_cv_detection["modules"]
+                anomalies = _pending_cv_detection["anomalies"]
             # cv_result는 generate_final_guide에서 message만 사용하므로 message만 전달
             # message는 문자열로 저장되어 있음
             cv_result = {"message": _pending_cv_detection.get("message", "")}
@@ -490,10 +489,10 @@ async def handle_audio_playback_completed(sid, data):
             print(f"   device_type: {device_type}")
             print(f"   anomalies: {anomalies}")
             print("=" * 80)
-            
-            # 전체 정비 가이드 생성 및 전송 (서비스 사용)
-            await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
-            _pending_cv_detection = None
+                
+                # 전체 정비 가이드 생성 및 전송 (서비스 사용)
+                await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
+                _pending_cv_detection = None
         
     elif audio_type == "sections_completed":
         # AI_Supporter 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
@@ -853,6 +852,3 @@ async def delete_marker(sid, data):
             idx += 1
     
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
-
-async def reset_wakeword_count(sid):
-    await broadcast_to('raspi', "reset_wakeword_count", {})
