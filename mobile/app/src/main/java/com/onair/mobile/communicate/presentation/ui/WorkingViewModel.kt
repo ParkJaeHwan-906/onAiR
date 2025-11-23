@@ -12,17 +12,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.net.Socket
 
 class WorkingViewModel(
     private val taskRepository: TaskRepository,
     private val workingRepository: WorkingRepository
 ): ViewModel() {
+    enum class OnAirState {
+        WAITING_WAKEWORD,
+        WAKEWORD_DETECTED,
+        PROCESSING_AI,
+        PROCESSING_OPERATOR
+    }
     private val _endStatus = MutableStateFlow(false)
     val endStatus = _endStatus.asStateFlow()
     private val _liveKitToken = MutableStateFlow("")
     val liveKitToken = _liveKitToken.asStateFlow()
     val finalAnswer = SocketHolder.socketClient.finalAnswer
     val cvAnswer = SocketHolder.socketClient.cvAnswer
+    val onAirState = SocketHolder.socketClient.onAirState
+
 
     fun endTask(taskId: Long, solution: String) {
         viewModelScope.launch {

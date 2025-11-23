@@ -863,54 +863,54 @@ class WorkingActivity : AppCompatActivity() {
 //    }
 
 
-    private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
-        Log.i(TAG, "✅ [모바일] 최종 답변 처리 시작")
+//    private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
+//        Log.i(TAG, "✅ [모바일] 최종 답변 처리 시작")
+//
+//        if (audioContent != null && audioContent.isNotBlank()) {
+//            lifecycleScope.launch {
+//                ttsRepository.playAudio(audioContent, mimeType) {
+//                    // 재생 완료 콜백
+//                    Log.i(TAG, "✅ [모바일] 최종 답변 TTS 재생 완료")
+//                    Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
+//                    Log.i(TAG, "   Type: final_answer")
+//                    // FastAPI 서버로 재생 완료 이벤트 전송
+//                    val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+//                    if (success) {
+//                        Log.i(TAG, "============================================================")
+//                        Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
+//                        Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+//                    } else {
+//                        Log.e(TAG, "============================================================")
+//                    }
+//                }
+//            }
+//        } else {
+//            // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
+//            Log.i(TAG, "============================================================")
+//            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작 (오디오 없음)")
+//            Log.i(TAG, "   Type: final_answer")
+//            Log.i(TAG, "============================================================")
+//            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
+//            if (success) {
+//                Log.i(TAG, "============================================================")
+//                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료 (오디오 없음)")
+//                Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
+//                Log.i(TAG, "============================================================")
+//            } else {
+//                Log.e(TAG, "============================================================")
+//                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패 (오디오 없음)")
+//                Log.e(TAG, "============================================================")
+//            }
+//        }
+//    }
 
-        if (audioContent != null && audioContent.isNotBlank()) {
-            lifecycleScope.launch {
-                ttsRepository.playAudio(audioContent, mimeType) {
-                    // 재생 완료 콜백
-                    Log.i(TAG, "✅ [모바일] 최종 답변 TTS 재생 완료")
-                    Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
-                    Log.i(TAG, "   Type: final_answer")
-                    // FastAPI 서버로 재생 완료 이벤트 전송
-                    val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-                    if (success) {
-                        Log.i(TAG, "============================================================")
-                        Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
-                        Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
-                    } else {
-                        Log.e(TAG, "============================================================")
-                    }
-                }
-            }
-        } else {
-            // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
-            Log.i(TAG, "============================================================")
-            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작 (오디오 없음)")
-            Log.i(TAG, "   Type: final_answer")
-            Log.i(TAG, "============================================================")
-            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-            if (success) {
-                Log.i(TAG, "============================================================")
-                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료 (오디오 없음)")
-                Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
-                Log.i(TAG, "============================================================")
-            } else {
-                Log.e(TAG, "============================================================")
-                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패 (오디오 없음)")
-                Log.e(TAG, "============================================================")
-            }
-        }
-    }
-
-    private suspend fun handleFinalAnswer(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
-        val answer = ragResponse.result?.answer ?: ""
-        val audioContent = ragResponse.result?.audio_content
-        val mimeType = ragResponse.result?.mime_type
-
-        handleFinalAnswer(answer, audioContent, mimeType)
-    }
+//    private suspend fun handleFinalAnswer(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
+//        val answer = ragResponse.result?.answer ?: ""
+//        val audioContent = ragResponse.result?.audio_content
+//        val mimeType = ragResponse.result?.mime_type
+//
+//        handleFinalAnswer(answer, audioContent, mimeType)
+//    }
 
     private fun handleWakewordDetected() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
@@ -1437,6 +1437,7 @@ class WorkingActivity : AppCompatActivity() {
     }
     private suspend fun handleServiceEnd() {
         try {
+
             withContext(Dispatchers.Main) {
                 showOnModal()
                 mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
