@@ -296,104 +296,6 @@ class GcpBufferedStt:
             # 마이크는 계속 ON 상태로 유지됨
             raise  # 상위로 예외 전파하여 wakeword 대기 상태로 복귀
 
-    # wakeword 교차검증용, 이전의 음성 데이터로 STT 
-    # async def transcribe_bytes(self, audio_data: bytes, broadcaster):
-    #     """
-    #     MicStream 없이 raw PCM (bytes) 데이터를 바로 STT 요청.
-    #     wakeword 교차 검증 용도.
-
-    #     Args:
-    #         audio_data: 16bit PCM little-endian bytes
-    #         broadcaster: STT 결과 처리 콜백 함수
-    #     """
-    #     if not audio_data or len(audio_data) < 1000:
-    #         await broadcaster({
-    #             "type": "error",
-    #             "text": "오디오 데이터가 너무 짧습니다."
-    #         })
-    #         return
-
-    #     # 최소 길이 보정: 1.5초 미만이면 무음으로 패딩
-    #     min_sec = 1.5
-    #     min_bytes = int(self.rate * min_sec * 2)  # 16bit = 2 bytes
-    #     if len(audio_data) < min_bytes:
-    #         pad_len = min_bytes - len(audio_data)
-    #         audio_data = audio_data + (b"\x00" * pad_len)
-
-    #     try:
-    #         audio_data = self._normalize_audio_volume(audio_data, target_level=0.8)
-    #     except Exception:
-    #         pass
-
-    #     config = speech.RecognitionConfig(
-    #         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-    #         sample_rate_hertz=self.rate,
-    #         language_code=self.language,
-    #         enable_automatic_punctuation=False,
-    #         alternative_language_codes=["en-US"],
-    #         model="latest_short",  # 짧은 오디오에 적합한 모델
-    #     )
-    #     audio = speech.RecognitionAudio(content=audio_data)
-
-    #     def blocking_call():
-    #         try:
-    #             return self.client.recognize(config=config, audio=audio)
-    #         except Exception as e:
-    #             raise e
-
-    #     loop = asyncio.get_running_loop()
-
-    #     try:
-    #         audio_samples = len(audio_data) // 2
-    #         audio_duration_sec = audio_samples / self.rate
-    #         import logging
-    #         logger = logging.getLogger(__name__)
-    #         logger.info(f"🎵 STT 요청: 오디오 길이={len(audio_data)} bytes, 샘플={audio_samples}, 지속시간={audio_duration_sec:.2f}초")
-
-    #         response = await loop.run_in_executor(None, blocking_call)
-
-    #         logger.info(f"📥 GCP STT 응답 수신: results 개수={len(response.results) if response.results else 0}")
-
-    #         if not response.results:
-    #             logger.warning("⚠️ GCP STT 응답에 results가 없음")
-    #             await broadcaster({"type": "error", "text": "STT 결과 없음"})
-    #             return
-
-    #         result = response.results[0]
-    #         logger.info(f"📋 첫 번째 result: alternatives 개수={len(result.alternatives) if result.alternatives else 0}")
-
-    #         if not result.alternatives:
-    #             logger.warning("⚠️ GCP STT 응답에 alternatives가 없음")
-    #             await broadcaster({"type": "error", "text": "STT 결과 없음"})
-    #             return
-
-    #         transcript = result.alternatives[0].transcript
-    #         confidence = result.alternatives[0].confidence
-    #         logger.info(f"📝 GCP STT 전사 결과: '{transcript}' (신뢰도: {confidence})")
-
-    #         if not transcript.strip():
-    #             logger.warning("⚠️ GCP STT 전사 결과가 빈 문자열")
-    #             await broadcaster({"type": "error", "text": "빈 텍스트"})
-    #             return
-
-    #         await broadcaster({
-    #             "type": "final",
-    #             "text": transcript,
-    #             "confidence": confidence
-    #         })
-
-    #     except Exception as e:
-    #         import logging
-    #         logger = logging.getLogger(__name__)
-    #         logger.error(f"❌ GCP STT 호출 중 예외: {e}")
-    #         import traceback
-    #         traceback.print_exc()
-    #         await broadcaster({
-    #             "type": "error",
-    #             "text": str(e)
-    #         })
-    #         raise
-
     async def transcribe_bytes(self, audio_data: bytes, broadcaster):
         """
         MicStream 없이 raw PCM (bytes) 데이터를 바로 STT 요청.
@@ -474,11 +376,14 @@ class GcpBufferedStt:
         # =============================
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=self.rate,   # MicStream과 동일: 16000
+            sample_rate_hertz=self.rate,
             language_code=self.language,
-            enable_automatic_punctuation=False,
-            alternative_language_codes=["en-US"],
-            model="latest_short",
+            enable_automatic_punctuation=True,
+            use_enhanced=True,
+            model="command_and_search",
+            speech_contexts=[
+                speech.SpeechContext(phrases=["온에어", "OnAir"], boost=20.0)
+            ],
         )
         audio = speech.RecognitionAudio(content=audio_data)
 

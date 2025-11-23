@@ -30,8 +30,8 @@ class STTCore:
         self.ignore_wakeword = False
 
         # Threshold
-        self.WAKEWORD_LCS_THRESHOLD_ENG = 0.65
-        self.WAKEWORD_LCS_THRESHOLD_KOR = 0.65
+        self.WAKEWORD_LCS_THRESHOLD_ENG = 0.60
+        self.WAKEWORD_LCS_THRESHOLD_KOR = 0.60
 
     # ---------------------------------
     # 유틸 함수
