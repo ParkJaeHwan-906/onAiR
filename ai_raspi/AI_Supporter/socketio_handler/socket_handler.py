@@ -127,6 +127,10 @@ class SocketIOClient:
         """
         FastAPI 서버에서 RTC 오디오 스트림 제어 요청(start/stop)
         data = { "start": True } 또는 { "start": False }
+        
+        역할:
+        - START: Operator 통신 연결 허가
+        - STOP: RTC 오디오 스트리밍 중지 (초기 상태 복귀는 wakeword_start_waiting에서 처리)
         """
         if not hasattr(self.manager, "stt_core"):
             return
@@ -135,27 +139,31 @@ class SocketIOClient:
         if data.get("start") is True:
             self.manager.stt_core.operator_accept.set()
 
-        # STOP 요청 (Operator 통신 종료)
+        # STOP 요청 (Operator 통신 종료 - RTC 중지만 담당)
         elif data.get("start") is False:
+            logger.info("📡 RTC 오디오 스트리밍 중지 요청 수신")
             self.manager.switch_to_stt()
-            # 초기 상태로 복귀
-            if hasattr(self.manager.stt_core, "reset_to_initial_state"):
-                self.manager.stt_core.reset_to_initial_state()
+            logger.info("✅ RTC 모드 종료 완료 (초기 상태 복귀는 wakeword_start_waiting에서 처리)")
 
     async def on_wakeword_start_waiting(self, data):
         """
         FastAPI 서버에서 wakeword 감지 대기 상태로 복귀 요청
         (서비스 메인 루프 종료 후 초기 상태로 복귀)
+        
+        역할:
+        - AI Supporter 케이스와 Operator 케이스 모두에서 서비스 종료 시 호출
+        - Wakeword 감지기 재개, 마이크 활성화, 모든 플래그 초기화
         """
         logger.info("=" * 60)
         logger.info("📩 wakeword_start_waiting 이벤트 수신 (초기 상태 복귀 요청)")
+        logger.info("   역할: 서비스 종료 후 wakeword 감지 대기 상태로 복귀")
         logger.info("=" * 60)
         
         if not hasattr(self.manager, "stt_core"):
             logger.warning("⚠️ stt_core가 없습니다. 초기 상태 복귀 불가")
             return
         
-        # 초기 상태로 복귀
+        # 초기 상태로 복귀 (Wakeword 감지기 재개, 마이크 활성화, 플래그 초기화)
         if hasattr(self.manager.stt_core, "reset_to_initial_state"):
             self.manager.stt_core.reset_to_initial_state()
         else:
