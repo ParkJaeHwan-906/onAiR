@@ -110,7 +110,7 @@ async def run_anomaly_detection():
     # 2) Fan/Belt 분석
     # -------------------------
     if fan_belt_boxes:
-        frames = await get_cv_buffer_frames(30)
+        frames = await get_cv_buffer_frames(60)
         if len(frames) < 10:
             anomalies["fan_belt"] = {
                 "type": "fan_belt",
