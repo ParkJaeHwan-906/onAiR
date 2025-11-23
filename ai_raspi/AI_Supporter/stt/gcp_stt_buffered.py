@@ -13,6 +13,16 @@ import numpy as np
 
 class GcpBufferedStt:
     def __init__(self):
+        # GCP 인증 키 파일 경로 설정
+        if hasattr(settings, 'GCP_CREDENTIAL_PATH') and settings.GCP_CREDENTIAL_PATH:
+            if os.path.exists(settings.GCP_CREDENTIAL_PATH):
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = settings.GCP_CREDENTIAL_PATH
+            else:
+                raise FileNotFoundError(
+                    f"GCP 인증 키 파일을 찾을 수 없습니다: {settings.GCP_CREDENTIAL_PATH}\n"
+                    f"파일이 존재하는지 확인하세요."
+                )
+        
         self.language = settings.LANGUAGE
         self.rate = settings.RATE
         self.client = speech.SpeechClient()
@@ -45,7 +55,8 @@ class GcpBufferedStt:
         max_abs = max(abs(s) for s in samples)
         
         if max_abs == 0:
-            print("⚠️ 경고: 오디오 데이터가 모두 0입니다. 정규화 스킵.")
+            # [25.11.22] 로그 주석 처리 - 재환
+            # print("⚠️ 경고: 오디오 데이터가 모두 0입니다. 정규화 스킵.")
             return audio_data
         
         # 정규화 팩터 계산 (목표 레벨에 맞춤, 클리핑 방지)
@@ -56,7 +67,8 @@ class GcpBufferedStt:
         # 팩터가 너무 크면 클리핑 방지를 위해 제한
         if normalize_factor > 2.0:
             normalize_factor = 2.0
-            print(f"⚠️ 경고: 볼륨이 너무 작아 정규화 팩터를 2.0으로 제한합니다.")
+            # [25.11.22] 로그 주석 처리 - 재환
+            # print(f"⚠️ 경고: 볼륨이 너무 작아 정규화 팩터를 2.0으로 제한합니다.")
         
         # 정규화 전 볼륨 정보
         avg_before = sum(abs(s) for s in samples) / len(samples)
@@ -72,10 +84,11 @@ class GcpBufferedStt:
         # 평균 볼륨 확인
         avg_after = sum(abs(s) for s in normalized_samples) / len(normalized_samples)
         
-        print(f"🔊 볼륨 정규화:")
-        print(f"   정규화 전 평균 절댓값: {avg_before:.2f} (최대: {max_abs})")
-        print(f"   정규화 팩터: {normalize_factor:.3f}")
-        print(f"   정규화 후 평균 절댓값: {avg_after:.2f}")
+        # [25.11.22] 로그 주석 처리 - 재환
+        # print(f"🔊 볼륨 정규화:")
+        # print(f"   정규화 전 평균 절댓값: {avg_before:.2f} (최대: {max_abs})")
+        # print(f"   정규화 팩터: {normalize_factor:.3f}")
+        # print(f"   정규화 후 평균 절댓값: {avg_after:.2f}")
         
         # 바이트로 변환
         normalized_audio = b''.join(struct.pack('<h', s) for s in normalized_samples)
@@ -282,4 +295,99 @@ class GcpBufferedStt:
             })
             # 마이크는 계속 ON 상태로 유지됨
             raise  # 상위로 예외 전파하여 wakeword 대기 상태로 복귀
+
+    # wakeword 교차검증용, 이전의 음성 데이터로 STT 
+    async def transcribe_bytes(self, audio_data: bytes, broadcaster):
+        """
+        MicStream 없이 raw PCM (bytes) 데이터를 바로 STT 요청.
+        wakeword 교차 검증 용도.
+
+        Args:
+            audio_data: 16bit PCM little-endian bytes
+            broadcaster: STT 결과 처리 콜백 함수
+        """
+        if not audio_data or len(audio_data) < 1000:
+            await broadcaster({
+                "type": "error",
+                "text": "오디오 데이터가 너무 짧습니다."
+            })
+            return
+
+        try:
+            audio_data = self._normalize_audio_volume(audio_data, target_level=0.8)
+        except Exception:
+            pass
+
+        # STT 설정
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=self.rate,
+            language_code=self.language,
+            enable_automatic_punctuation=False,  # wakeword 검증은 문장부호 필요 없음
+            alternative_language_codes=["en-US"],  # 한국어 인식 실패 시 영어도 시도
+            model="latest_long",  # 긴 오디오에 최적화된 모델 사용
+        )
+        audio = speech.RecognitionAudio(content=audio_data)
+
+        # 동기 API → 스레드에서 실행
+        def blocking_call():
+            try:
+                return self.client.recognize(config=config, audio=audio)
+            except Exception as e:
+                raise e
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            # 오디오 길이 및 지속 시간 계산
+            audio_samples = len(audio_data) // 2  # 16bit = 2 bytes per sample
+            audio_duration_sec = audio_samples / self.rate
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"🎵 STT 요청: 오디오 길이={len(audio_data)} bytes, 샘플={audio_samples}, 지속시간={audio_duration_sec:.2f}초")
+            
+            response = await loop.run_in_executor(None, blocking_call)
+            
+            logger.info(f"📥 GCP STT 응답 수신: results 개수={len(response.results) if response.results else 0}")
+
+            if not response.results:
+                logger.warning("⚠️ GCP STT 응답에 results가 없음")
+                await broadcaster({"type": "error", "text": "STT 결과 없음"})
+                return
+
+            result = response.results[0]
+            logger.info(f"📋 첫 번째 result: alternatives 개수={len(result.alternatives) if result.alternatives else 0}")
+            
+            if not result.alternatives:
+                logger.warning("⚠️ GCP STT 응답에 alternatives가 없음")
+                await broadcaster({"type": "error", "text": "STT 결과 없음"})
+                return
+
+            transcript = result.alternatives[0].transcript
+            confidence = result.alternatives[0].confidence
+            logger.info(f"📝 GCP STT 전사 결과: '{transcript}' (신뢰도: {confidence})")
+
+            if not transcript.strip():
+                logger.warning("⚠️ GCP STT 전사 결과가 빈 문자열")
+                await broadcaster({"type": "error", "text": "빈 텍스트"})
+                return
+
+            # wakeword 검증에서는 final 만 보내면 됨
+            await broadcaster({
+                "type": "final",
+                "text": transcript,
+                "confidence": confidence
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ GCP STT 호출 중 예외: {e}")
+            import traceback
+            traceback.print_exc()
+            await broadcaster({
+                "type": "error",
+                "text": str(e)
+            })
+            raise
 
