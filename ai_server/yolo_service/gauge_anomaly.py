@@ -160,12 +160,12 @@ def detect_center_hub_intensity(img, debug_dir=None):
 
     h, w = gray.shape
 
-    # 1) 최저 1% 픽셀(어두운 영역) 찾기
-    thresh_val = np.percentile(blur, 5)  # 하위 1% 픽셀값
+    # 1) 최저 5% 픽셀(어두운 영역) 찾기
+    thresh_val = np.percentile(blur, 3)  # 하위 1% 픽셀값
     mask = (blur <= thresh_val).astype(np.uint8) * 255
 
-    if debug_dir:
-        cv2.imwrite(f"{debug_dir}/hub_dark_mask.png", mask)
+    # if debug_dir:
+    #     cv2.imwrite(f"{debug_dir}/hub_dark_mask.png", mask)
 
     # 2) 연결된 어두운 블롭 탐지
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
@@ -255,7 +255,7 @@ def detect_gauge_angle_fast(roi, cfg):
 
         # 4) angle → value 변환
         value = angle_to_value(best_angle, cfg)
-
+        logger.info(f"angle={best_angle:.2f}°, value={value:.2f}")
         return float(best_angle), float(value)
 
     except Exception as e:
@@ -272,8 +272,8 @@ def judge_abnormal(gauge_type, value):
     if "thermometer" in gauge_type or "thermo" in gauge_type:
         if value > 40:
             return "온도 과열", "thermo_high"
-        if value < 20:
-            return "온도 과열", "thermo_high"
+        if value < 10:
+            return "온도 낮음", "thermo_low"
         return "정상", "normal"
 
     if "pressure" in gauge_type:
