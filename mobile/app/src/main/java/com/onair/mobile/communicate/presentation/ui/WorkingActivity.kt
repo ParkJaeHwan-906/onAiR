@@ -78,8 +78,8 @@ class WorkingActivity : AppCompatActivity() {
     private lateinit var ttsRepository: TtsRepositoryImpl
     private lateinit var mediaPlayerController: MediaPlayerController
     private lateinit var raspberryPiControlRepository: RaspberryPiControlRepository
-    private lateinit var tokenManager: TokenManager
-    private lateinit var webRtcRepository: WebRtcRepository
+//    private lateinit var tokenManager: TokenManager
+//    private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
     private lateinit var preferenceUtil: PreferenceUtil
     private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
@@ -100,7 +100,7 @@ class WorkingActivity : AppCompatActivity() {
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
-    private val SPRING_SERVER_URL = "https://onair.ai.kr/api"
+//    private val SPRING_SERVER_URL = "https://onair.ai.kr/api"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -362,10 +362,10 @@ class WorkingActivity : AppCompatActivity() {
         raspberryPiControlRepository = RaspberryPiControlRepository(socketIoSttClient)
 
         // 토큰 관리자 초기화
-        tokenManager = TokenManager(this)
+//        tokenManager = TokenManager(this)
 
         // WebRTC Repository 초기화
-        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
+//        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
 
         // 토큰 갱신
         lifecycleScope.launch {
@@ -426,7 +426,7 @@ class WorkingActivity : AppCompatActivity() {
                             
                             // 2초 대기 후 FastAPI 서버로 재생 완료 이벤트 전송
                             lifecycleScope.launch {
-                                kotlinx.coroutines.delay(2000)
+                                delay(2000)
                                 
                                 val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
                                 if (success) {
@@ -463,24 +463,24 @@ class WorkingActivity : AppCompatActivity() {
 
                             // intent_audio_completed 이벤트 전송 직후 WebRTC 요청 API 호출
                             lifecycleScope.launch {
-                                val accessToken = authRepository.getAccessToken()
-                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                                if (accessToken.isNotEmpty()) {
-                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                                    val receiverAccountId = -1L
-                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                                    if (success) {
-                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                                    } else {
-                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                                    }
-                                } else {
-                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                                }
-                                
+//                                val accessToken = authRepository.getAccessToken()
+//                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+//
+//                                if (accessToken.isNotEmpty()) {
+//                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                                    val receiverAccountId = -1L
+//                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                                    if (success) {
+//                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                                    } else {
+//                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                                    }
+//                                } else {
+//                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                                }
+                                workingViewModel.requestCall()
                                 // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (CV 탐지 실패/정상과 동일한 로직)
                                 raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                             }
@@ -490,7 +490,6 @@ class WorkingActivity : AppCompatActivity() {
                     else -> {
                         Log.w(TAG, "⚠️ 알 수 없는 Intent 타입: $intentType")
                         runOnUiThread {
-//                            binding.taskName.text = "처리할 수 없는 요청입니다."
                         }
                     }
                 }
@@ -529,23 +528,24 @@ class WorkingActivity : AppCompatActivity() {
 
                     // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
-                        val accessToken = authRepository.getAccessToken()
-                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                        if (accessToken.isNotEmpty()) {
-                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                            val receiverAccountId = -1L
-                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                            if (success) {
-                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                            } else {
-                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                            }
-                        } else {
-                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                        }
+//                        val accessToken = authRepository.getAccessToken()
+//                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
+//
+//                        if (accessToken.isNotEmpty()) {
+//                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                            val receiverAccountId = -1L
+//                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                            if (success) {
+//                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                            } else {
+//                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                            }
+//                        } else {
+//                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                        }
+                        workingViewModel.requestCall()
                         
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                         raspberryPiControlRepository.notifyIntentDone("OPERATOR")
@@ -604,24 +604,23 @@ class WorkingActivity : AppCompatActivity() {
 
                     // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
-                        val accessToken = authRepository.getAccessToken()
-                        Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-
-                        if (accessToken.isNotEmpty()) {
-                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-                            val receiverAccountId = -1L
-                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-
-                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-                            if (success) {
-                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-                            } else {
-                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-                            }
-                        } else {
-                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-                        }
-                        
+                        workingViewModel.requestCall()
+//
+//                        if (accessToken.isNotEmpty()) {
+//                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
+//                            val receiverAccountId = -1L
+//                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
+//
+//                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
+//                            if (success) {
+//                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
+//                            } else {
+//                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
+//                            }
+//                        } else {
+//                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
+//                        }
+//
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                         raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
@@ -1406,7 +1405,6 @@ class WorkingActivity : AppCompatActivity() {
 
             // UI 초기화
             runOnUiThread {
-//                binding.taskName.text = "대기 중..."
                 hideModal()
             }
             

@@ -59,7 +59,9 @@ class WorkingViewModel(
     fun requestCall() {
         viewModelScope.launch {
             workingRepository.requestCall { result ->
-                result.onSuccess {  }.onFailure { exception ->
+                result.onSuccess {
+                    Log.i("request call", "통신 연결 요청 성공")
+                }.onFailure { exception ->
                     Log.e("request call", exception.message.toString())
                 }
             }
