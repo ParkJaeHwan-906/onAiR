@@ -1,6 +1,7 @@
+# ===============기존=================
 # === Bridge Server (Python 3.10) ===
 # threading 모드 사용 (eventlet 제거)
-python-socketio[server]==5.11.3
+python-socketio[client]==5.11.3
 python-engineio==4.12.3
 werkzeug>=2.0.0  # WSGI 서버용 (threading 모드에서 필요)
 
@@ -13,3 +14,6 @@ soundfile==0.12.1
 numpy==1.26.4
 scipy==1.11.4
 tflite-runtime==2.14.0  # 이미 설치돼 있으면 생략 가능
+
+# ===============추가=================
+jamo

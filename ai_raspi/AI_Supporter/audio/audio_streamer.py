@@ -146,7 +146,7 @@ class AudioStreamer:
                         try:
                             import asyncio
                             try:
-                                loop = asyncio.get_event_loop()
+                                loop = self.socketio_client.loop
                             except RuntimeError:
                                 # 이벤트 루프가 없으면 새로 생성
                                 loop = asyncio.new_event_loop()
@@ -245,17 +245,18 @@ class AudioStreamer:
                 time.sleep(0.05)
             
             break   # is_streaming false 임이 감지되었으니, 재연결 시도할 필요 없음
-    
+
     async def _emit_audio_frame(self, timestamp, frame_bytes):
-        """비동기 audio_frame 이벤트 전송"""
+        """audio_frame 전송 요청을 socket_handler로 전달"""
+        if not self.socketio_client:
+            return
+
         try:
-            await self.socketio_client.sio.emit(
-                "audio_frame",
-                {
-                    "timestamp": timestamp,
-                    "frame": frame_bytes
-                }
+            loop = self.socketio_client.loop
+
+            asyncio.run_coroutine_threadsafe(
+                self.socketio_client.emit_audio_frame(timestamp, frame_bytes),
+                loop
             )
         except Exception as e:
-            logger.error(f"❌ audio_frame emit 오류: {e}")
-
+            logger.error(f"❌ audio_frame emit 요청 실패: {e}")

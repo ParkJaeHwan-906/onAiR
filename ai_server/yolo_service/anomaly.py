@@ -78,7 +78,8 @@ async def run_anomaly_detection():
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
-            "message": "AHU가 아님"
+            "message": "AHU가 아님",
+            "modules_detected": False  # ★ 추가
         }
 
     # -------------------------
@@ -92,7 +93,8 @@ async def run_anomaly_detection():
             "device_type": device_label,
             "modules": [],
             "anomalies": {},
-            "message": "YOLO 결과 없음"
+            "message": "YOLO 결과 없음",
+            "modules_detected": False  # ★ 추가
         }
 
     raw_boxes = yolo_data.get("boxes", [])
@@ -105,11 +107,13 @@ async def run_anomaly_detection():
     panel_parts_boxes = [b for b in raw_boxes if b["label"] in PANEL_parts]
 
     anomalies = {}
+    modules_detected = False  # ★ 모듈 탐지 여부 플래그
 
     # -------------------------
     # 2) Fan/Belt 분석
     # -------------------------
     if fan_belt_boxes:
+        modules_detected = True  # ★ 모듈 탐지됨
         frames = await get_cv_buffer_frames(60)
         if len(frames) < 10:
             anomalies["fan_belt"] = {
@@ -135,13 +139,15 @@ async def run_anomaly_detection():
             "device_type": device_label,
             "modules": [],
             "anomalies": anomalies,
-            "message": "프레임 없음"
+            "message": "프레임 없음",
+            "modules_detected": False
         }
 
     # -------------------------
     # 4) Gauge 분석
     # -------------------------
     if gauge_boxes:
+        modules_detected = True  # ★ 모듈 탐지됨
         anomalies["gauge"] = await analyze_gauge(latest_frame, gauge_boxes)
     else:
         anomalies["gauge"] = {"status": "not_found"}
@@ -150,6 +156,7 @@ async def run_anomaly_detection():
     # 5) Panel 분석
     # -------------------------
     if panel_boxes:
+        modules_detected = True  # ★ 모듈 탐지됨
         anomalies["panel"] = await analyze_panel(latest_frame, panel_boxes, panel_parts_boxes)
     else:
         anomalies["panel"] = {"status": "not_found"}
@@ -166,15 +173,17 @@ async def run_anomaly_detection():
     filtered_messages = _collect_messages(filtered_anomalies)
 
     # -------------------------
-    # 8) 최종 반환 (기존 포맷 유지)
+    # 8) 최종 반환
+    # ★ detected = modules_detected로 동일하게 맞춤
     # -------------------------
     return {
-        "detected": True,
+        "detected": modules_detected,  # ★ modules_detected와 동일하게 설정
         "has_anomaly": has_anomaly,
         "device_type": device_label,
         "timestamp": latest_ts,
         "modules": raw_boxes,
         "anomalies": filtered_anomalies,   # 정제된 anomaly
         "messages": filtered_messages,     # 정제된 메시지
-        "message": "OK"
+        "message": "OK",
+        "modules_detected": modules_detected
     }

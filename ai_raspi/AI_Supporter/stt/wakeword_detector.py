@@ -13,7 +13,7 @@ import time
 import os
 
 SAMPLE_RATE = 16000
-DURATION = 1.0
+DURATION = 2.0  # 버퍼 크기를 2초로 증가 (STT 검증을 위해 더 긴 오디오 필요)
 N_FFT = 400
 HOP_LENGTH = 160
 N_MELS = 40
@@ -61,6 +61,8 @@ class WakewordDetector:
         # 초기화 시 버퍼와 시간 추적 변수 초기화 (첫 번째 wakeword 감지를 위해 필수)
         self.audio_buffer = deque(maxlen=int(SAMPLE_RATE * DURATION))
         self.last_detection_time = 0
+        # Wakeword 감지 시점의 오디오를 저장 (STT 검증용)
+        self.recent_detected_audio = None
         self._load_model()
 
     def _load_model(self):
@@ -115,6 +117,11 @@ class WakewordDetector:
         별도 스트림을 열지 않고 외부에서 오디오 데이터를 받아서 처리
         주의: 이 메서드는 콜백에서 호출되므로 블로킹 작업을 하면 안 됨
         """
+        # 디버깅: 첫 호출 시에만 로그 출력 (너무 많은 로그 방지)
+        if not hasattr(self, '_first_call_logged'):
+            print("✅ Wakeword 콜백 호출됨 (마이크 스트림 정상 작동)")
+            self._first_call_logged = True
+        
         if self.interpreter is None or not self.is_running or self.is_paused:
             return
         
@@ -168,16 +175,41 @@ class WakewordDetector:
                 label = "onair" if np.argmax(pred) == 0 else "negative"
                 conf = np.max(pred)
                 # 디버그: 모든 예측 결과 로깅 (오탐지 원인 파악용)
-                if conf > 0.5:  # 어느 정도 신뢰도가 있으면 로깅
-                    print(f"🔍 [디버그] 예측 결과: label={label}, conf={conf:.3f}, threshold={WAKEWORD_THRESHOLD}")
+                if conf > 0.3:  # 임계값 낮춤 (더 많은 로그 확인)
+                    print(f"🔍 [Wakeword] 예측: {label}, conf={conf:.3f}, threshold={WAKEWORD_THRESHOLD}, buffer_len={buffer_length}")
                 
                 if label == "onair" and conf > WAKEWORD_THRESHOLD:
-                    print(f"🚀 Wakeword 감지됨! (신뢰도: {conf*100:.1f}%)")
-                    self.detection_queue.put(True)
+                    print(f"🚀 [Wakeword] 감지됨! (신뢰도: {conf*100:.1f}%)")
+                    # 감지 시점의 오디오 버퍼를 저장 (STT 검증용)
+                    # 버퍼의 최근 부분만 저장 (이전 대화 내용 제외)
+                    # wakeword는 보통 0.5~1초 정도이므로, 최근 1.0초만 저장
+                    buffer_list = list(self.audio_buffer)
+                    buffer_audio = np.array(buffer_list, dtype=np.int16)
+                    buffer_duration = len(buffer_audio) / SAMPLE_RATE
+                    
+                    # 최근 1.0초만 추출 (wakeword 감지 시점의 오디오만)
+                    # 추가로 0.5초를 더 수집하므로, 여기서는 1.0초만 저장
+                    EXTRACT_DURATION = 1.0  # 1.0초
+                    extract_samples = int(SAMPLE_RATE * EXTRACT_DURATION)
+                    if len(buffer_audio) > extract_samples:
+                        # 버퍼의 최근 부분만 추출 (뒤에서부터)
+                        extracted_audio = buffer_audio[-extract_samples:]
+                        extracted_duration = len(extracted_audio) / SAMPLE_RATE
+                        print(f"📊 버퍼 전체: {len(buffer_audio)} 샘플 ({buffer_duration:.2f}초) → 최근 {len(extracted_audio)} 샘플 ({extracted_duration:.2f}초)만 저장")
+                        self.recent_detected_audio = extracted_audio
+                    else:
+                        # 버퍼가 짧으면 전체 사용
+                        print(f"📊 저장된 오디오: {len(buffer_audio)} 샘플, {buffer_duration:.2f}초 (전체 사용)")
+                        self.recent_detected_audio = buffer_audio
+                    
+                    # 버퍼를 즉시 clear하여 다음 wakeword 감지 시 이전 오디오가 포함되지 않도록 함
                     self.audio_buffer.clear()
+                    print(f"🧹 버퍼 clear 완료 (다음 wakeword 감지를 위해)")
+                    
+                    self.detection_queue.put(True)
                     self.last_detection_time = current_time  # 중복 방지
                 elif label == "onair" and conf > 0.7:  # threshold 미만이지만 높은 신뢰도면 경고
-                    print(f"⚠️ [경고] 'onair'로 예측되었지만 threshold 미만: conf={conf:.3f} < {WAKEWORD_THRESHOLD}")
+                    print(f"⚠️ [Wakeword] 'onair' 예측되었지만 threshold 미만: conf={conf:.3f} < {WAKEWORD_THRESHOLD}")
                     # 버퍼는 유지 (다음 청크와 합쳐서 다시 시도)
 
     def _detection_loop(self):
@@ -239,6 +271,28 @@ class WakewordDetector:
             self.thread.join(timeout=2.0)
         print("🔇 Wakeword 감지기 중지")
 
+    # def get_recent_audio(self):
+    #     """감지 시점에 저장된 오디오 버퍼를 반환하고 비운다"""
+    #     if self.recent_detected_audio is None or len(self.recent_detected_audio) == 0:
+    #         # 저장된 오디오가 없으면 현재 버퍼 사용 (fallback)
+    #         audio = np.array(list(self.audio_buffer), dtype=np.int16)
+    #         self.audio_buffer.clear()
+    #     else:
+    #         # 저장된 오디오 사용
+    #         audio = self.recent_detected_audio.copy()
+    #         self.recent_detected_audio = None  # 사용 후 초기화
+        
+    #     return audio.tobytes()
+        
+
+    def get_recent_audio(self):
+        """감지 시점에 저장된 오디오 버퍼를 반환하고 비운다"""
+        if self.recent_detected_audio is None or len(self.recent_detected_audio) == 0:
+            return b""
+        audio = self.recent_detected_audio
+        self.recent_detected_audio = None 
+        return audio.tobytes()
+
     def wait_for_wakeword(self, timeout=None):
         """Wakeword 감지 대기"""
         try:
@@ -249,6 +303,8 @@ class WakewordDetector:
             return detected
         except queue.Empty:
             return False
+
+
 
 
 # -----------------------------
