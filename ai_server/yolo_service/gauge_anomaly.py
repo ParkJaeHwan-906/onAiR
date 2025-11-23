@@ -14,7 +14,7 @@ PRESS_CONFIG = {
     "min_angle": 210,
     "max_angle": 330,
     "min_val": 0,
-    "max_val": 2.0
+    "max_val": 1.0
 }
 
 def cw_delta(a, b):
@@ -277,7 +277,7 @@ def judge_abnormal(gauge_type, value):
         return "정상", "normal"
 
     if "pressure" in gauge_type:
-        if value > 1.5:
+        if value > 0.8:
             return "압력 과다", "pressure_high"
         if value < 0.2:
             return "압력 부족", "pressure_low"
