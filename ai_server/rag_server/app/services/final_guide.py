@@ -69,13 +69,41 @@ async def generate_final_guide(
     
     answer_text = structured_answer.get("tts_text") or structured_answer.get("summary") or structured_answer.get("answer", "")
     
+    # 모바일로 전송할 structured_answer 구성
+    # 요약형 마크다운 + 원본 기반 TTS 오디오만 전송
+    mobile_structured_answer = {
+        "error_code": structured_answer.get("error_code", ""),
+        "markdown_text": structured_answer.get("markdown_text", ""),  # 요약형 전체 마크다운
+        "query": structured_answer.get("query", ""),
+        "citations": structured_answer.get("citations", []),
+        # 요약형 마크다운 (모바일 화면 표시용)
+        "possible_causes_markdown": structured_answer.get("summary_causes_markdown", ""),
+        "recommended_actions_markdown": structured_answer.get("summary_actions_markdown", ""),
+        "safety_warnings_markdown": structured_answer.get("summary_warnings_markdown", ""),
+        # 원본 기반 TTS 오디오 (요약 전 문장으로 생성된 오디오)
+        "possible_causes_audio": structured_answer.get("possible_causes_audio"),
+        "possible_causes_audio_encoding": structured_answer.get("possible_causes_audio_encoding", ""),
+        "recommended_actions_audio": structured_answer.get("recommended_actions_audio"),
+        "recommended_actions_audio_encoding": structured_answer.get("recommended_actions_audio_encoding", ""),
+        "safety_warnings_audio": structured_answer.get("safety_warnings_audio"),
+        "safety_warnings_audio_encoding": structured_answer.get("safety_warnings_audio_encoding", ""),
+        # TTS 텍스트 (원본 기반)
+        "tts_text": structured_answer.get("tts_text", ""),
+        # 리스트 형태는 모바일에서 사용하지 않지만 호환성을 위해 빈 리스트로 전송
+        "possible_causes": [],
+        "recommended_actions": [],
+        "safety_warnings": []
+    }
+    
     # 모바일로 전체 정비 가이드 전송
     print("=" * 60)
     print(f"📤 [단계 14] 모바일로 전체 정비 가이드 전송 시작")
     print("=" * 60)
+    print(f"   요약형 마크다운 전송 (모바일 화면 표시용)")
+    print(f"   원본 기반 TTS 오디오 전송 (요약 전 문장으로 생성)")
     await broadcast_to_func("mobile", "final_answer", {
         "answer": answer_text,
-        "structured_answer": structured_answer,
+        "structured_answer": mobile_structured_answer,
         "audio_content": None,
         "audio_encoding": None,
         "citations": structured_answer.get("citations", []),
