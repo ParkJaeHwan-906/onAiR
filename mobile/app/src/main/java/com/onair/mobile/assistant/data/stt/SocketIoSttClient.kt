@@ -380,10 +380,6 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-//            socket?.emit("audio_playback_completed")
-            socket?.on("enable_service_end_button") { args ->
-
-            }
 
             // 서버 메시지 수신 (디버깅용)
             socket?.on("server_message") { args ->
