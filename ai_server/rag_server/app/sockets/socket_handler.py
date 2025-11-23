@@ -228,6 +228,11 @@ async def handle_wakeword_detected(sid, data):
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
     
+    print("=" * 80)
+    print("🎤 [Wakeword 감지] 라즈베리파이로부터 wakeword_detected 이벤트 수신")
+    print(f"   세션 ID: {sid}")
+    print("=" * 80)
+    
     await wait_for_next_step("Wakeword 감지 이벤트 수신 완료", "2-1")
     
     # 모바일 연결 상태 확인
@@ -236,10 +241,14 @@ async def handle_wakeword_detected(sid, data):
         print("⚠️ 모바일 디바이스가 연결되어 있지 않습니다.")
         return
     
+    print(f"📤 모바일로 wakeword_detected 이벤트 전송 시작 (연결된 모바일: {len(mobile_sids)}개)")
+    
     # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
     await broadcast_to("mobile", "wakeword_detected", {
         "timestamp": None
     })
+    
+    print("✅ 모바일로 wakeword_detected 이벤트 전송 완료")
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
     
     # ⚠️ 주의: wakeword_audio_completed는 모바일에서 오디오 재생 완료 후 
