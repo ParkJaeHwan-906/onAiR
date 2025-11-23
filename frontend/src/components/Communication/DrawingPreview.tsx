@@ -24,12 +24,16 @@ const DrawingPreview = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const resetFocusRef = useRef<(() => void) | null>(null);
+  // 도면(3D 모델) ON/OFF 상태 (패널은 유지
+  const [showModel, setShowModel] = useState(true);
 
   // 라이브킷
   const room = useRoomContext();
   const trackRef = useRef<MediaStreamTrack | null>(null);
 
   useEffect(() => {
+    if (!showModel) return; // 도면 숨기기 상태면 3D 엔진 실행 안함
+
     const container = containerRef.current;
     if (!container) return;
     if (!room) return;
@@ -48,7 +52,7 @@ const DrawingPreview = () => {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(clientWidth, clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x00aaff, 0.0)
+    renderer.setClearColor(0x00aaff, 0.0);
     container.appendChild(renderer.domElement);
 
     // 모델 모바일 연동 30fps
@@ -352,10 +356,17 @@ const DrawingPreview = () => {
         track.stop();
       }
     };
-  }, [room]);
+  }, [room, showModel]);
 
   return (
     <div className="drawing-preview" ref={containerRef}>
+      {/* 도면 ON/OFF 버튼 */}
+      <button
+        className="drawing-preview__toggle"
+        onClick={() => setShowModel((prev) => !prev)}
+      >
+        {showModel ? "도면 ON" : "도면 OFF"}
+      </button>
       {isFocused && (
         <button
           className="drawing-preview__back"

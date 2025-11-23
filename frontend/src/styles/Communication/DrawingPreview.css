@@ -33,3 +33,27 @@
 .drawing-preview__back:hover {
   background: rgba(17, 24, 39, 1);
 }
+
+/* 도면 ON/OFF 버튼 전용 스타일 */
+.drawing-preview__toggle {
+  position: absolute;
+  top: clamp(18px, 1.7vw, 24px);
+  right: clamp(18px, 1.7vw, 24px);
+
+  padding: clamp(8px, 0.7vw, 10px) clamp(12px, 1.1vw, 16px);
+  border: none;
+  border-radius: 9999px;
+
+  background: rgba(17, 24, 39, 0.85);
+  color: #fff;
+  font-size: clamp(12px, 1vw, 14px);
+  cursor: pointer;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: background 0.2s ease;
+  z-index: 20; /* 캔버스 위로 나오게 */
+}
+
+.drawing-preview__toggle:hover {
+  background: rgba(17, 24, 39, 1);
+}
