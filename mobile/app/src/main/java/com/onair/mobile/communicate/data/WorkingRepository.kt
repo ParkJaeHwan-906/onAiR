@@ -3,6 +3,7 @@ package com.onair.mobile.communicate.data
 import android.util.Log
 import com.onair.mobile.communicate.data.api.ApiService
 import com.onair.mobile.communicate.data.api.dto.ApiResponse
+import com.onair.mobile.communicate.data.api.dto.CallRequestRequest
 import com.onair.mobile.communicate.data.api.dto.CallResponseRequestDto
 import com.onair.mobile.communicate.data.api.dto.RtcResponse
 import retrofit2.Call
@@ -36,6 +37,28 @@ class WorkingRepository(
                 t: Throwable
             ) {
                 onResult(Result.failure(Exception(t.message)))
+            }
+
+        })
+    }
+    fun requestCall(onResult: (Result<String?>) -> Unit) {
+        apiService.requestCall(CallRequestRequest(-1)).enqueue(object : Callback<ApiResponse<RtcResponse>> {
+            override fun onResponse(
+                call: Call<ApiResponse<RtcResponse>?>,
+                response: Response<ApiResponse<RtcResponse>?>
+            ) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    onResult(Result.success(null))
+                } else {
+                    onResult(Result.failure(Exception("통신 요청에 실패하였습니다.")))
+                }
+            }
+
+            override fun onFailure(
+                call: Call<ApiResponse<RtcResponse>?>,
+                t: Throwable
+            ) {
+                onResult(Result.failure(Exception("통신 요청에 실패하였습니다: ${t.message}")))
             }
 
         })
