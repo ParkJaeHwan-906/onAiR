@@ -271,19 +271,28 @@ class WakewordDetector:
             self.thread.join(timeout=2.0)
         print("🔇 Wakeword 감지기 중지")
 
+    # def get_recent_audio(self):
+    #     """감지 시점에 저장된 오디오 버퍼를 반환하고 비운다"""
+    #     if self.recent_detected_audio is None or len(self.recent_detected_audio) == 0:
+    #         # 저장된 오디오가 없으면 현재 버퍼 사용 (fallback)
+    #         audio = np.array(list(self.audio_buffer), dtype=np.int16)
+    #         self.audio_buffer.clear()
+    #     else:
+    #         # 저장된 오디오 사용
+    #         audio = self.recent_detected_audio.copy()
+    #         self.recent_detected_audio = None  # 사용 후 초기화
+        
+    #     return audio.tobytes()
+        
+
     def get_recent_audio(self):
         """감지 시점에 저장된 오디오 버퍼를 반환하고 비운다"""
         if self.recent_detected_audio is None or len(self.recent_detected_audio) == 0:
-            # 저장된 오디오가 없으면 현재 버퍼 사용 (fallback)
-            audio = np.array(list(self.audio_buffer), dtype=np.int16)
-            self.audio_buffer.clear()
-        else:
-            # 저장된 오디오 사용
-            audio = self.recent_detected_audio.copy()
-            self.recent_detected_audio = None  # 사용 후 초기화
-        
+            return b""
+        audio = self.recent_detected_audio
+        self.recent_detected_audio = None 
         return audio.tobytes()
-        
+
     def wait_for_wakeword(self, timeout=None):
         """Wakeword 감지 대기"""
         try:

@@ -37,30 +37,42 @@ async def generate_final_guide(
     query = _build_rag_query(device_type, anomalies)
     print(f"   Query: {query}")
     
-    # RAG 검색
-    try:
-        base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
-        hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
-        used_hits = hits[:5]
-        
-        if not used_hits:
-            print("⚠️ RAG 검색 결과가 없습니다.")
-            structured_answer = _create_empty_answer(query)
-        else:
-            print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+    # anomalies 검증: anomaly 상태인 모듈이 있는지 확인
+    anomaly_count = sum(1 for v in anomalies.values() if isinstance(v, dict) and v.get("status") == "anomaly")
+    print(f"   Anomaly 개수: {anomaly_count}")
+    
+    if anomaly_count == 0:
+        print("⚠️ anomalies에 status='anomaly'인 모듈이 없습니다. 빈 답변 생성")
+        structured_answer = _create_empty_answer(query)
+    else:
+        # RAG 검색
+        try:
+            base_hits = hybrid_retrieve(query, top_k=settings.TOP_K)
+            hits = rerank(query, base_hits, top_k=settings.RERANK_TOP_K)
+            used_hits = hits[:5]
             
-            # GPT-4o로 최종 답변 생성
-            print("=" * 60)
-            print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
-            print("=" * 60)
-            
-            snippets = [h["source"]["content"] for h in used_hits]
-            error_code = _extract_error_code(anomalies)
-            
-            structured_answer = llm_generate_answer(
-                query, snippets, error_code=error_code, hits=used_hits
-            )
-            print(f"✅ 전체 정비 가이드 생성 완료")
+            if not used_hits:
+                print("⚠️ RAG 검색 결과가 없습니다.")
+                structured_answer = _create_empty_answer(query)
+            else:
+                print(f"✅ RAG 검색 완료: {len(used_hits)}개 문서 발견")
+                
+                # GPT-4o로 최종 답변 생성
+                print("=" * 60)
+                print(f"🤖 [단계 13] GPT-4o로 전체 정비 가이드 생성 시작")
+                print("=" * 60)
+                
+                snippets = [h["source"]["content"] for h in used_hits]
+                error_code = _extract_error_code(anomalies)
+                
+                if not error_code:
+                    print("⚠️ error_code 추출 실패. query를 error_code로 사용")
+                    error_code = query
+                
+                structured_answer = llm_generate_answer(
+                    query, snippets, error_code=error_code, hits=used_hits
+                )
+                print(f"✅ 전체 정비 가이드 생성 완료")
     except Exception as e:
         print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
         import traceback
