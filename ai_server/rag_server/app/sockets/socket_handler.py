@@ -313,8 +313,14 @@ async def handle_intent_audio_completed(sid, data):
     # AI_SUPPORTER → CV 분석 실행
     # ---------------------------------------------------------
     if intent == "AI_SUPPORTER":
+        print("=" * 80)
+        print("🔍 [CV 탐지 시작] AI_SUPPORTER Intent 수신 - CV 이상 탐지 실행")
+        print("=" * 80)
         try:
+            print("📡 YOLO 서비스로 이상 탐지 요청 전송 중...")
             cv_raw = await run_anomaly_detection()
+            print("✅ YOLO 서비스 응답 수신 완료")
+            print(f"   응답 데이터: {cv_raw}")
 
             detected = cv_raw.get("detected", False)
             has_anomaly = cv_raw.get("has_anomaly", False)
@@ -322,6 +328,17 @@ async def handle_intent_audio_completed(sid, data):
             modules = cv_raw.get("modules", [])
             anomalies = cv_raw.get("anomalies", {})     # ★ 이미 정제됨
             messages = cv_raw.get("messages", [])       # ★ 이미 정제됨
+            
+            print("=" * 80)
+            print(f"📊 [CV 탐지 결과 분석]")
+            print(f"   detected: {detected}")
+            print(f"   has_anomaly: {has_anomaly}")
+            print(f"   device_type: {device_type}")
+            print(f"   modules 개수: {len(modules)}")
+            print(f"   anomalies 개수: {len(anomalies)}")
+            print(f"   anomalies 상세: {anomalies}")
+            print(f"   messages: {messages}")
+            print("=" * 80)
 
             # 최종 구조
             cv_result = {
@@ -336,6 +353,11 @@ async def handle_intent_audio_completed(sid, data):
             # 1) 탐지 실패 (AHU 아님 / YOLO 없음 / 프레임 없음 등)
             # -------------------------
             if not detected:
+                print("=" * 80)
+                print("❌ [CV 탐지 실패] detected=False")
+                print(f"   device_type: {device_type}")
+                print(f"   message: {cv_raw.get('message', 'N/A')}")
+                print("=" * 80)
                 _pending_cv_detection = cv_result
                 await broadcast_to("mobile", "cv_detection_failed", {
                     "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
@@ -346,6 +368,11 @@ async def handle_intent_audio_completed(sid, data):
             # 2) 정상 (탐지 OK + 이상 없음)
             # -------------------------
             if detected and not has_anomaly:
+                print("=" * 80)
+                print("✅ [CV 탐지 정상] detected=True, has_anomaly=False")
+                print(f"   device_type: {device_type}")
+                print(f"   anomalies 개수: {len(anomalies)}")
+                print("=" * 80)
                 _pending_cv_detection = cv_result
                 await broadcast_to("mobile", "cv_detection_normal", {
                     "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
@@ -355,6 +382,12 @@ async def handle_intent_audio_completed(sid, data):
             # -------------------------
             # 3) 이상 (anomaly)
             # -------------------------
+            print("=" * 80)
+            print("🚨 [CV 탐지 이상] detected=True, has_anomaly=True")
+            print(f"   device_type: {device_type}")
+            print(f"   anomalies: {anomalies}")
+            print(f"   messages: {messages}")
+            print("=" * 80)
             await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
 
             # 알림 메시지 생성
