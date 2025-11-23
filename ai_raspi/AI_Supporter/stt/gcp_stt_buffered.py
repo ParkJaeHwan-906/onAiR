@@ -296,98 +296,138 @@ class GcpBufferedStt:
             # 마이크는 계속 ON 상태로 유지됨
             raise  # 상위로 예외 전파하여 wakeword 대기 상태로 복귀
 
-    # wakeword 교차검증용, 이전의 음성 데이터로 STT 
     async def transcribe_bytes(self, audio_data: bytes, broadcaster):
         """
         MicStream 없이 raw PCM (bytes) 데이터를 바로 STT 요청.
-        wakeword 교차 검증 용도.
-
-        Args:
-            audio_data: 16bit PCM little-endian bytes
-            broadcaster: STT 결과 처리 콜백 함수
+        - MicStream 구조에 맞춰 16kHz, int16 mono 전제
+        - 패딩은 앞/뒤 균등 분배
+        - numpy 기반 안전 정규화
+        - PCM format 검사 포함
         """
+
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # =============================
+        # 1) 데이터 길이 기본 검증
+        # =============================
         if not audio_data or len(audio_data) < 1000:
-            await broadcaster({
-                "type": "error",
-                "text": "오디오 데이터가 너무 짧습니다."
-            })
+            await broadcaster({"type": "error", "text": "오디오 데이터가 너무 짧습니다"})
             return
 
+        # =============================
+        # 2) PCM 변환 및 유효성 체크
+        # =============================
         try:
-            audio_data = self._normalize_audio_volume(audio_data, target_level=0.8)
+            pcm = np.frombuffer(audio_data, dtype=np.int16)
         except Exception:
-            pass
+            await broadcaster({"type": "error", "text": "PCM 변환 실패 (int16 아님)"})
+            return
 
-        # STT 설정
+        if pcm.size == 0:
+            await broadcaster({"type": "error", "text": "PCM 샘플 없음"})
+            return
+
+        # mono 체크 (MicStream은 항상 mono이므로 경고만)
+        if pcm.ndim != 1:
+            logger.warning("⚠ PCM이 1차원이 아님 (mono 아님 가능성 있음)")
+
+        # =============================
+        # 3) 최소 길이 1.5초 미만이면 중앙 패딩
+        # =============================
+        min_sec = 1.5
+        min_bytes = int(self.rate * min_sec * 2)
+
+        if len(audio_data) < min_bytes:
+            diff = min_bytes - len(audio_data)
+            left = diff // 2
+            right = diff - left
+            audio_data = (b"\x00" * left) + audio_data + (b"\x00" * right)
+            pcm = np.frombuffer(audio_data, dtype=np.int16)
+
+        # =============================
+        # 4) numpy 기반 볼륨 정규화
+        # =============================
+        try:
+            float_pcm = pcm.astype(np.float32)
+            peak = np.max(np.abs(float_pcm))
+
+            if peak > 0:
+                factor = (0.8 * 32767) / peak
+                factor = min(factor, 2.0)  # clipping 제한
+                float_pcm *= factor
+                float_pcm = np.clip(float_pcm, -32768, 32767)
+                pcm = float_pcm.astype(np.int16)
+
+            audio_data = pcm.tobytes()
+
+        except Exception as e:
+            logger.warning(f"⚠ 정규화 실패: {e}")
+
+        # =============================
+        # 5) PCM duration 계산
+        # =============================
+        samples = len(audio_data) // 2
+        duration = samples / self.rate
+        logger.info(f"🎵 STT 요청: bytes={len(audio_data)}, 샘플={samples}, 길이={duration:.2f}s")
+
+        # =============================
+        # 6) GCP STT 호출 구성
+        # =============================
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=self.rate,
             language_code=self.language,
-            enable_automatic_punctuation=False,  # wakeword 검증은 문장부호 필요 없음
-            alternative_language_codes=["en-US"],  # 한국어 인식 실패 시 영어도 시도
-            model="latest_long",  # 긴 오디오에 최적화된 모델 사용
+            enable_automatic_punctuation=True,
+            use_enhanced=True,
+            model="command_and_search",
+            speech_contexts=[
+                speech.SpeechContext(phrases=["온에어", "OnAir", "오네요", "보네요", "에어"], boost=23.0)
+            ],
         )
         audio = speech.RecognitionAudio(content=audio_data)
 
-        # 동기 API → 스레드에서 실행
-        def blocking_call():
-            try:
-                return self.client.recognize(config=config, audio=audio)
-            except Exception as e:
-                raise e
+        def blocking():
+            return self.client.recognize(config=config, audio=audio)
 
         loop = asyncio.get_running_loop()
 
+        # =============================
+        # 7) 실제 GCP 요청
+        # =============================
         try:
-            # 오디오 길이 및 지속 시간 계산
-            audio_samples = len(audio_data) // 2  # 16bit = 2 bytes per sample
-            audio_duration_sec = audio_samples / self.rate
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"🎵 STT 요청: 오디오 길이={len(audio_data)} bytes, 샘플={audio_samples}, 지속시간={audio_duration_sec:.2f}초")
-            
-            response = await loop.run_in_executor(None, blocking_call)
-            
-            logger.info(f"📥 GCP STT 응답 수신: results 개수={len(response.results) if response.results else 0}")
+            response = await loop.run_in_executor(None, blocking)
 
-            if not response.results:
-                logger.warning("⚠️ GCP STT 응답에 results가 없음")
+            result_count = len(response.results)
+            logger.info(f"📥 GCP STT results={result_count}")
+
+            if result_count == 0:
                 await broadcaster({"type": "error", "text": "STT 결과 없음"})
                 return
 
             result = response.results[0]
-            logger.info(f"📋 첫 번째 result: alternatives 개수={len(result.alternatives) if result.alternatives else 0}")
-            
+
             if not result.alternatives:
-                logger.warning("⚠️ GCP STT 응답에 alternatives가 없음")
                 await broadcaster({"type": "error", "text": "STT 결과 없음"})
                 return
 
             transcript = result.alternatives[0].transcript
             confidence = result.alternatives[0].confidence
-            logger.info(f"📝 GCP STT 전사 결과: '{transcript}' (신뢰도: {confidence})")
 
             if not transcript.strip():
-                logger.warning("⚠️ GCP STT 전사 결과가 빈 문자열")
                 await broadcaster({"type": "error", "text": "빈 텍스트"})
                 return
 
-            # wakeword 검증에서는 final 만 보내면 됨
+            logger.info(f"📝 결과: '{transcript}' (신뢰도={confidence})")
+
             await broadcaster({
                 "type": "final",
                 "text": transcript,
-                "confidence": confidence
+                "confidence": confidence,
             })
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"❌ GCP STT 호출 중 예외: {e}")
-            import traceback
-            traceback.print_exc()
-            await broadcaster({
-                "type": "error",
-                "text": str(e)
-            })
+            logger.error(f"❌ GCP STT 예외: {e}")
+            await broadcaster({"type": "error", "text": str(e)})
             raise
 
