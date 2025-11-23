@@ -73,11 +73,11 @@ async def generate_final_guide(
                     query, snippets, error_code=error_code, hits=used_hits
                 )
                 print(f"✅ 전체 정비 가이드 생성 완료")
-    except Exception as e:
-        print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
-        import traceback
-        traceback.print_exc()
-        structured_answer = _create_empty_answer(query)
+        except Exception as e:
+            print(f"❌ RAG 검색 또는 답변 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            structured_answer = _create_empty_answer(query)
     
     answer_text = structured_answer.get("tts_text") or structured_answer.get("summary") or structured_answer.get("answer", "")
     
