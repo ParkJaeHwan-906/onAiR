@@ -376,13 +376,13 @@ class GcpBufferedStt:
         # =============================
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=self.rate,   # MicStream과 동일: 16000
+            sample_rate_hertz=self.rate,
             language_code=self.language,
             enable_automatic_punctuation=True,
             use_enhanced=True,
             model="command_and_search",
             speech_contexts=[
-                speech.SpeechContext(phrases=["온에어", "OnAir", "오네요", "보네요", "에어"], boost=23.0)
+                speech.SpeechContext(phrases=["온에어", "OnAir"], boost=20.0)
             ],
         )
         audio = speech.RecognitionAudio(content=audio_data)
