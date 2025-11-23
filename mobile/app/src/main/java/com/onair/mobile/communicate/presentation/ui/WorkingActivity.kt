@@ -513,7 +513,7 @@ class WorkingActivity : AppCompatActivity() {
 
                 // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
                 runOnUiThread {
-                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                    aiOnDialog?.updateMessage("통신 연결 중...")
                 }
                 
                 // CV 탐지 실패 음성 파일 재생
@@ -1220,6 +1220,8 @@ class WorkingActivity : AppCompatActivity() {
                 answer.safety_warnings_markdown,
                 answer.safety_warnings_audio
             )
+            socketIoSttClient.sendFinalAnswerAudioCompleted()
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ 섹션 처리 중 오류 발생: ${e.message}")
         }
@@ -1243,11 +1245,7 @@ class WorkingActivity : AppCompatActivity() {
                 playAudio(audioBase64)
             }
         }
-//        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
-        // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
-//        withContext(Dispatchers.Main) {
-//            cardView.visibility = View.GONE
-//        }
+
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
         val markwon = Markwon.create(textView.context)
@@ -1439,6 +1437,21 @@ class WorkingActivity : AppCompatActivity() {
     }
     private suspend fun handleServiceEnd() {
         try {
+
+            withContext(Dispatchers.Main) {
+                binding.aiResultCause.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+                binding.aiResultAction.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+                binding.aiResultWarning.apply {
+                    fadeOut()
+                    visibility = View.GONE
+                }
+            }
 
             withContext(Dispatchers.Main) {
                 showOnModal()

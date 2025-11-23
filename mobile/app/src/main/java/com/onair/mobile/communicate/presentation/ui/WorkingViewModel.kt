@@ -18,19 +18,20 @@ class WorkingViewModel(
     private val taskRepository: TaskRepository,
     private val workingRepository: WorkingRepository
 ): ViewModel() {
-    enum class OnAirState {
-        WAITING_WAKEWORD,
-        WAKEWORD_DETECTED,
-        PROCESSING_AI,
-        PROCESSING_OPERATOR
-    }
+//    enum class OnAirState {
+//        WAITING_WAKEWORD,
+//        WAKEWORD_DETECTED,
+//        PROCESSING_AI,
+//        PROCESSING_OPERATOR
+//    }
     private val _endStatus = MutableStateFlow(false)
     val endStatus = _endStatus.asStateFlow()
     private val _liveKitToken = MutableStateFlow("")
     val liveKitToken = _liveKitToken.asStateFlow()
+    private val _onAirState = MutableStateFlow<OnAirState>(OnAirState.Waiting)
+    val onAirState = _onAirState.asStateFlow()
     val finalAnswer = SocketHolder.socketClient.finalAnswer
     val cvAnswer = SocketHolder.socketClient.cvAnswer
-    val onAirState = SocketHolder.socketClient.onAirState
     val endService = SocketHolder.socketClient.endService
 
 
@@ -76,4 +77,21 @@ class WorkingViewModel(
             Log.e("Live kit", "요청이 거절됨")
         }
     }
+
+    fun onWakewordDetected() {
+        if (_onAirState.value == OnAirState.Waiting) {
+            _onAirState.value = OnAirState.Started
+        }
+    }
+    fun onServiceStarted() {
+        _onAirState.value = OnAirState.Processing
+    }
+    fun onFlowCompleted() {
+        _onAirState.value = OnAirState.Waiting
+    }
+}
+sealed class OnAirState {
+    object Waiting : OnAirState()
+    object Started : OnAirState()
+    object Processing : OnAirState()
 }
