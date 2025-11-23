@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +13,7 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -44,13 +46,10 @@ import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
 import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
-import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
-import com.onair.mobile.assistant.data.auth.TokenManager
-import com.onair.mobile.assistant.data.webrtc.WebRtcRepository
-import com.onair.mobile.communicate.data.api.dto.StructuredAnswer
+import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.CompletableDeferred
@@ -159,6 +158,11 @@ class WorkingActivity : AppCompatActivity() {
                 isActivityResumed = true
             } else {
                 Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
+            }
+        }
+        lifecycleScope.launch {
+            workingViewModel.endService.collect {
+                handleServiceEnd()
             }
         }
     }
@@ -1239,11 +1243,11 @@ class WorkingActivity : AppCompatActivity() {
                 playAudio(audioBase64)
             }
         }
-        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
+//        cardView.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
         // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
-        withContext(Dispatchers.Main) {
-            cardView.visibility = View.GONE
-        }
+//        withContext(Dispatchers.Main) {
+//            cardView.visibility = View.GONE
+//        }
     }
     suspend fun showTypingEffect(textView: TextView, text: String) {
         val markwon = Markwon.create(textView.context)
