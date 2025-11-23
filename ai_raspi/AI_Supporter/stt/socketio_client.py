@@ -54,7 +54,6 @@ class SocketIOClient:
         self.connected = False
         self.sid = None
         self.manager = manager  # ConnectionManager 참조
-        self.loop = None  # 이벤트 루프 참조 (외부에서 설정)
         
         # 이벤트 핸들러 등록
         self._setup_handlers()
@@ -320,10 +319,11 @@ class SocketIOClient:
         @self.sio.on("service_completed")
         async def handle_service_completed(data):
             """서비스 완료 이벤트 수신 (GPT-4o 답변 생성 및 TTS 완료 후)"""
+            session_id = data.get("session_id", "")
             status = data.get("status", "")
             logger.info("=" * 60)
             logger.info(f"✅ [서비스 완료] service_completed 이벤트 수신 (FastAPI 서버)")
-            logger.info(f"   Status: {status}")
+            logger.info(f"   Session ID: {session_id}, Status: {status}")
             logger.info("=" * 60)
             
             # 브리지 서버를 통해 Python 3.10으로 서비스 완료 신호 전달
@@ -347,6 +347,7 @@ class SocketIOClient:
                         logger.info(f"📤 [서비스 완료] 브리지 서버로 서비스 완료 신호 전송")
                         logger.info("=" * 60)
                         self.manager.bridge_client.sio.emit('service_completed', {
+                            "session_id": session_id,
                             "status": status
                         })
                         logger.info("=" * 60)
@@ -457,9 +458,6 @@ class SocketIOClient:
         if self.connected:
             logger.warning("⚠️ 이미 Socket.IO 서버에 연결되어 있습니다.")
             return True
-        
-        # 이벤트 루프 저장
-        self.loop = asyncio.get_event_loop()
         
         # HTTPS인 경우 인증서 정보 확인 (디버깅용)
         if self.server_url.startswith('https://'):
