@@ -19,6 +19,9 @@ from app.ar import motion_core
 from app.services.yolo_overlay import get_latest_yolo_result
 from app.services.cv_service import run_anomaly_detection
 from app.services.final_guide import generate_final_guide
+from app.services.gesture_service import process_gesture
+
+#BUTTON_RECT = (20, 20, 170, 120) # 모바일 내에 고정된 버튼 좌표(프레임 기준)
 
 try:
     import google.generativeai as genai
@@ -239,14 +242,8 @@ async def handle_wakeword_detected(sid, data):
     })
     await wait_for_next_step("모바일로 Wakeword 감지 이벤트 전송 완료", "2-1-1")
     
-    # 오디오 재생 시작과 동시에 버퍼링 STT 세션 시작
-    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
-    if raspi_sids:
-        await broadcast_to("raspi", "wakeword_audio_completed", {
-            "timestamp": None
-        })
-    else:
-        print("⚠️ 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
+    # ⚠️ 주의: wakeword_audio_completed는 모바일에서 오디오 재생 완료 후 
+    # handle_wakeword_audio_completed 함수에서 라즈베리파이로 전달됩니다.
 
 
 async def handle_wakeword_waiting_ready(sid, data):
@@ -264,8 +261,7 @@ async def handle_wakeword_waiting_ready(sid, data):
 async def handle_wakeword_audio_completed(sid, data):
     """
     모바일로부터 음성 파일 재생 완료 이벤트 수신
-    ⚠️ 중요: 버퍼링 STT 세션은 이미 오디오 재생 시작과 동시에 시작되었으므로
-    여기서는 추가 처리 없음
+    라즈베리파이로 전달하여 다음 단계 진행
     """
     sender_device = device_map.get(sid, "unknown")
     
@@ -275,6 +271,16 @@ async def handle_wakeword_audio_completed(sid, data):
         return
     
     await wait_for_next_step("모바일 음성 파일 재생 완료 이벤트 수신 완료", "2-2")
+    
+    # 라즈베리파이로 wakeword_audio_completed 전달 (다음 단계 진행)
+    raspi_sids = [s for s, d in device_map.items() if d == "raspi"]
+    if raspi_sids:
+        await broadcast_to("raspi", "wakeword_audio_completed", {
+            "timestamp": None
+        })
+        await wait_for_next_step("라즈베리파이로 wakeword_audio_completed 전달 완료", "2-2-1")
+    else:
+        print("⚠️ 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
 
 
 async def handle_intent_audio_completed(sid, data):
@@ -455,8 +461,6 @@ async def handle_intent_audio_completed(sid, data):
     elif intent == "OPERATOR":
         # OPERATOR인 경우 WebRTC 오디오 스트리밍 대기 상태
         pass
-
-
 
 
 async def handle_audio_playback_completed(sid, data):
@@ -672,6 +676,16 @@ async def handle_video_frame(sid, data):
             })
         ar_markers[:] = updated
         await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+
+    # # gesture로 servcie_on/off 이벤트 전송 
+    # gesture_result = process_gesture(frame, BUTTON_RECT)
+
+    # if gesture_result == "service_on_trigger":
+    #     await broadcast_to("mobile", "service_on", {})
+
+    # elif gesture_result == "service_off_trigger":
+    #     await broadcast_to("mobile", "service_off", {})
+
 
     # PC로 프레임 전송 (timestamp 포함)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
