@@ -16,6 +16,8 @@ import org.json.JSONObject
 import java.net.URISyntaxException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -57,17 +59,22 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-    private val _wakewordFlow = MutableSharedFlow<Unit>(replay = 1)
+    private var _wakewordFlow = MutableSharedFlow<Unit>(
+        replay = 1,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val wakewordFlow = _wakewordFlow.asSharedFlow()
+//    private var _wakewordFlow = Channel<Unit>(Channel.BUFFERED)
+//    val wakewordFlow = _wakewordFlow.receiveAsFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
-    private val _finalAnswer = MutableSharedFlow<StructuredAnswer>()
+    private var _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
     private val _endService = Channel<Unit>(Channel.BUFFERED)
     val endService = _endService.receiveAsFlow()
 
-    private val _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
+    private var _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
     val cvAnswer = _cvAnswer.asSharedFlow()
 
     private val _videoFrames = MutableSharedFlow<ByteArray>(replay = 1)
@@ -312,14 +319,8 @@ class SocketIoSttClient(
             // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
             socket?.on("wakeword_detected") {
                 _wakewordFlow.tryEmit(Unit)
-//                try {
-//                    val data = args[0] as? JSONObject
                     Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
-//                    onWakewordDetected?.invoke()
-//                } catch (e: Exception) {
-//                    Log.e(TAG, "❌ Wakeword 감지 이벤트 처리 오류: ${e.message}")
-//                    e.printStackTrace()
-//                }
+
             }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
@@ -333,7 +334,12 @@ class SocketIoSttClient(
                     val data = args[0] as? JSONObject
                     if (data != null) {
                         val answerStr = data.getJSONObject("structured_answer").toString()
-                        val answer = Json.decodeFromString<StructuredAnswer>(answerStr)
+
+                        // ✅ [수정] 파서를 먼저 정의합니다 (모르는 키 무시 옵션 추가)
+                        val jsonParser = Json { ignoreUnknownKeys = true }
+
+                        // ✅ [수정] 위에서 만든 parser를 사용해 변환합니다
+                        val answer = jsonParser.decodeFromString<StructuredAnswer>(answerStr)
                         Log.d(TAG, "답변 파싱 성공 ${answer.markdown_text}")
                         _finalAnswer.tryEmit(answer)
                     } else {
@@ -735,6 +741,12 @@ class SocketIoSttClient(
             e.printStackTrace()
             false
         }
+    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun resetShared() {
+        _wakewordFlow.resetReplayCache()
+        _finalAnswer.resetReplayCache()
+        _cvAnswer.resetReplayCache()
     }
     
     /**
