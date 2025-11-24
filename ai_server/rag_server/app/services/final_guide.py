@@ -83,24 +83,29 @@ async def generate_final_guide(
     
     # 모바일로 전송할 structured_answer 구성
     # 요약형 마크다운 + 원본 기반 TTS 오디오만 전송
+    # None 값을 빈 문자열로 변환 (모바일 데이터 클래스가 non-nullable String이므로)
+    def safe_get(key: str, default: str = "") -> str:
+        value = structured_answer.get(key, default)
+        return value if value is not None else default
+    
     mobile_structured_answer = {
-        "error_code": structured_answer.get("error_code", ""),
-        "markdown_text": structured_answer.get("markdown_text", ""),  # 요약형 전체 마크다운
-        "query": structured_answer.get("query", ""),
+        "error_code": safe_get("error_code", ""),
+        "markdown_text": safe_get("markdown_text", ""),  # 요약형 전체 마크다운
+        "query": safe_get("query", ""),
         "citations": structured_answer.get("citations", []),
         # 요약형 마크다운 (모바일 화면 표시용)
-        "possible_causes_markdown": structured_answer.get("summary_causes_markdown", ""),
-        "recommended_actions_markdown": structured_answer.get("summary_actions_markdown", ""),
-        "safety_warnings_markdown": structured_answer.get("summary_warnings_markdown", ""),
+        "possible_causes_markdown": safe_get("summary_causes_markdown", ""),
+        "recommended_actions_markdown": safe_get("summary_actions_markdown", ""),
+        "safety_warnings_markdown": safe_get("summary_warnings_markdown", ""),
         # 원본 기반 TTS 오디오 (요약 전 문장으로 생성된 오디오)
-        "possible_causes_audio": structured_answer.get("possible_causes_audio"),
-        "possible_causes_audio_encoding": structured_answer.get("possible_causes_audio_encoding", ""),
-        "recommended_actions_audio": structured_answer.get("recommended_actions_audio"),
-        "recommended_actions_audio_encoding": structured_answer.get("recommended_actions_audio_encoding", ""),
-        "safety_warnings_audio": structured_answer.get("safety_warnings_audio"),
-        "safety_warnings_audio_encoding": structured_answer.get("safety_warnings_audio_encoding", ""),
+        "possible_causes_audio": structured_answer.get("possible_causes_audio"),  # nullable
+        "possible_causes_audio_encoding": safe_get("possible_causes_audio_encoding", ""),
+        "recommended_actions_audio": structured_answer.get("recommended_actions_audio"),  # nullable
+        "recommended_actions_audio_encoding": safe_get("recommended_actions_audio_encoding", ""),
+        "safety_warnings_audio": structured_answer.get("safety_warnings_audio"),  # nullable
+        "safety_warnings_audio_encoding": safe_get("safety_warnings_audio_encoding", ""),
         # TTS 텍스트 (원본 기반)
-        "tts_text": structured_answer.get("tts_text", ""),
+        "tts_text": safe_get("tts_text", ""),
         # 리스트 형태는 모바일에서 사용하지 않지만 호환성을 위해 빈 리스트로 전송
         "possible_causes": [],
         "recommended_actions": [],
