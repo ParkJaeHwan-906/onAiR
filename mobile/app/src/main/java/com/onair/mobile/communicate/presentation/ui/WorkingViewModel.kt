@@ -102,6 +102,7 @@ class WorkingViewModel(
     }
     fun onFlowCompleted() {
         _onAirState.value = OnAirState.Waiting
+        SocketHolder.socketClient.resetShared()
     }
 }
 sealed class OnAirState {
