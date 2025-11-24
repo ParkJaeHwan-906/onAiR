@@ -382,7 +382,7 @@ class GcpBufferedStt:
             use_enhanced=True,
             model="command_and_search",
             speech_contexts=[
-                speech.SpeechContext(phrases=["온에어", "OnAir"], boost=20.0)
+                speech.SpeechContext(phrases=["온에어", "OnAir", "오네요", "보네요", "에어", "오내요", "보내요"], boost=23.0)
             ],
         )
         audio = speech.RecognitionAudio(content=audio_data)
