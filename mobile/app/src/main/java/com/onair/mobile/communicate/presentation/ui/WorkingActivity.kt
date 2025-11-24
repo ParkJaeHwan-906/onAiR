@@ -283,7 +283,7 @@ class WorkingActivity : AppCompatActivity() {
             launch {
                 workingViewModel.onAirState.collect { onAirState ->
                     when (onAirState) {
-                        OnAirState.Started -> TODO()
+                        OnAirState.Started -> handleWakewordDetected()
                         OnAirState.Processing -> TODO()
                         OnAirState.Waiting -> TODO()
                     }
@@ -315,12 +315,7 @@ class WorkingActivity : AppCompatActivity() {
             workingViewModel.liveKitToken.collect { token ->
                 Log.d("RTC", "LiveKit 토큰 수신: ${if (token.isNotBlank()) "있음 (길이: ${token.length})" else "없음"}")
                 if (token.isNotBlank()) {
-                    Log.i(TAG, "============================================================")
-                    Log.i(TAG, "🚀 CallActivity로 이동 시작")
-                    Log.i(TAG, "   토큰: ${token.take(20)}...")
-                    Log.i(TAG, "   설명: $description")
-                    Log.i(TAG, "============================================================")
-                    
+
                     val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
 //                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
@@ -590,10 +585,6 @@ class WorkingActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // UI 업데이트: "통신 중..." 표시
-                runOnUiThread {
-//                    binding.taskName.text = "통신 중..."
-                }
                 Log.i(TAG, "📱 UI 업데이트: CV 탐지 정상 메시지 표시")
 
                 // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
@@ -954,7 +945,9 @@ class WorkingActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Wakeword 감지 이벤트 처리 오류: ${e.message}")
                 e.printStackTrace()
-                socketIoSttClient.sendWakewordAudioCompleted()
+                socketIoSttClient.sendWakewordAudioCompleted(
+
+                )
             }
         }
     }
