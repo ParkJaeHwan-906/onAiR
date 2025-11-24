@@ -222,6 +222,7 @@ async def handle_wakeword_detected(sid, data):
     라즈베리파이로부터 Wakeword 감지 이벤트 수신
     모바일로 이벤트를 전송하여 음성 파일 재생 시작
     """
+    print("🎤 Wakeword 감지됨")
     sender_device = device_map.get(sid, "unknown")
     
     # 라즈베리파이에서만 받음
