@@ -33,16 +33,19 @@ class WorkingViewModel(
     val finalAnswer = SocketHolder.socketClient.finalAnswer
     val cvAnswer = SocketHolder.socketClient.cvAnswer
     val endService = SocketHolder.socketClient.endService
+    val wakewordFlow = SocketHolder.socketClient.wakewordFlow
 
-    init {
-        viewModelScope.launch {
-            SocketHolder.socketClient.wakewordFlow.collect {
-                if (_onAirState.value == OnAirState.Waiting) {
-                    _onAirState.value = OnAirState.Started
-                }
-            }
-        }
-    }
+//    init {
+//        Log.d("WorkingVM", "WorkingViewModel init 실행됨")
+//        viewModelScope.launch {
+//            SocketHolder.socketClient.wakewordFlow.collect {
+//                Log.d("working viewmodel", "현재 상태: ${_onAirState.value}")
+//                if (_onAirState.value == OnAirState.Waiting) {
+//                    _onAirState.value = OnAirState.Started
+//                }
+//            }
+//        }
+//    }
 
 
     fun endTask(taskId: Long, solution: String) {
@@ -89,6 +92,7 @@ class WorkingViewModel(
     }
 
     fun onWakewordDetected() {
+        Log.d("workingVM", "현재 상태 :${_onAirState.value}")
         if (_onAirState.value == OnAirState.Waiting) {
             _onAirState.value = OnAirState.Started
         }
