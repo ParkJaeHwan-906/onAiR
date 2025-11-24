@@ -57,7 +57,7 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-    private val _wakewordFlow = MutableSharedFlow<Unit>()
+    private val _wakewordFlow = MutableSharedFlow<Unit>(replay = 1)
     val wakewordFlow = _wakewordFlow.asSharedFlow()
     private val _callEnd = Channel<Unit>(Channel.BUFFERED)
     val callEnd = _callEnd.receiveAsFlow()
@@ -314,7 +314,7 @@ class SocketIoSttClient(
                 _wakewordFlow.tryEmit(Unit)
 //                try {
 //                    val data = args[0] as? JSONObject
-//                    Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
+                    Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
 //                    onWakewordDetected?.invoke()
 //                } catch (e: Exception) {
 //                    Log.e(TAG, "❌ Wakeword 감지 이벤트 처리 오류: ${e.message}")
