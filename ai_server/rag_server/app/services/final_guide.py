@@ -131,6 +131,19 @@ async def generate_final_guide(
             "message": cv_result.get('message', '')
         }
     })
+    # await broadcast_to_func(["mobile", "pc"], "final_answer", {
+    #     "answer": answer_text,
+    #     "structured_answer": mobile_structured_answer,
+    #     "audio_content": None,
+    #     "audio_encoding": None,
+    #     "citations": structured_answer.get("citations", []),
+    #     "cv_detection_result": {
+    #         "device_type": device_type,
+    #         "modules": modules,
+    #         "anomalies": anomalies,
+    #         "message": cv_result.get('message', '')
+    #     }
+    # })
     print("✅ 모바일로 전체 정비 가이드 전송 완료")
     print("=" * 60)
     

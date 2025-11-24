@@ -126,7 +126,7 @@ class GcpBufferedStt:
         # (모바일 오디오 재생 완료를 기다리지 않고 버퍼링 STT가 시작되므로 충분한 시간 제공)
         INITIAL_GRACE_PERIOD = 6.0
         last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
-        MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
+        MIN_RMS_THRESHOLD = 300.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
         
         chunk_count = 0
         # 청크 읽기 타임아웃: 0.1초 (큐가 비어있을 때 무한 대기 방지)
