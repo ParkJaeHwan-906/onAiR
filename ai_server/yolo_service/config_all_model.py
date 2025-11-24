@@ -1,5 +1,5 @@
 
-ALL_MODEL_PATH = "/app/ai_server/yolo_service/models/final_v1.pt"
+ALL_MODEL_PATH = "/app/ai_server/yolo_service/models/final_v3.pt" 
 
 ALL_CLASS_NAMES = [
     "AHU", "AHU_pannel", "Boiler", "Chiler", "belt",
