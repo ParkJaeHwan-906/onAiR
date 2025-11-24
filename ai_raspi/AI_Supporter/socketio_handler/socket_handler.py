@@ -121,6 +121,9 @@ class SocketIOClient:
         FastAPI 서버에서 wakeword 오디오 처리가 완료되었음을 알림.
         """
         if hasattr(self.manager, "stt_core"):
+            if not self.manager.stt_core.ignore_wakeword:
+                return
+
             self.manager.stt_core.wakeword_audio_done.set()
 
     async def on_handle_audio_stream(self, data):
