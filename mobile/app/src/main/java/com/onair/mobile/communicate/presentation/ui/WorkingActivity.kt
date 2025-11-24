@@ -281,11 +281,17 @@ class WorkingActivity : AppCompatActivity() {
                 }
             }
             launch {
+                workingViewModel.wakewordFlow.collect { value ->
+                    Log.d(TAG, "wakeword 감지")
+                    workingViewModel.onWakewordDetected()
+                }
+            }
+            launch {
                 workingViewModel.onAirState.collect { onAirState ->
                     when (onAirState) {
                         OnAirState.Started -> handleWakewordDetected()
-                        OnAirState.Processing -> TODO()
-                        OnAirState.Waiting -> TODO()
+                        OnAirState.Processing -> Log.d(TAG, "Processing")
+                        OnAirState.Waiting -> Log.d(TAG, "Waiting")
                     }
                 }
             }
