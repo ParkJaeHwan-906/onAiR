@@ -38,7 +38,11 @@ class STTCore:
     # ---------------------------------
     def lcs_ratio(self, a, b):
         import difflib
-        return difflib.SequenceMatcher(None, a, b).ratio()
+        ratios = []
+        for item in b:
+            s = difflib.SequenceMatcher(None, a, item)
+            ratios.append(s.ratio())
+        return max(ratios)
 
     def regx_text(self, text):
         return re.sub(r'[^A-Za-z가-힣]', '', text)
@@ -54,11 +58,14 @@ class STTCore:
 
         # 영어
         if all(ord(c) < 128 for c in cleaned):
-            return self.lcs_ratio(cleaned.lower(), "onair"), "ENG"
+            return self.lcs_ratio(cleaned.lower(), ["onair"]), "ENG"
 
         # 한국어
         cleaned_jamo = self.to_jamo(cleaned)
-        keyword_jamo = self.to_jamo(keyword)
+        # keyword_jamo = self.to_jamo(keyword)
+        # Sample 증가
+        keyword_jamo = [self.to_jamo("온에어"), self.to_jamo("오네요"), self.to_jamo("오내요")
+                        , self.to_jamo("보네요"), self.to_jamo("보내요")]
         return self.lcs_ratio(cleaned_jamo, keyword_jamo), "KOR"
 
     def reset_to_initial_state(self):
