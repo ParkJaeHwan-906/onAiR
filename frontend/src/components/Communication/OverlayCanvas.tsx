@@ -341,15 +341,15 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
               key={`line-${i}`}
               points={item.line.points}
               stroke={"#ffffff"}
-              strokeWidth={4}
+              strokeWidth={10}
               tension={0.5}
               lineCap="round"
               lineJoin="round"
               shadowColor={item.line.color || penColor}
               shadowBlur={15}
-              shadowOffsetX={7}
-              shadowOffsetY={7}
-              shadowOpacity={0.8}
+              shadowOffsetX={10}
+              shadowOffsetY={10}
+              shadowOpacity={1.9}
               opacity={item.opacity}
               globalCompositeOperation="lighter"
             />

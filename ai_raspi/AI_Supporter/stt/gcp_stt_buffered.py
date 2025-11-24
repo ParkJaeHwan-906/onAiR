@@ -126,7 +126,7 @@ class GcpBufferedStt:
         # (모바일 오디오 재생 완료를 기다리지 않고 버퍼링 STT가 시작되므로 충분한 시간 제공)
         INITIAL_GRACE_PERIOD = 6.0
         last_speech_time = start_time  # 마지막으로 실제 음성이 감지된 시간
-        MIN_RMS_THRESHOLD = 500.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
+        MIN_RMS_THRESHOLD = 300.0  # 실제 음성으로 간주하는 최소 RMS 값 (wakeword_detector와 동일)
         
         chunk_count = 0
         # 청크 읽기 타임아웃: 0.1초 (큐가 비어있을 때 무한 대기 방지)
@@ -382,7 +382,7 @@ class GcpBufferedStt:
             use_enhanced=True,
             model="command_and_search",
             speech_contexts=[
-                speech.SpeechContext(phrases=["온에어", "OnAir"], boost=20.0)
+                speech.SpeechContext(phrases=["온에어", "OnAir", "오네요", "보네요", "에어", "오내요", "보내요"], boost=23.0)
             ],
         )
         audio = speech.RecognitionAudio(content=audio_data)

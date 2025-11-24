@@ -222,6 +222,7 @@ async def handle_wakeword_detected(sid, data):
     라즈베리파이로부터 Wakeword 감지 이벤트 수신
     모바일로 이벤트를 전송하여 음성 파일 재생 시작
     """
+    print("🎤 Wakeword 감지됨")
     sender_device = device_map.get(sid, "unknown")
     
     # 라즈베리파이에서만 받음
@@ -427,6 +428,7 @@ async def handle_intent_audio_completed(sid, data):
 
             # 모바일로 anomaly 전송
             await broadcast_to("mobile", "cv_detection_anomaly", payload)
+            # await broadcast_to(["mobile", "pc"], "cv_detection_anomaly", payload)
 
             # ⚠️ 주의: cv_detection_success는 generate_final_guide에서 전송됨 (중복 방지)
 

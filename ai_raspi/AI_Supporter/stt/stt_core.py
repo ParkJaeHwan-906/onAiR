@@ -38,7 +38,11 @@ class STTCore:
     # ---------------------------------
     def lcs_ratio(self, a, b):
         import difflib
-        return difflib.SequenceMatcher(None, a, b).ratio()
+        ratios = []
+        for item in b:
+            s = difflib.SequenceMatcher(None, a, item)
+            ratios.append(s.ratio())
+        return max(ratios)
 
     def regx_text(self, text):
         return re.sub(r'[^A-Za-z가-힣]', '', text)
@@ -54,11 +58,14 @@ class STTCore:
 
         # 영어
         if all(ord(c) < 128 for c in cleaned):
-            return self.lcs_ratio(cleaned.lower(), "onair"), "ENG"
+            return self.lcs_ratio(cleaned.lower(), ["onair"]), "ENG"
 
         # 한국어
         cleaned_jamo = self.to_jamo(cleaned)
-        keyword_jamo = self.to_jamo(keyword)
+        # keyword_jamo = self.to_jamo(keyword)
+        # Sample 증가
+        keyword_jamo = [self.to_jamo("온에어"), self.to_jamo("오네요"), self.to_jamo("오내요")
+                        , self.to_jamo("보네요"), self.to_jamo("보내요")]
         return self.lcs_ratio(cleaned_jamo, keyword_jamo), "KOR"
 
     def reset_to_initial_state(self):
@@ -233,62 +240,6 @@ class STTCore:
                             logger.warning("⚠️ 음성 데이터가 None입니다")
                             continue
                         
-                        # ---------------------------------------------------------------------
-                        # 마이크 큐에 쌓인 오래된 오디오 제거 (이전 wakeword 감지의 잔여 데이터 방지)
-                        # self.mic.flush_queue()
-                        # logger.info("🧹 마이크 큐 비움 완료 (새로운 오디오 수집 준비)")
-                        
-                        # 2단계: wakeword 감지 후 추가로 오디오 수집 (최대 1.0초)
-                        # 버퍼를 clear했으므로, 이후 들어오는 오디오는 wakeword 이후의 오디오
-                        # additional_audio_chunks = []
-                        # collect_duration = 1.0  # 추가로 1.0초 수집 (0.5초 → 1.0초로 증가)
-                        # collect_samples = int(16000 * collect_duration)  # 16000 샘플
-                        # collected_samples = 0
-                        # start_collect_time = time.time()
-                        
-                        # logger.info(f"📥 Wakeword 감지 후 추가 오디오 수집 시작 (목표: {collect_duration}초)")
-                        
-                        # while collected_samples < collect_samples and (time.time() - start_collect_time) < collect_duration + 0.3:  # 타임아웃 1.3초
-                        #     chunk = self.mic.read(timeout=0.1)
-                        #     if chunk is not None:
-                                # 16000Hz로 리샘플링된 오디오를 bytes로 변환
-                                # if isinstance(chunk, np.ndarray):
-                                #     chunk_bytes = chunk.astype(np.int16).tobytes()
-                                # else:
-                                #     chunk_bytes = chunk
-                                # additional_audio_chunks.append(chunk_bytes)
-                                # collected_samples += len(chunk_bytes) // 2  # 16bit = 2 bytes per sample
-                        
-                        # 3단계: 기존 오디오 + 추가 오디오 합치기
-                        # if additional_audio_chunks:
-                        #     additional_audio = b''.join(additional_audio_chunks)
-                        #     raw_audio = raw_audio + additional_audio
-                        #     logger.info(f"✅ 추가 오디오 수집 완료: {len(additional_audio)} bytes 추가 (총 {len(raw_audio)} bytes)")
-                        # else:
-                        #     logger.warning("⚠️ 추가 오디오 수집 실패 (타임아웃 또는 큐 비어있음)")
-                        
-                        # 오디오 품질 확인 (RMS 값으로 볼륨 체크)
-                        # audio_array = np.frombuffer(raw_audio, dtype=np.int16)
-                        # rms = np.sqrt(np.mean(audio_array.astype(np.float64) ** 2))
-                        # max_abs = np.max(np.abs(audio_array))
-                        # logger.info(f"🔊 오디오 품질: RMS={rms:.1f}, 최대값={max_abs}")
-                        
-                        # 오디오 길이 확인 (최소 0.5초 = 16000Hz * 0.5 * 2 bytes = 16000 bytes)
-                        # GCP STT는 최소 0.5초 이상의 오디오가 필요하지만, 실제로는 1.5초 이상이 권장됨
-                        # MIN_AUDIO_LENGTH = int(16000 * 0.5 * 2)  # 0.5초 최소
-                        # RECOMMENDED_AUDIO_LENGTH = int(16000 * 1.5 * 2)  # 1.5초 권장 (1.0초 → 1.5초로 증가)
-                        # audio_length = len(raw_audio)
-                        # audio_duration = audio_length / 2 / 16000  # bytes -> samples -> seconds
-                        
-                        # logger.info(f"📊 최종 오디오 정보: 길이={audio_length} bytes, 지속시간={audio_duration:.2f}초")
-                        
-                        # if audio_length < MIN_AUDIO_LENGTH:
-                        #     logger.warning(f"⚠️ 음성 데이터가 너무 짧음 (길이: {audio_length} bytes, 최소: {MIN_AUDIO_LENGTH} bytes, 지속시간: {audio_duration:.2f}초)")
-                        #     continue
-                        
-                        # if audio_length < RECOMMENDED_AUDIO_LENGTH:
-                        #     logger.warning(f"⚠️ 음성 데이터가 권장 길이보다 짧음 (길이: {audio_length} bytes, 권장: {RECOMMENDED_AUDIO_LENGTH} bytes, 지속시간: {audio_duration:.2f}초) - STT 실패 가능성 있음")
-                        # ---------------------------------------------------------------------
                         stt_text = None
                         stt_error = None
                         # STT 로 교차 검증
@@ -371,22 +322,28 @@ class STTCore:
                         self.ignore_wakeword = True 
                         self.wakeword_detector.pause() 
 
-                        # 홀수 → STT
-                        if self.manager.wakeword_count % 2 == 1:
-                            # 시연 시에는, AI 서포터로 무조건 
-                            self.manager.switch_to_stt()
-                            # AI 서포터 전송
-                            self.manager.on_ai_supporter()
-                            time.sleep(1.0)
-                        else:
-                            # 오퍼레이터 통신 전송
-                            self.manager.on_connect_operator()
-                            # 수락을 했을 때
-                            self.operator_accept.clear()
-                            self.operator_accept.wait()
-                            # 시연 시에는, 오퍼레이터 통신으로 무조건
-                            self.manager.switch_to_rtc()
-                            time.sleep(1.0)
+                        # # 홀수 → STT
+                        # if self.manager.wakeword_count % 2 == 1:
+                        #     # 시연 시에는, AI 서포터로 무조건 
+                        #     self.manager.switch_to_stt()
+                        #     # AI 서포터 전송
+                        #     self.manager.on_ai_supporter()
+                        #     time.sleep(1.0)
+                        # else:
+                        #     # 오퍼레이터 통신 전송
+                        #     self.manager.on_connect_operator()
+                        #     # 수락을 했을 때
+                        #     self.operator_accept.clear()
+                        #     self.operator_accept.wait()
+                        #     # 시연 시에는, 오퍼레이터 통신으로 무조건
+                        #     self.manager.switch_to_rtc()
+                        #     time.sleep(1.0)
+
+                    # 시연 시에는, AI 서포터로 무조건 
+                    self.manager.switch_to_stt()
+                    # AI 서포터 전송
+                    self.manager.on_ai_supporter()
+                    time.sleep(1.0)
 
                     if self.manager.is_rtc_running:
                         self.wakeword_detector.pause()
