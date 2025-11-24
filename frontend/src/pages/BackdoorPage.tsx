@@ -8,8 +8,8 @@ function BackdoorPage() {
   const videoCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const ORI_W = 360;
-  const ORI_H = 480;
+  const ORI_W = 480;
+  const ORI_H = 360;
 
   /* ------------------------------------------
    * 색상 함수
@@ -197,14 +197,14 @@ function BackdoorPage() {
       <canvas
         ref={videoCanvasRef}
         className="backdoor-canvas-image"
-        width={360}
-        height={480}
+        width={480}
+        height={360}
       />
       <canvas
         ref={overlayCanvasRef}
         className="backdoor-canvas-overlay"
-        width={360}
-        height={480}
+        width={480}
+        height={360}
       />
     </div>
   );
