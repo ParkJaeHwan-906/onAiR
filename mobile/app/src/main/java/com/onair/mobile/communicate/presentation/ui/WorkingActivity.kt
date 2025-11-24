@@ -149,16 +149,20 @@ class WorkingActivity : AppCompatActivity() {
         super.onResume()
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
-            
+            workingViewModel.onFlowCompleted()
             // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
             // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
-            if (!isActivityResumed) {
-                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
-                resetToWakewordWaitingState()
-                isActivityResumed = true
-            } else {
-                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
-            }
+//            if (!isActivityResumed) {
+//                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
+//                resetToWakewordWaitingState()
+//                if (workingViewModel.onAirState.value != OnAirState.Waiting) {
+//                    Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
+//                    workingViewModel.onFlowCompleted()
+//                }
+//                isActivityResumed = true
+//            } else {
+//                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
+//            }
         }
         lifecycleScope.launch {
             workingViewModel.endService.collect {
@@ -194,6 +198,8 @@ class WorkingActivity : AppCompatActivity() {
 //                Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (중복 방지)")
 //            }
             socketIoSttClient.disconnect()
+            workingViewModel.onFlowCompleted()
+            Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
         }
         if (::sttRepository.isInitialized) {
             sttRepository.cleanup()
@@ -225,6 +231,11 @@ class WorkingActivity : AppCompatActivity() {
                         binding.videoView.setImageBitmap(cropped)
                     }
                 }
+            }
+        }
+        binding.serviceEndButton.setOnClickListener {
+            lifecycleScope.launch {
+                handleServiceEnd()
             }
         }
     }
@@ -278,10 +289,13 @@ class WorkingActivity : AppCompatActivity() {
             launch {
                 workingViewModel.finalAnswer.collect { answer ->
                     showAiAnswer(answer)
+                    withContext(Dispatchers.Main) {
+                        binding.serviceEndButton.visibility = View.VISIBLE
+                    }
                 }
             }
             launch {
-                workingViewModel.wakewordFlow.collect { value ->
+                workingViewModel.wakewordFlow.collectLatest { value ->
                     Log.d(TAG, "wakeword 감지")
                     workingViewModel.onWakewordDetected()
                 }
@@ -477,23 +491,6 @@ class WorkingActivity : AppCompatActivity() {
 
                             // intent_audio_completed 이벤트 전송 직후 WebRTC 요청 API 호출
                             lifecycleScope.launch {
-//                                val accessToken = authRepository.getAccessToken()
-//                                Log.i(TAG, "🔑 AccessToken 확인: 길이=${accessToken.length}, 비어있음=${accessToken.isEmpty()}")
-//
-//                                if (accessToken.isNotEmpty()) {
-//                                    // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-//                                    val receiverAccountId = -1L
-//                                    Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-//
-//                                    val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-//                                    if (success) {
-//                                        Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-//                                    } else {
-//                                        Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-//                                    }
-//                                } else {
-//                                    Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-//                                }
                                 workingViewModel.requestCall()
                                 // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (CV 탐지 실패/정상과 동일한 로직)
                                 raspberryPiControlRepository.notifyIntentDone("OPERATOR")
@@ -615,22 +612,6 @@ class WorkingActivity : AppCompatActivity() {
                     // WebRTC 연결 요청 전송 (OPERATOR와 동일한 로직)
                     lifecycleScope.launch {
                         workingViewModel.requestCall()
-//
-//                        if (accessToken.isNotEmpty()) {
-//                            // 작업자가 요청할 시 receiverAccountId는 -1로 고정 (API 문서 참조)
-//                            val receiverAccountId = -1L
-//                            Log.i(TAG, "📤 WebRTC 연결 요청 전송 시작: receiverAccountId=$receiverAccountId")
-//
-//                            val success = webRtcRepository.requestConnection(accessToken, receiverAccountId)
-//                            if (success) {
-//                                Log.i(TAG, "✅ WebRTC 연결 요청 완료 (서버 응답 성공)")
-//                            } else {
-//                                Log.e(TAG, "❌ WebRTC 연결 요청 실패 (서버 응답 실패 또는 오류)")
-//                            }
-//                        } else {
-//                            Log.e(TAG, "❌ AccessToken이 없어 WebRTC 연결 요청을 보낼 수 없습니다.")
-//                        }
-//
                         // 라즈베리파이 제어: 마이크 resume + 모드 buffered 유지 (OPERATOR와 동일한 로직)
                         raspberryPiControlRepository.notifyIntentDone("OPERATOR")
                     }
@@ -643,283 +624,6 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
     }
-
-
-//    private fun handleFinalAnswerFromSocket(finalAnswer: FinalAnswerDto) {
-//        Log.i(TAG, "============================================================")
-//        Log.i(TAG, "✅ [모바일] 최종 답변 수신 (GPT-4o 생성 완료)")
-//        Log.i(TAG, "   답변: ${finalAnswer.answer.take(100)}...")
-//        Log.i(TAG, "============================================================")
-//
-//        // 모달 숨기기 ("답변 생성 중..." 모달) - 즉시 실행
-//        Log.i(TAG, "============================================================")
-//        Log.i(TAG, "🔍 [모바일] final_answer 수신 시 모달 숨기기 시작")
-//        Log.i(TAG, "   aiOnDialog 상태: ${if (aiOnDialog != null) "존재" else "null"}")
-//        if (aiOnDialog != null) {
-//            Log.i(TAG, "   aiOnDialog isAdded: ${aiOnDialog?.isAdded}")
-//            Log.i(TAG, "   aiOnDialog isVisible: ${aiOnDialog?.isVisible}")
-//            Log.i(TAG, "   aiOnDialog isRemoving: ${aiOnDialog?.isRemoving}")
-//        }
-//        Log.i(TAG, "============================================================")
-//
-//        // 간단한 알림 메시지 카드 숨기기 (확실하게)
-//        // final_answer 수신 시 간단한 알림 카드가 아직 표시되어 있을 수 있으므로 확실히 숨김
-//        runOnUiThread {
-//            binding.cvResultError.visibility = View.GONE
-//            binding.cvResultError.alpha = 0f
-//            binding.cvResultError.clearAnimation()  // 진행 중인 애니메이션 취소
-//        }
-//
-//        // 모달 숨기기 및 간단한 알림 카드가 완전히 사라진 후 섹션별 카드 표시를 위해 딜레이
-//        lifecycleScope.launch {
-//            // 메인 스레드에서 모달 숨기기 (여러 번 시도)
-//            withContext(Dispatchers.Main) {
-//                hideModal()
-//            }
-//
-//            // 모달이 완전히 사라질 때까지 대기
-//            delay(200)  // 200ms 딜레이로 모달과 간단한 알림 카드가 완전히 사라지도록 보장
-//
-//            // 모달이 여전히 표시되어 있으면 다시 시도
-//            val fragment = supportFragmentManager.findFragmentByTag("waiting call")
-//            if (fragment != null && fragment is AiOnDialog && fragment.isVisible) {
-//                Log.w(TAG, "⚠️ 모달이 여전히 표시 중, 재시도")
-//                withContext(Dispatchers.Main) {
-//                    hideModal()
-//                }
-//                delay(100)  // 추가 딜레이
-//            }
-//
-//            Log.i(TAG, "✅ [모바일] 모달 숨기기 완료")
-//
-//            // 각 섹션별 말풍선 표시 및 오디오 재생
-//            val structuredAnswer = finalAnswer.structured_answer
-//            if (structuredAnswer != null) {
-//                handleStructuredAnswerSections(structuredAnswer)
-//            } else {
-//                // Fallback: 기존 방식 (전체 오디오 재생)
-//                handleFinalAnswer(
-//                    answer = finalAnswer.answer,
-//                    audioContent = finalAnswer.audio_content,
-//                    mimeType = finalAnswer.audio_encoding
-//                )
-//            }
-//        }
-//    }
-
-    /**
-     * 각 섹션별(possible_causes, recommended_actions, safety_warnings) 말풍선 표시 및 오디오 재생
-     * 마지막 섹션의 오디오 재생 완료 후 서비스 종료 처리
-     */
-//    private fun handleStructuredAnswerSections(structuredAnswer: Map<String, Any>) {
-//
-//        lifecycleScope.launch {
-//            try {
-//                // 1. possible_causes (원인) - 마크다운 텍스트 + 오디오
-//                val possibleCausesMarkdown = structuredAnswer["possible_causes_markdown"] as? String
-//                val possibleCausesAudio = structuredAnswer["possible_causes_audio"] as? String
-//                val possibleCausesAudioEncoding = structuredAnswer["possible_causes_audio_encoding"] as? String
-//
-//                // 2. recommended_actions (조치) - 마크다운 텍스트 + 오디오
-//                val recommendedActionsMarkdown = structuredAnswer["recommended_actions_markdown"] as? String
-//                val recommendedActionsAudio = structuredAnswer["recommended_actions_audio"] as? String
-//                val recommendedActionsAudioEncoding = structuredAnswer["recommended_actions_audio_encoding"] as? String
-//
-//                // 3. safety_warnings (주의사항) - 마크다운 텍스트 + 오디오
-//                val safetyWarningsMarkdown = structuredAnswer["safety_warnings_markdown"] as? String
-//                val safetyWarningsAudio = structuredAnswer["safety_warnings_audio"] as? String
-//                val safetyWarningsAudioEncoding = structuredAnswer["safety_warnings_audio_encoding"] as? String
-//
-//                // 각 섹션별 처리 (순차적으로)
-//                Log.i(TAG, "============================================================")
-//                Log.i(TAG, "📋 [모바일] 섹션별 처리 시작 (원인 → 조치 → 주의사항)")
-//                Log.i(TAG, "============================================================")
-//
-//                processSection(
-//                    sectionName = "원인",
-//                    markdownText = possibleCausesMarkdown,
-//                    audioContent = possibleCausesAudio,
-//                    audioEncoding = possibleCausesAudioEncoding,
-//                    isLastSection = false
-//                ) {
-//                    // possible_causes 완료 후 바로 다음 섹션 진행
-//                    Log.i(TAG, "✅ [모바일] 원인 섹션 완료, 조치 섹션 시작")
-//                    processSection(
-//                        sectionName = "조치",
-//                        markdownText = recommendedActionsMarkdown,
-//                        audioContent = recommendedActionsAudio,
-//                        audioEncoding = recommendedActionsAudioEncoding,
-//                        isLastSection = false
-//                    ) {
-//                        // recommended_actions 완료 후 바로 다음 섹션 진행
-//                        Log.i(TAG, "✅ [모바일] 조치 섹션 완료, 주의사항 섹션 시작")
-//                        processSection(
-//                            sectionName = "주의사항",
-//                            markdownText = safetyWarningsMarkdown,
-//                            audioContent = safetyWarningsAudio,
-//                            audioEncoding = safetyWarningsAudioEncoding,
-//                            isLastSection = true
-//                        ) {
-//                            // 마지막 섹션 완료 → 2초 대기 후 서비스 종료 처리
-//                            try {
-//                                // 2초 대기
-//                                delay(2000)
-//
-//                                // 서비스 종료 오디오 재생 시작과 동시에 모달 표시
-//                                withContext(Dispatchers.Main) {
-//                                    showOnModal()
-//                                }
-//
-//                                // 서비스 종료 오디오 재생
-//                                withContext(Dispatchers.Main) {
-//                                    try {
-//                                        mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
-//                                            // 모달 숨기기
-//                                            hideOnModal()
-//
-//                                            // FastAPI로 서비스 완료 이벤트 전송
-//                                            socketIoSttClient.sendServiceCompletedAudioCompleted()
-//                                        }
-//                                    } catch (e: Exception) {
-//                                        Log.e(TAG, "❌ 서비스 종료 오디오 재생 오류: ${e.message}")
-//                                        e.printStackTrace()
-//                                        // 오류 발생 시에도 모달 숨기고 이벤트 전송
-//                                        hideOnModal()
-//                                        socketIoSttClient.sendServiceCompletedAudioCompleted()
-//                                    }
-//                                }
-//                            } catch (e: Exception) {
-//                                Log.e(TAG, "❌ [모바일] 마지막 섹션 완료 후 서비스 종료 처리 중 오류 발생: ${e.message}")
-//                                e.printStackTrace()
-//                                // 오류 발생 시에도 모달 표시 및 서비스 종료 처리 시도
-//                                try {
-//                                    withContext(Dispatchers.Main) {
-//                                        showOnModal()
-//                                        mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
-//                                            hideOnModal()
-//                                            socketIoSttClient.sendServiceCompletedAudioCompleted()
-//                                        }
-//                                    }
-//                                } catch (e2: Exception) {
-//                                    Log.e(TAG, "❌ [모바일] 서비스 종료 처리 재시도 중 오류: ${e2.message}")
-//                                    e2.printStackTrace()
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            } catch (e: Exception) {
-//                Log.e(TAG, "❌ 섹션별 처리 오류: ${e.message}")
-//                e.printStackTrace()
-//                // 오류 발생 시에도 서비스 종료 처리
-//                socketIoSttClient.sendFinalAnswerAudioCompleted()
-//            }
-//        }
-//    }
-
-    /**
-     * 각 섹션 처리 (마크다운 말풍선 표시 + 오디오 재생)
-     */
-//    private suspend fun processSection(
-//        sectionName: String,
-//        markdownText: String?,
-//        audioContent: String?,
-//        audioEncoding: String?,
-//        isLastSection: Boolean,
-//        onComplete: suspend () -> Unit
-//    ) {
-//        // 섹션별 CardView와 TextView 매핑
-//        val (cardView, textView) = when (sectionName) {
-//            "원인" -> Pair(binding.aiResultCause, binding.aiResultCauseText)
-//            "조치" -> Pair(binding.aiResultAction, binding.aiResultActionText)
-//            "주의사항" -> Pair(binding.aiResultWarning, binding.aiResultWarningText)
-//            else -> {
-//                Log.w(TAG, "⚠️ 알 수 없는 섹션: $sectionName")
-//                // 기본값으로 원인 섹션 사용
-//                Pair(binding.aiResultCause, binding.aiResultCauseText)
-//            }
-//        }
-//
-//        try {
-//            // 마크다운 텍스트가 있으면 runSection() 호출하여 UI 표시 및 오디오 재생
-//            if (markdownText != null && markdownText.isNotBlank()) {
-//                runSection(
-//                    cardView = cardView,
-//                    textView = textView,
-//                    text = markdownText,
-//                    audioBase64 = audioContent
-//                )
-//            } else {
-//                // 마크다운 텍스트가 없으면 오디오만 재생
-//                if (audioContent != null && audioContent.isNotBlank()) {
-//                    playAudio(audioContent)
-//                }
-//            }
-//
-//            // runSection() 완료 후 완료 콜백 호출 (다음 섹션 진행)
-//            onComplete()
-//        } catch (e: Exception) {
-//            Log.e(TAG, "❌ [모바일] $sectionName 섹션 처리 중 오류 발생: ${e.message}")
-//            e.printStackTrace()
-//            // 오류 발생 시에도 완료 콜백 호출하여 다음 섹션으로 진행
-//            try {
-//                onComplete()
-//            } catch (e2: Exception) {
-//                Log.e(TAG, "❌ [모바일] 완료 콜백 호출 중 오류 발생: ${e2.message}")
-//                e2.printStackTrace()
-//            }
-//        }
-//    }
-
-
-//    private fun handleFinalAnswer(answer: String, audioContent: String? = null, mimeType: String? = null) {
-//        Log.i(TAG, "✅ [모바일] 최종 답변 처리 시작")
-//
-//        if (audioContent != null && audioContent.isNotBlank()) {
-//            lifecycleScope.launch {
-//                ttsRepository.playAudio(audioContent, mimeType) {
-//                    // 재생 완료 콜백
-//                    Log.i(TAG, "✅ [모바일] 최종 답변 TTS 재생 완료")
-//                    Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작")
-//                    Log.i(TAG, "   Type: final_answer")
-//                    // FastAPI 서버로 재생 완료 이벤트 전송
-//                    val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-//                    if (success) {
-//                        Log.i(TAG, "============================================================")
-//                        Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료")
-//                        Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
-//                    } else {
-//                        Log.e(TAG, "============================================================")
-//                    }
-//                }
-//            }
-//        } else {
-//            // 오디오가 없어도 재생 완료 이벤트 전송 (텍스트만 있는 경우)
-//            Log.i(TAG, "============================================================")
-//            Log.i(TAG, "📤 [모바일] FastAPI로 audio_playback_completed 이벤트 전송 시작 (오디오 없음)")
-//            Log.i(TAG, "   Type: final_answer")
-//            Log.i(TAG, "============================================================")
-//            val success = socketIoSttClient.sendFinalAnswerAudioCompleted()
-//            if (success) {
-//                Log.i(TAG, "============================================================")
-//                Log.i(TAG, "✅ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 완료 (오디오 없음)")
-//                Log.i(TAG, "   💡 서비스 로직 종료 → Wakeword 감지 대기 상태로 복귀")
-//                Log.i(TAG, "============================================================")
-//            } else {
-//                Log.e(TAG, "============================================================")
-//                Log.e(TAG, "❌ [모바일] FastAPI로 audio_playback_completed 이벤트 전송 실패 (오디오 없음)")
-//                Log.e(TAG, "============================================================")
-//            }
-//        }
-//    }
-
-//    private suspend fun handleFinalAnswer(ragResponse: com.onair.mobile.assistant.core.model.dto.RagResponse) {
-//        val answer = ragResponse.result?.answer ?: ""
-//        val audioContent = ragResponse.result?.audio_content
-//        val mimeType = ragResponse.result?.mime_type
-//
-//        handleFinalAnswer(answer, audioContent, mimeType)
-//    }
 
     private fun handleWakewordDetected() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
@@ -1240,7 +944,6 @@ class WorkingActivity : AppCompatActivity() {
         text: String,
         audioBase64: String?
     ) {
-        // 이전 섹션 카드가 완전히 사라졌는지 확인
         withContext(Dispatchers.Main) {
             cardView.visibility = View.VISIBLE
             cardView.slideIn()
@@ -1270,40 +973,10 @@ class WorkingActivity : AppCompatActivity() {
             Log.w(TAG, "⚠️ 오디오 base64가 null이거나 비어있습니다")
             return
         }
-
-        val audioBytes = Base64.decode(base64, Base64.DEFAULT)
-        val tempFile = File.createTempFile("tts", ".mp3")
-
-        tempFile.writeBytes(audioBytes)
-
-        val player = MediaPlayer().apply {
-            setDataSource(tempFile.path)
-        }
         val completion = CompletableDeferred<Unit>()
-        player.setOnCompletionListener {
+
+        mediaPlayerController.playBase64Audio(base64, "audio/mpeg") {
             completion.complete(Unit)
-            player.release()
-            tempFile.delete()  // 임시 파일 삭제
-        }
-        player.setOnErrorListener { _, what, extra ->
-            Log.e(TAG, "❌ MediaPlayer 오류: what=$what, extra=$extra")
-            completion.complete(Unit)  // 오류 발생 시에도 완료 처리
-            player.release()
-            tempFile.delete()
-            true
-        }
-        try {
-            player.prepare()
-            player.start()
-            Log.d(TAG, "✅ 오디오 재생 시작")
-            completion.await()  // 재생 완료까지 대기
-            Log.d(TAG, "✅ 오디오 재생 완료")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 오디오 재생 오류: ${e.message}")
-            e.printStackTrace()
-            completion.complete(Unit)
-            player.release()
-            tempFile.delete()
         }
 
         completion.await()
@@ -1444,8 +1117,9 @@ class WorkingActivity : AppCompatActivity() {
         }
     }
     private suspend fun handleServiceEnd() {
+        mediaPlayerController.stop()
+        workingViewModel.onFlowCompleted()
         try {
-
             withContext(Dispatchers.Main) {
                 binding.aiResultCause.apply {
                     fadeOut()
@@ -1457,6 +1131,9 @@ class WorkingActivity : AppCompatActivity() {
                 }
                 binding.aiResultWarning.apply {
                     fadeOut()
+                    visibility = View.GONE
+                }
+                binding.serviceEndButton.apply {
                     visibility = View.GONE
                 }
             }
