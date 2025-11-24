@@ -491,50 +491,44 @@ def llm_generate_answer(
         print(f"   상세형: 원인={len(causes)}개, 조치={len(actions)}개, 주의사항={len(warnings)}개")
         
         # ----------------------------
-        # 8) TTS friendly 변환
+        # 8) TTS friendly 변환 (요약형 기반)
         # ----------------------------
         tts_parts = []
-        if causes and actions and warnings:
+        # 요약형 우선 사용, 없으면 상세형 사용
+        use_causes = summary_causes if summary_causes else causes
+        use_actions = summary_actions if summary_actions else actions
+        use_warnings = summary_warnings if summary_warnings else warnings
+        
+        if use_causes and use_actions and use_warnings:
             tts_parts.append(f"{error_code}에 대한 정비 가이드입니다.")
-            tts_parts.append("원인은 " + ", ".join(causes[:3]) + " 등이 있습니다.")
-            tts_parts.append("조치 단계는 " + ", ".join(actions[:3]) + " 입니다.")
-            tts_parts.append("주의사항으로는 " + ", ".join(warnings[:2]) + "가 있습니다.")
+            tts_parts.append("원인은 " + use_causes[0] + "입니다.")
+            tts_parts.append("조치는 " + use_actions[0] + "입니다.")
+            tts_parts.append("주의사항은 " + use_warnings[0] + "입니다.")
         else:
             # Fallback: 기존 방식
             tts_text_parts = []
             tts_text_parts.append(f"{error_code}에 대한 정비 가이드입니다.")
-            if causes:
-                tts_text_parts.append("가능한 원인은 다음과 같습니다.")
-                for i, cause in enumerate(causes[:5], 1):
-                    tts_text_parts.append(f"{i}번째로, {cause}")
-            if actions:
-                tts_text_parts.append("다음과 같이 조치하세요.")
-                step_number_map = {
-                    1: "첫 번째", 2: "두 번째", 3: "세 번째", 4: "네 번째",
-                    5: "다섯 번째", 6: "여섯 번째", 7: "일곱 번째", 8: "여덟 번째",
-                    9: "아홉 번째", 10: "열 번째"
-                }
-                for i, action in enumerate(actions[:10], 1):
-                    step_word = step_number_map.get(i, f"{i}번째")
-                    tts_text_parts.append(f"{step_word}로, {action}")
-            if warnings:
-                tts_text_parts.append("중요한 주의사항입니다.")
-                for warning in warnings:
-                    tts_text_parts.append(warning)
+            if use_causes:
+                tts_text_parts.append("원인은 " + use_causes[0] + "입니다.")
+            if use_actions:
+                tts_text_parts.append("조치는 " + use_actions[0] + "입니다.")
+            if use_warnings:
+                tts_text_parts.append("주의사항은 " + use_warnings[0] + "입니다.")
             tts_parts = tts_text_parts
         
         result["tts_text"] = format_for_tts(". ".join(tts_parts))
         
         # ----------------------------
-        # 9) 각 섹션별 TTS 변환
+        # 9) 각 섹션별 TTS 변환 (요약형 기반)
         # ----------------------------
         from app.services.tts_service import text_to_speech
         
-        # possible_causes TTS (첫 번째 원인만 사용)
+        # possible_causes TTS (요약형 우선 사용)
         causes_audio = None
         causes_audio_encoding = None
-        if causes and len(causes) > 0:
-            causes_text = f"가능한 원인은 다음과 같습니다. {causes[0]}"
+        use_cause = summary_causes[0] if summary_causes else (causes[0] if causes else None)
+        if use_cause:
+            causes_text = f"원인은 {use_cause}입니다."
             try:
                 causes_tts = text_to_speech(format_for_tts(causes_text))
                 causes_audio = causes_tts.get("audio_content")
@@ -542,11 +536,12 @@ def llm_generate_answer(
             except Exception as e:
                 print(f"⚠️ possible_causes TTS 변환 실패: {e}")
         
-        # recommended_actions TTS (첫 번째 조치만 사용)
+        # recommended_actions TTS (요약형 우선 사용)
         actions_audio = None
         actions_audio_encoding = None
-        if actions and len(actions) > 0:
-            actions_text = f"조치 방법은 다음과 같습니다. {actions[0]}"
+        use_action = summary_actions[0] if summary_actions else (actions[0] if actions else None)
+        if use_action:
+            actions_text = f"조치는 {use_action}입니다."
             try:
                 actions_tts = text_to_speech(format_for_tts(actions_text))
                 actions_audio = actions_tts.get("audio_content")
@@ -554,11 +549,12 @@ def llm_generate_answer(
             except Exception as e:
                 print(f"⚠️ recommended_actions TTS 변환 실패: {e}")
         
-        # safety_warnings TTS (첫 번째 주의사항만 사용)
+        # safety_warnings TTS (요약형 우선 사용)
         warnings_audio = None
         warnings_audio_encoding = None
-        if warnings and len(warnings) > 0:
-            warnings_text = f"중요한 주의사항입니다. {warnings[0]}"
+        use_warning = summary_warnings[0] if summary_warnings else (warnings[0] if warnings else None)
+        if use_warning:
+            warnings_text = f"주의사항은 {use_warning}입니다."
             try:
                 warnings_tts = text_to_speech(format_for_tts(warnings_text))
                 warnings_audio = warnings_tts.get("audio_content")
