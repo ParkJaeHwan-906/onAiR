@@ -5,6 +5,7 @@ WebRTC 오디오 스트리밍 모듈
 import time
 import threading
 import logging
+import asyncio
 import sounddevice as sd
 import numpy as np
 

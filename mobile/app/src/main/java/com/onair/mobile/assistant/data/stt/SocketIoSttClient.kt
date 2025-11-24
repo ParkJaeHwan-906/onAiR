@@ -658,6 +658,33 @@ class SocketIoSttClient(
     }
     
     /**
+     * 섹션별 TTS 재생 완료 이벤트 전송
+     * 
+     * @return 전송 성공 여부
+     */
+    fun sendSectionsCompletedAudioCompleted(): Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+
+        return try {
+            val payload = JSONObject().apply {
+                put("type", "sections_completed")
+                put("timestamp", System.currentTimeMillis())
+            }
+
+            socket?.emit("audio_playback_completed", payload)
+            Log.i(TAG, "📤 모바일 섹션별 TTS 재생 완료 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 모바일 섹션별 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
      * 서비스 종료 오디오 재생 완료 이벤트 전송
      *
      * @return 전송 성공 여부
