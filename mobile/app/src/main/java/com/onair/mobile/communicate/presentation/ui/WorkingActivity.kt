@@ -1222,7 +1222,7 @@ class WorkingActivity : AppCompatActivity() {
                 answer.safety_warnings_markdown,
                 answer.safety_warnings_audio
             )
-            socketIoSttClient.sendFinalAnswerAudioCompleted()
+            socketIoSttClient.sendSectionsCompletedAudioCompleted()
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ 섹션 처리 중 오류 발생: ${e.message}")
