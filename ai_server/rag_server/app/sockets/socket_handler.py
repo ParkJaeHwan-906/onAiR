@@ -621,7 +621,8 @@ async def handle_video_frame(sid, data):
             print("⚠️ Failed to decode frame bytes")
             return
         try:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            # frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            frame = cv2.flip(frame, -1)
         except Exception as e:
             print(f"⚠️ Frame rotation error: {e}")
     except Exception as e:
