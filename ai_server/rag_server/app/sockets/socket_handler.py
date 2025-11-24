@@ -427,6 +427,7 @@ async def handle_intent_audio_completed(sid, data):
 
             # 모바일로 anomaly 전송
             await broadcast_to("mobile", "cv_detection_anomaly", payload)
+            # await broadcast_to(["mobile", "pc"], "cv_detection_anomaly", payload)
 
             # ⚠️ 주의: cv_detection_success는 generate_final_guide에서 전송됨 (중복 방지)
 
