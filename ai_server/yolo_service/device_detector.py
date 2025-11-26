@@ -4,10 +4,11 @@ import asyncio
 from loguru import logger
 from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
 from ai_server.yolo_service.redis_client import (
-    save_device_state, get_device_state, get_latest_frame, save_yolo_result
+    save_device_state, get_device_state, get_latest_frame, save_yolo_result, get_cv_buffer_frames
 )
 from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, DEVICE_CLASSES
 from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG, PRESS_CONFIG
+from ai_server.yolo_service.fan_belt_anomaly import analyze_fan_belt
 
 DETECTION_INTERVAL = 2.0
 CONF_THRESHOLD = 0.75
@@ -77,6 +78,40 @@ async def device_detector_loop():
                                 is_anomaly = True
 
                             logger.info(f"[PRESS] angle={angle:.2f}°, value={press_value:.2f}")
+                    
+                        elif label == "fan":
+                            buf = await get_cv_buffer_frames()
+                            frames_buf = [b["frame"] for b in buf if b.get("frame") is not None]
+
+                            if len(frames_buf) < 10:
+                                logger.warning("[FAN] 프레임 부족으로 분석 건너뜀")
+                                analyze_fan_belt_result = {
+                                    "type": "fan_belt",
+                                    "status": "error",
+                                    "detail": "not_enough_frames",
+                                    "message": "프레임 부족",
+                                    "percent": {}
+                                }
+                            else:
+                                # 팬 ROI 좌표 전달
+                                analyze_fan_belt_result = await analyze_fan_belt(
+                                    frames_buf,
+                                    [{
+                                        "x1": x1, "y1": y1,
+                                        "x2": x2, "y2": y2
+                                    }]
+                                )
+
+                            # 결과 로그 출력
+                            logger.info(
+                                f"[FAN] result={analyze_fan_belt_result.get('result')}, "
+                                f"status={analyze_fan_belt_result.get('status')}, "
+                                f"detail={analyze_fan_belt_result.get('detail')}, "
+                                f"msg={analyze_fan_belt_result.get('message')}"
+                            )
+
+                            # YOLO 결과에도 anomaly 여부 기록
+                            is_anomaly = analyze_fan_belt_result.get("status") == "anomaly"
 
                     all_boxes.append({
                         "label": display_label,
