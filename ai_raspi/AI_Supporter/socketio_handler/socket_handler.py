@@ -115,15 +115,22 @@ class SocketIOClient:
             )
         except Exception as e:
             logger.error(f"❌ audio_frame emit 오류: {e}")
+    
+    async def emit_stt_result(self, msg):
+        try:
+            await self.sio.emit(
+                "stt_result",
+                msg
+            )
+        except Exception as e:
+            logger.error(f"❌ stt_result emit 오류: {e}")
     #=============================================================
     async def on_wakeword_audio_completed(self, data):
         """
         FastAPI 서버에서 wakeword 오디오 처리가 완료되었음을 알림.
         """
+        logger.info("wakeword audio completed receive")
         if hasattr(self.manager, "stt_core"):
-            if not self.manager.stt_core.ignore_wakeword:
-                return
-
             self.manager.stt_core.wakeword_audio_done.set()
 
     async def on_handle_audio_stream(self, data):
