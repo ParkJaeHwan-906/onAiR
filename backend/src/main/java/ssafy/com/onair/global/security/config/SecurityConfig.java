@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/sse/**").permitAll()
                         .requestMatchers("/task/reset").permitAll()
+                        .requestMatchers("/webrtc/get-join-token").permitAll()
                         .anyRequest().authenticated()
                 );
 
