@@ -11,37 +11,91 @@ import tflite_runtime.interpreter as tflite
 from collections import deque
 import time
 import os
+from scipy.fftpack import dct
 
 SAMPLE_RATE = 16000
 DURATION = 2.0  # 버퍼 크기를 2초로 증가 (STT 검증을 위해 더 긴 오디오 필요)
 N_FFT = 400
 HOP_LENGTH = 160
 N_MELS = 40
+N_MFCC = 40
 WAKEWORD_THRESHOLD = 0.90
 LABELS = ["onair", "negative"]
+TARGET_FRAMES = 98
 
 # -----------------------------
 # Mel 필터 계산
 # -----------------------------
-def hz_to_mel(hz): return 2595 * np.log10(1 + hz / 700.0)
-def mel_to_hz(mel): return 700 * (10**(mel / 2595.0) - 1)
+def hz_to_mel(hz):
+    return 2595 * np.log10(1 + hz / 700.0)
 
-def mel_filterbank(n_mels=N_MELS, n_fft=N_FFT, sr=SAMPLE_RATE, fmin=0, fmax=None):
-    fmax = fmax or sr / 2
+def mel_to_hz(mel):
+    return 700 * (10**(mel / 2595.0) - 1)
+
+def build_mel_filterbank(n_mels=N_MELS, n_fft=N_FFT, sr=SAMPLE_RATE):
+    fmin = 0
+    fmax = sr / 2
+
     mel_points = np.linspace(hz_to_mel(fmin), hz_to_mel(fmax), n_mels + 2)
     hz_points = mel_to_hz(mel_points)
-    bin_points = np.floor((n_fft + 1) * hz_points / sr).astype(int)
-    fbanks = np.zeros((n_mels, n_fft // 2 + 1))
+
+    bins = np.floor((n_fft + 1) * hz_points / sr).astype(int)
+    fb = np.zeros((n_mels, n_fft // 2 + 1))
+
     for i in range(1, n_mels + 1):
-        left, center, right = bin_points[i - 1], bin_points[i], bin_points[i + 1]
+        left = bins[i - 1]
+        center = bins[i]
+        right = bins[i + 1]
+
         for j in range(left, center):
-            fbanks[i - 1, j] = (j - left) / (center - left)
+            fb[i - 1, j] = (j - left) / (center - left)
         for j in range(center, right):
-            fbanks[i - 1, j] = (right - j) / (right - center)
-    return fbanks
+            fb[i - 1, j] = (right - j) / (right - center)
 
-MEL_FB = mel_filterbank()
+    return fb
 
+MEL_FBANK = build_mel_filterbank()
+
+def compute_mfcc(audio):
+    """librosa 없이 MFCC 계산 (학습과 동일한 형태)"""
+    # float32 변환
+    wav = audio.astype(np.float32) / 32768.0
+
+    # STFT
+    _, _, Zxx = scipy.signal.stft(
+        wav,
+        fs=SAMPLE_RATE,
+        window="hann",
+        nperseg=N_FFT,
+        noverlap=N_FFT - HOP_LENGTH,
+        padded=False,
+        boundary=None
+    )
+
+    # 파워 스펙트럼
+    power = np.abs(Zxx) ** 2
+
+    # Mel Filterbank 적용
+    mel_spec = np.dot(MEL_FBANK, power)
+
+    # 로그 적용
+    log_mel = np.log10(mel_spec + 1e-10).T  # (time, n_mels)
+
+    # MFCC = DCT(log-mel)
+    mfcc = dct(log_mel, type=2, axis=1, norm='ortho')[:, :N_MFCC]
+
+    # 프레임 길이 맞추기
+    if mfcc.shape[0] < TARGET_FRAMES:
+        mfcc = np.pad(mfcc, ((0, TARGET_FRAMES - mfcc.shape[0]), (0, 0)))
+    else:
+        mfcc = mfcc[:TARGET_FRAMES]
+
+    # CMVN(정규화)
+    mean = np.mean(mfcc)
+    std = np.std(mfcc) + 1e-6
+    mfcc = (mfcc - mean) / std
+
+    return np.expand_dims(mfcc, (0, -1)).astype(np.float32)
 # -----------------------------
 # WakewordDetector 클래스
 # -----------------------------
@@ -86,20 +140,7 @@ class WakewordDetector:
             self.interpreter = None
 
     def extract_features(self, audio):
-        """오디오 → Mel Spectrogram 변환"""
-        _, _, Zxx = scipy.signal.stft(
-            audio, fs=SAMPLE_RATE, window="hann",
-            nperseg=N_FFT, noverlap=N_FFT - HOP_LENGTH
-        )
-        power = np.abs(Zxx) ** 2
-        power = power / np.sum(np.hanning(N_FFT)**2)
-        mel = np.dot(MEL_FB, power)
-        mel_norm = mel / (np.max(mel) + 1e-6)
-        mel_db = 10 * np.log10(mel_norm + 1e-10)
-        mel_db = np.clip(mel_db, -80, 0)
-        mel_db = mel_db.T
-        mel_db = np.pad(mel_db, ((0, max(0, 98 - mel_db.shape[0])), (0, 0)))[:98, :]
-        return np.expand_dims(mel_db, (0, -1)).astype(np.float32)
+        return compute_mfcc(audio)
 
     def predict_wakeword(self, audio_chunk):
         """TFLite 모델 예측"""
@@ -311,7 +352,7 @@ class WakewordDetector:
 # 단독 테스트 실행
 # -----------------------------
 if __name__ == "__main__":
-    detector = WakewordDetector("/home/pi/wakeword_onair_cnn.tflite")
+    detector = WakewordDetector("/home/pi/Wakeword/wakeword_onair_mfcc_fp16.tflite")
     detector.start()
     print("🎙️ 'onAir'라고 말해보세요! 감지 중입니다...")
     try:
