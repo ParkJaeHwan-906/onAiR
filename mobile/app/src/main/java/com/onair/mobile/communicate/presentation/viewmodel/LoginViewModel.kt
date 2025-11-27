@@ -1,7 +1,5 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import com.onair.mobile.communicate.data.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
