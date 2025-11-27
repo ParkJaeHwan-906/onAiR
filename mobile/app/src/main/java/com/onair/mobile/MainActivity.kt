@@ -12,10 +12,10 @@ import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
 import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.ApiService
-import com.onair.mobile.communicate.presentation.ui.CommunicationViewModel
+import com.onair.mobile.communicate.presentation.viewmodel.CommunicationViewModel
 import com.onair.mobile.communicate.presentation.ui.LoginActivity
-import com.onair.mobile.communicate.presentation.ui.MainViewModel
-import com.onair.mobile.communicate.presentation.ui.NavigationNext
+import com.onair.mobile.communicate.presentation.viewmodel.MainViewModel
+import com.onair.mobile.communicate.presentation.viewmodel.NavigationNext
 import com.onair.mobile.communicate.presentation.ui.TaskListFragment
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import com.onair.mobile.databinding.ActivityMainBinding

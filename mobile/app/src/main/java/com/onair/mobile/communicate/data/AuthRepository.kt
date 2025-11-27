@@ -16,22 +16,6 @@ class AuthRepository(
     private val apiService: ApiService,
     private val dataStore: PreferenceUtil
 ) {
-//    suspend fun login(email: String, password: String): ApiResponse<Unit> {
-//        return try {
-//            val response = apiService.login(LoginRequest(email, password))
-//            if (response.isSuccessful) {
-//                val token = response.body()?.accessToken ?: return ApiResponse.Error("토큰없음")
-//                dataStore.setToken(token, "")  //saveAccessToken 변경 고려
-//                ApiResponse.Success(Unit)
-//            }
-//            else {
-//                ApiResponse.Error("로그인 실패", response.code())
-//
-//            }
-//        } catch (e: Exception) {
-//            ApiResponse.Error(e.message)
-//        }
-//    }
     fun login(email: String, password : String, onResult: (Result<Unit>) -> Unit) {
         apiService.login(LoginRequest(email, password)).enqueue(object : Callback<ApiResponse<TokenData>> {
             override fun onResponse(
@@ -59,11 +43,14 @@ class AuthRepository(
                 call: Call<ApiResponse<TokenData>?>,
                 t: Throwable
             ) {
-                Log.e("ticket", t.message.toString())
+                Log.e("Login", t.message.toString())
                 onResult(Result.failure(t))
             }
 
         })
+    }
+    fun logout() {
+        dataStore.reset()
     }
     fun getRefreshToken(): String {
         return dataStore.getRefreshToken()
