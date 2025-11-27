@@ -1056,24 +1056,24 @@ class WorkingActivity : AppCompatActivity() {
     /**
      * 비정상 종료 시 wakeword 대기 상태로 복귀하기 위한 통신 종료 이벤트 전송
      */
-    private fun sendCommunicationCloseForRecovery() {
-        try {
-            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
-                val success = socketIoSttClient.sendCommunicationClose()
-                if (success) {
-                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
-                    hasSentCommunicationClose = true
-                } else {
-                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
-                }
-            } else {
-                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
-            e.printStackTrace()
-        }
-    }
+//    private fun sendCommunicationCloseForRecovery() {
+//        try {
+//            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+//                val success = socketIoSttClient.sendCommunicationClose()
+//                if (success) {
+//                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
+//                    hasSentCommunicationClose = true
+//                } else {
+//                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+//                }
+//            } else {
+//                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
+//            }
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
+//            e.printStackTrace()
+//        }
+//    }
     
     /**
      * 상태 초기화 및 wakeword 대기 상태로 복귀
