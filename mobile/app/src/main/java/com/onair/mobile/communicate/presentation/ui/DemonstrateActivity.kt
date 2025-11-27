@@ -240,7 +240,7 @@ class DemonstrateActivity : AppCompatActivity() {
                 viewModel.finishEvent.collect {
 //                    showOnModal()
 //                    context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-//                    Log.d("Demo", "오디오 함수 리턴")
+                    Log.d("Demo", "오디오 함수 리턴")
 //                    hideOnModal()
                     (context as? Activity)?.finish()
                 }
@@ -248,6 +248,7 @@ class DemonstrateActivity : AppCompatActivity() {
 
             LaunchedEffect(viewModel) {
                 viewModel.dataReceived.collect { jsonString ->
+                    Log.d("damonstrate activity", jsonString)
                     try {
                         val json = JSONObject(jsonString)
                         val eventType = json.getString("event")
@@ -342,7 +343,6 @@ class DemonstrateActivity : AppCompatActivity() {
                         }
                     }
                 }
-                Log.d("CallActivity marker", markers.toString())
                 markers.forEach { marker ->
                     val p = transform(marker.info.x, marker.info.y)
                     if (marker.type == "description") {

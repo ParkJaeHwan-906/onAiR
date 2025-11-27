@@ -66,8 +66,14 @@ class SocketIoSttClient(
     val wakewordFlow = _wakewordFlow.asSharedFlow()
 //    private var _wakewordFlow = Channel<Unit>(Channel.BUFFERED)
 //    val wakewordFlow = _wakewordFlow.receiveAsFlow()
-    private val _callEnd = Channel<Unit>(Channel.BUFFERED)
-    val callEnd = _callEnd.receiveAsFlow()
+//    private val _callEnd = Channel<Unit>(Channel.BUFFERED)
+//    val callEnd = _callEnd.receiveAsFlow()
+    private val _callEnd = MutableSharedFlow<Unit>(
+        replay = 0,             // 👈 0으로 설정하면 구독 전 데이터는 받지 않음
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val callEnd = _callEnd.asSharedFlow()
     private var _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
@@ -324,8 +330,8 @@ class SocketIoSttClient(
             }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
-//                _callEnd.tryEmit(true)
-                _callEnd.trySend(Unit)
+                _callEnd.tryEmit(Unit)
+//                _callEnd.trySend(Unit)
             }
 
             socket?.on("final_answer") { args ->
@@ -742,11 +748,18 @@ class SocketIoSttClient(
             false
         }
     }
+//    fun clearCallEndBuffer() {
+//        while (_callEnd.tryReceive().isSuccess) {
+//
+//        }
+//    }
     @OptIn(ExperimentalCoroutinesApi::class)
     fun resetShared() {
         _wakewordFlow.resetReplayCache()
         _finalAnswer.resetReplayCache()
         _cvAnswer.resetReplayCache()
+
+//        clearCallEndBuffer()
     }
     
     /**
