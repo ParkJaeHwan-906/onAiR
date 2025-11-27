@@ -241,8 +241,8 @@ class STTCore:
                             logger.warning("⚠️ Wakeword 감지기가 중지되었습니다. 재시작합니다...")
                             self.wakeword_detector.start()
                         
-                        if self.wakeword_detector.is_paused:
-                            self.wakeword_detector.resume()
+                        # if self.wakeword_detector.is_paused:
+                        #     self.wakeword_detector.resume()
                         
                         # 마이크 상태 확인
                         if not self.mic.is_active():
@@ -374,10 +374,15 @@ class STTCore:
                         self.wakeword_detector.pause()
                         time.sleep(0.1)
                         continue
+                    else:
+                        # RTC가 종료된 상태인데 아직 ignore_wakeword=True이면 즉시 초기화
+                        if self.ignore_wakeword:
+                            logger.info("🔄 RTC 종료 감지 → 초기 상태로 복귀")
+                            self.reset_to_initial_state()
 
                     # RTC 모드가 종료되면 초기 상태로 복귀
-                    self.ignore_wakeword = False
-                    self.wakeword_detector.resume()
+                    # self.ignore_wakeword = False
+                    # self.wakeword_detector.resume()
 
                 except Exception as e:
                     logger.error(f"❌ STT Core 루프 오류: {e}")
