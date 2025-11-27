@@ -1,4 +1,4 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.onair.mobile.communicate.data.SSERepository

@@ -1,12 +1,8 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
-import android.app.Application
-import android.util.Log
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onair.mobile.communicate.data.TaskRepository
-import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.dto.TaskResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

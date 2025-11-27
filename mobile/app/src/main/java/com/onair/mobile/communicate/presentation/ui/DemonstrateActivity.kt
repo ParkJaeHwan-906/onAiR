@@ -1,14 +1,11 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.app.Activity
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -64,7 +61,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
-import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import com.onair.mobile.communicate.presentation.viewmodel.CallViewModel
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import com.onair.mobile.databinding.ActivityDemonstrateBinding
 import io.livekit.android.compose.ui.RendererType
@@ -72,25 +69,23 @@ import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
-import kotlin.coroutines.resume
 import kotlin.getValue
 import kotlin.math.roundToInt
 
 class DemonstrateActivity : AppCompatActivity() {
     private lateinit var description : String
-    private var onAirOnDialog : OnAirOnDialog? = null
+//    private var onAirOnDialog : OnAirOnDialog? = null
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
         val token = intent.getStringExtra("token")
             ?: throw NullPointerException("token is null")
-        CallViewModel(
-            url = url,
-            token = token,
-            application = application
-        )
+    CallViewModel(
+        url = url,
+        token = token,
+        application = application
+    )
     }
     private lateinit var binding: ActivityDemonstrateBinding
 
@@ -150,47 +145,6 @@ class DemonstrateActivity : AppCompatActivity() {
             targetHeight
         )
     }
-    private fun showOnModal() {
-        try {
-            // 기존 모달이 있으면 먼저 숨기기
-//            if (onAirOnDialog != null && onAirOnDialog?.isVisible == true) {
-//                onAirOnDialog?.dismissAllowingStateLoss()
-//                onAirOnDialog = null
-//            }
-            // 새 모달 생성 및 표시
-            onAirOnDialog = OnAirOnDialog()
-            onAirOnDialog?.show(supportFragmentManager, "onAiR on")
-        } catch (e: Exception) {
-        }
-    }
-    private fun hideOnModal() {
-        try {
-            // 방법 1: FragmentManager에서 직접 찾아서 dismiss
-            try {
-                val fragment = supportFragmentManager.findFragmentByTag("onAiR on")
-                if (fragment != null && fragment is OnAirOnDialog) {
-                    fragment.dismissAllowingStateLoss()
-                }
-            } catch (e: Exception) {
-            }
-
-            // 방법 2: onAirOnDialog를 통해 dismiss
-            if (onAirOnDialog != null) {
-                try {
-                    onAirOnDialog?.dismissAllowingStateLoss()
-                } catch (e: Exception) {
-                    try {
-                        onAirOnDialog?.dismiss()
-                    } catch (e2: Exception) {
-                    }
-                }
-            }
-
-            onAirOnDialog = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
     @Composable
     fun CallScreen(viewModel: CallViewModel) {
         val blueprintTrack by viewModel.blueprintTrack.collectAsState()
@@ -227,8 +181,8 @@ class DemonstrateActivity : AppCompatActivity() {
             }
         }
     }
-    private val REMOTE_WIDTH = 360f
-    private val REMOTE_HEIGHT = 480f
+    private val REMOTE_WIDTH = 480f
+    private val REMOTE_HEIGHT = 360f
 //    private val REMOTE_WIDTH = 600f
 //    private val REMOTE_HEIGHT = 680f
 //    private val targetRatio = 4f / 3f
@@ -284,10 +238,10 @@ class DemonstrateActivity : AppCompatActivity() {
             val context = LocalContext.current
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
-                    showOnModal()
-                    context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-                    Log.d("Demo", "오디오 함수 리턴")
-                    hideOnModal()
+//                    showOnModal()
+//                    context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+//                    Log.d("Demo", "오디오 함수 리턴")
+//                    hideOnModal()
                     (context as? Activity)?.finish()
                 }
             }
@@ -478,55 +432,55 @@ class DemonstrateActivity : AppCompatActivity() {
             )
         }
     }
-    suspend fun Context.playAssetAudio(fileName: String) = suspendCancellableCoroutine<Unit> { continuation ->
-        // MediaPlayer를 함수 내부에서 생성
-        val mediaPlayer = MediaPlayer()
-        Log.d("CallActivity", "MediaPlayer 재생")
-
-        try {
-            // assets 폴더에서 파일 열기
-            val afd = this.assets.openFd(fileName)
-
-            // 핵심: offset과 length를 같이 넘겨줘야 함
-            mediaPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            afd.close() // fd는 설정 후 닫아도 됨
-
-            mediaPlayer.setOnCompletionListener {
-                Log.d("Demo", "재생 완료 리스너")
-                it.release()
-                // 재생이 끝나면 코루틴 재개 (finish()가 호출될 수 있게 함)
-                if (continuation.isActive) continuation.resume(Unit)
-            }
-
-            mediaPlayer.setOnErrorListener { _, _, _ ->
-                // 에러 나면 멈추지 말고 그냥 종료로 넘어가게 처리
-                Log.e("Demo", "audio error")
-                mediaPlayer.release()
-                if (continuation.isActive) continuation.resume(Unit)
-                true
-            }
-
-            mediaPlayer.prepare() // 로컬 파일이므로 동기 prepare 사용
-            mediaPlayer.start()
-
-            // 코루틴이 취소되면(화면 이탈 등) 플레이어도 해제
-            continuation.invokeOnCancellation {
-                try {
-                    if (mediaPlayer.isPlaying) mediaPlayer.stop()
-                    mediaPlayer.release()
-                } catch (e: Exception) { e.printStackTrace() }
-            }
-
-//            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
-//            mediaPlayer.setOnCompletionListener { mp ->
-//                mp.release()
+//    suspend fun Context.playAssetAudio(fileName: String) = suspendCancellableCoroutine<Unit> { continuation ->
+//        // MediaPlayer를 함수 내부에서 생성
+//        val mediaPlayer = MediaPlayer()
+//        Log.d("CallActivity", "MediaPlayer 재생")
+//
+//        try {
+//            // assets 폴더에서 파일 열기
+//            val afd = this.assets.openFd(fileName)
+//
+//            // 핵심: offset과 length를 같이 넘겨줘야 함
+//            mediaPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+//            afd.close() // fd는 설정 후 닫아도 됨
+//
+//            mediaPlayer.setOnCompletionListener {
+//                Log.d("Demo", "재생 완료 리스너")
+//                it.release()
+//                // 재생이 끝나면 코루틴 재개 (finish()가 호출될 수 있게 함)
+//                if (continuation.isActive) continuation.resume(Unit)
 //            }
-
-        } catch (e: Exception) {
-            Log.e("AudioPlayer", "재생 실패: $fileName", e)
-            mediaPlayer.release() // 에러 발생 시에도 해제
-            if (continuation.isActive) continuation.resume(Unit)
-        }
-    }
+//
+//            mediaPlayer.setOnErrorListener { _, _, _ ->
+//                // 에러 나면 멈추지 말고 그냥 종료로 넘어가게 처리
+//                Log.e("Demo", "audio error")
+//                mediaPlayer.release()
+//                if (continuation.isActive) continuation.resume(Unit)
+//                true
+//            }
+//
+//            mediaPlayer.prepare() // 로컬 파일이므로 동기 prepare 사용
+//            mediaPlayer.start()
+//
+//            // 코루틴이 취소되면(화면 이탈 등) 플레이어도 해제
+//            continuation.invokeOnCancellation {
+//                try {
+//                    if (mediaPlayer.isPlaying) mediaPlayer.stop()
+//                    mediaPlayer.release()
+//                } catch (e: Exception) { e.printStackTrace() }
+//            }
+//
+////            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
+////            mediaPlayer.setOnCompletionListener { mp ->
+////                mp.release()
+////            }
+//
+//        } catch (e: Exception) {
+//            Log.e("AudioPlayer", "재생 실패: $fileName", e)
+//            mediaPlayer.release() // 에러 발생 시에도 해제
+//            if (continuation.isActive) continuation.resume(Unit)
+//        }
+//    }
 
 }

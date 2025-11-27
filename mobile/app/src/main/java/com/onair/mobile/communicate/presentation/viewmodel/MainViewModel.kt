@@ -1,4 +1,4 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -33,6 +33,10 @@ class MainViewModel(
             }
             _isLoading.value = false
         }
+    }
+    fun logout() {
+        authRepository.logout()
+        _navigationNext.value = NavigationNext.LOGIN
     }
 }
 
