@@ -238,9 +238,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
           fading: false,
         },
       ]);
-      console.log(
-        `pen drawing start : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
-      );
+      // console.log(
+      //   `pen drawing start : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+      // );
       sendDrawingData({
         event: "draw-start",
         color: penColor,
@@ -266,9 +266,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
         },
       ]);
 
-      console.log(
-        `ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
-      );
+      // console.log(
+      //   `ar-marker created: Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+      // );
 
       // 소켓 이벤트 발신 (서버 있을 경우)
       socket.emit("ar-marker", {
@@ -297,9 +297,9 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
       return;
     }
 
-    console.log(
-      `pen drawing : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
-    );
+    // console.log(
+    //   `pen drawing : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+    // );
 
     if (tool === "pen") {
       if (!isDrawing.current) return;
