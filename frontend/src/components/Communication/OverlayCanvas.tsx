@@ -229,6 +229,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
     // 펜
     if (tool === "pen") {
       isDrawing.current = true;
+      const cameraPos = convertStageToCamera(pos.x, pos.y);
       setLines((prev) => [
         ...prev,
         {
@@ -237,12 +238,15 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
           fading: false,
         },
       ]);
+      // console.log(
+      //   `pen drawing start : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+      // );
       sendDrawingData({
         event: "draw-start",
         color: penColor,
         tool,
-        x: pos.x,
-        y: pos.y,
+        x: cameraPos.x,
+        y: cameraPos.y,
       });
     }
 
@@ -282,14 +286,20 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
   // ------------------------------- 마우스 이동 -------------------------------
   const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const pos = e.target.getStage()?.getPointerPosition();
+
     if (!pos) return;
+    const cameraPos = convertStageToCamera(pos.x, pos.y);
 
     if (tool === "eraser") {
       if (!isDrawing.current) return;
       setEraserPos(pos);
-      throttledSendDrawMove(tool, "eraser", pos.x, pos.y);
+      throttledSendDrawMove(tool, "eraser", cameraPos.x, cameraPos.y);
       return;
     }
+
+    // console.log(
+    //   `pen drawing : Stage(${pos.x}, ${pos.y}) -> Camera(${cameraPos.x}, ${cameraPos.y})`
+    // );
 
     if (tool === "pen") {
       if (!isDrawing.current) return;
@@ -300,7 +310,7 @@ export const OverlayCanvas = ({ penColor, tool = "pen" }: CanvasProps) => {
         newLines[newLines.length - 1] = lastLine;
         return newLines;
       });
-      throttledSendDrawMove(tool, penColor, pos.x, pos.y);
+      throttledSendDrawMove(tool, penColor, cameraPos.x, cameraPos.y);
     }
   };
 
