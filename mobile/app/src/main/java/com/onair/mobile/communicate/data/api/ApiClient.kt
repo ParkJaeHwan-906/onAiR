@@ -12,8 +12,8 @@ import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 
 class ApiClient(context: Context) {
-    private lateinit var retrofit: Retrofit
-    private lateinit var okHttpClient: OkHttpClient
+    private var retrofit: Retrofit
+    private var okHttpClient: OkHttpClient
 
     init {
         val preferenceUtil = PreferenceUtil(context)

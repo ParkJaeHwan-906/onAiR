@@ -3,7 +3,6 @@ package com.onair.mobile.communicate.presentation.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,14 +11,12 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.divider.MaterialDividerItemDecoration
-import com.onair.mobile.communicate.PreferenceUtil
-import com.onair.mobile.communicate.data.AuthRepository
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.api.ApiClient
 import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.presentation.viewmodel.TaskListViewModel
 import com.onair.mobile.communicate.utils.activityViewModelByFactory
 import com.onair.mobile.databinding.FragmentRecyclerviewBinding
 import kotlinx.coroutines.flow.collectLatest
