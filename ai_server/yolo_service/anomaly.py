@@ -116,25 +116,25 @@ async def run_anomaly_detection():
     if fan_belt_boxes:
         modules_detected = True  # ★ 모듈 탐지됨
         # ★ 하드코딩: Fan/Belt 모듈이 탐지되면 무조건 "E_FAN_SLOWDOWN" 오류로 반환
-        anomalies["fan_belt"] = {
-            "type": "fan_belt",
-            "status": "anomaly",  # 무조건 anomaly
-            "detail": "E_FAN_SLOWDOWN",  # 무조건 팬 벨트 감속
-            "message": "팬 벨트가 감속 중입니다",
-            "result": "E_FAN_SLOWDOWN"
-        }
-        # 기존 분석 로직 주석 처리 (하드코딩 사용)
-        # frames = await get_cv_buffer_frames(60)
-        # if len(frames) < 10:
-        #     anomalies["fan_belt"] = {
-        #         "type": "fan_belt",
-        #         "status": "error",
-        #         "detail": "not_enough_frames",
-        #         "message": "프레임 부족",
-        #         "results": {}
-        #     }
-        # else:
-        #     anomalies["fan_belt"] = await analyze_fan_belt(frames, fan_belt_boxes)
+        # anomalies["fan_belt"] = {
+        #     "type": "fan_belt",
+        #     "status": "anomaly",  # 무조건 anomaly
+        #     "detail": "E_FAN_SLOWDOWN",  # 무조건 팬 벨트 감속
+        #     "message": "팬 벨트가 감속 중입니다",
+        #     "result": "E_FAN_SLOWDOWN"
+        # }
+        # 기존 분석 로직
+        frames = await get_cv_buffer_frames(60)
+        if len(frames) < 10:
+            anomalies["fan_belt"] = {
+                "type": "fan_belt",
+                "status": "error",
+                "detail": "not_enough_frames",
+                "message": "프레임 부족",
+                "results": {}
+            }
+        else:
+            anomalies["fan_belt"] = await analyze_fan_belt(frames, fan_belt_boxes)
     else:
         anomalies["fan_belt"] = {"status": "not_found"}
 
@@ -159,13 +159,13 @@ async def run_anomaly_detection():
     if gauge_boxes:
         modules_detected = True  # ★ 모듈 탐지됨
         # ★ 하드코딩: Gauge 모듈이 탐지되면 무조건 normal로 반환
-        anomalies["gauge"] = {
-            "type": "gauge",
-            "status": "normal",  # 무조건 normal
-            "message": "압력계가 정상입니다"
-        }
-        # 기존 분석 로직 주석 처리 (하드코딩 사용)
-        # anomalies["gauge"] = await analyze_gauge(latest_frame, gauge_boxes)
+        # anomalies["gauge"] = {
+        #     "type": "gauge",
+        #     "status": "normal",  # 무조건 normal
+        #     "message": "압력계가 정상입니다"
+        # }
+        # 기존 분석 로직
+        anomalies["gauge"] = await analyze_gauge(latest_frame, gauge_boxes)
     else:
         anomalies["gauge"] = {"status": "not_found"}
 
