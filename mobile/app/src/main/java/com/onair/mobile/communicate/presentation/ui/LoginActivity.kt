@@ -9,8 +9,8 @@ import androidx.lifecycle.lifecycleScope
 import com.onair.mobile.MainActivity
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.presentation.viewmodel.LoginViewModel
 import com.onair.mobile.databinding.ActivityLoginBinding
 import kotlinx.coroutines.launch

@@ -1,14 +1,14 @@
-package com.onair.mobile.communicate.data.api
+package com.onair.mobile.communicate.data.source.remote.api
 
-import com.onair.mobile.communicate.data.api.dto.LoginRequest
-import com.onair.mobile.communicate.data.api.dto.ApiResponse
-import com.onair.mobile.communicate.data.api.dto.CallRequestRequest
-import com.onair.mobile.communicate.data.api.dto.CallResponseRequestDto
-import com.onair.mobile.communicate.data.api.dto.RefreshRequest
-import com.onair.mobile.communicate.data.api.dto.EndTaskRequest
-import com.onair.mobile.communicate.data.api.dto.RtcResponse
-import com.onair.mobile.communicate.data.api.dto.TaskResponse
-import com.onair.mobile.communicate.data.api.dto.TokenData
+import com.onair.mobile.communicate.data.model.dto.LoginRequest
+import com.onair.mobile.communicate.data.model.dto.ApiResponse
+import com.onair.mobile.communicate.data.model.dto.CallRequestRequest
+import com.onair.mobile.communicate.data.model.dto.CallResponseRequestDto
+import com.onair.mobile.communicate.data.model.dto.RefreshRequest
+import com.onair.mobile.communicate.data.model.dto.EndTaskRequest
+import com.onair.mobile.communicate.data.model.dto.RtcResponse
+import com.onair.mobile.communicate.data.model.dto.TaskResponse
+import com.onair.mobile.communicate.data.model.dto.TokenData
 import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.GET

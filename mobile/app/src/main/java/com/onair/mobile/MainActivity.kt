@@ -10,8 +10,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.presentation.viewmodel.CommunicationViewModel
 import com.onair.mobile.communicate.presentation.ui.LoginActivity
 import com.onair.mobile.communicate.presentation.viewmodel.MainViewModel
@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val mainViewModel: MainViewModel by viewModelByFactory {
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
-        val repository = AuthRepository(apiService, PreferenceUtil(applicationContext))
+        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
+        val repository = AuthRepository(apiService, PreferenceUtil)
 
         MainViewModel(repository)
     }

@@ -1,4 +1,4 @@
-package com.onair.mobile.communicate.data.api
+package com.onair.mobile.communicate.data.source.remote.api
 
 sealed class ApiResponse<out T> {
     data class Success<out T>(val data: T) : ApiResponse<T>()

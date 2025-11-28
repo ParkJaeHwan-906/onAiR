@@ -1,12 +1,10 @@
 package com.onair.mobile.assistant.data.tts
 
-import android.content.Context
 import android.util.Log
 import com.onair.mobile.assistant.domain.repository.TtsRepository
+import com.onair.mobile.communicate.data.network.ApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 
 /**
  * TTS Repository 구현체
@@ -15,20 +13,12 @@ import retrofit2.converter.gson.GsonConverterFactory
  * 텍스트를 TTS API로 변환하여 재생합니다.
  */
 class TtsRepositoryImpl(
-    private val context: Context,
     private val mediaPlayerController: MediaPlayerController,
-    private val baseUrl: String  // FastAPI 서버 URL
 ) : TtsRepository {
     
     private val TAG = "TtsRepository"
     private val ttsApi: TtsApi by lazy {
-        // Retrofit의 baseUrl은 반드시 끝에 슬래시(/)가 있어야 함
-        val retrofitBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-        Retrofit.Builder()
-            .baseUrl(retrofitBaseUrl)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(TtsApi::class.java)
+        ApiClient.getFastApiRetrofit().create(TtsApi::class.java)
     }
     
     override suspend fun playAudio(base64Audio: String, mimeType: String?, onCompletion: (() -> Unit)?) {

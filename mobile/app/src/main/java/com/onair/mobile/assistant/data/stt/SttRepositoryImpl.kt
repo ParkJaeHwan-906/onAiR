@@ -1,7 +1,5 @@
 package com.onair.mobile.assistant.data.stt
 
-import android.content.Context
-import com.onair.mobile.assistant.core.common.Result
 import com.onair.mobile.assistant.domain.repository.SttRepository
 
 /**
@@ -9,9 +7,7 @@ import com.onair.mobile.assistant.domain.repository.SttRepository
  * 
  * 라즈베리파이로부터 STT 텍스트를 수신하는 전용 Repository
  */
-class SttRepositoryImpl(
-    private val context: Context
-) : SttRepository {
+class SttRepositoryImpl() : SttRepository {
     
     // 라즈베리파이 텍스트 수신
     private val raspberryPiReceiver = RaspberryPiTextReceiver()

@@ -3,7 +3,7 @@ package com.onair.mobile.communicate.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onair.mobile.communicate.data.TaskRepository
-import com.onair.mobile.communicate.data.api.dto.TaskResponse
+import com.onair.mobile.communicate.data.model.dto.TaskResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

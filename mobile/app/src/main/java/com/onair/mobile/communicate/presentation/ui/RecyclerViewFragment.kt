@@ -14,8 +14,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.divider.MaterialDividerItemDecoration
 import com.onair.mobile.communicate.data.TaskRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.presentation.viewmodel.TaskListViewModel
 import com.onair.mobile.communicate.utils.activityViewModelByFactory
 import com.onair.mobile.databinding.FragmentRecyclerviewBinding
