@@ -74,11 +74,11 @@ def process_gesture(frame, button_rect):
             ix = int(index_tip.x * w)
             iy = int(index_tip.y * h)
 
-            return{
-                "gesture": point,
+            return {
+                "gesture": "point",
                 "x": ix,
                 "y": iy,
-                "is_end_button": is_end_button
+                "is_end_button": is_button
             }
 
         return None
