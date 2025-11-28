@@ -57,7 +57,7 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-    private var _wakewordFlow = MutableSharedFlow<Unit>(
+    private var _wakewordFlow = MutableSharedFlow<WakewordEvent>(
         replay = 1,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -300,10 +300,19 @@ class SocketIoSttClient(
 
 
             // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
-            socket?.on("wakeword_detected") {
-                _wakewordFlow.tryEmit(Unit)
-                    Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
-
+            socket?.on("wakeword_detected") { args ->
+                val data = args[0] as? JSONObject
+                Log.d(TAG, "wakeword detected data: $data")
+                if (data != null) {
+                    val isDetected = data.optBoolean("detected")
+                    val state = if (isDetected) {
+                        WakewordEvent.Detected
+                    } else {
+                        WakewordEvent.Ready
+                    }
+                    _wakewordFlow.tryEmit(state)
+                }
+                Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
             }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
@@ -512,6 +521,7 @@ class SocketIoSttClient(
         }
 
         return try {
+            Log.d(TAG, "accept_communication 이벤트 발신")
             socket?.emit("accept_communication", null)
             true
         } catch (e: Exception) {
@@ -789,5 +799,10 @@ class SocketIoSttClient(
         if (onConnect != null) this.onConnect = onConnect
         if (onDisconnect != null) this.onDisconnect = onDisconnect
         if (onConnectError != null) this.onConnectError = onConnectError
+    }
+
+    sealed class WakewordEvent {
+        object Detected : WakewordEvent()
+        object Ready : WakewordEvent()
     }
 }
