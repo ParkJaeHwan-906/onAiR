@@ -213,7 +213,7 @@ async def handle_register_device(sid, data):
     """디바이스 등록"""
     device = data.get("device", "unknown")
     device_map[sid] = device
-    print(f"디바이스 등록됨 : {}", device)
+    print(f"디바이스 등록됨 : {device}")
     print(f"{device_map}")
     if sio:
         await sio.save_session(sid, {"device": device})
@@ -819,6 +819,7 @@ async def handle_audio_frame(sid, data):
         return
 
     await broadcast_to("pc", "audio_frame", data)
+    print(f"{device_map}")
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
