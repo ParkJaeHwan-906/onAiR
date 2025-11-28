@@ -18,7 +18,7 @@ class TtsRepositoryImpl(
     
     private val TAG = "TtsRepository"
     private val ttsApi: TtsApi by lazy {
-        ApiClient.getFastApiRetrofit().create(TtsApi::class.java)
+        ApiClient.fastApiRetrofit.create(TtsApi::class.java)
     }
     
     override suspend fun playAudio(base64Audio: String, mimeType: String?, onCompletion: (() -> Unit)?) {

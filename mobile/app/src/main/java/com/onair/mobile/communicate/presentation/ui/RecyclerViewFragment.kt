@@ -37,7 +37,7 @@ class RecyclerViewFragment : Fragment() {
     private lateinit var taskAdapter : TaskListAdapter
     private lateinit var binding: FragmentRecyclerviewBinding
     private val viewModel: TaskListViewModel by activityViewModelByFactory {
-        val apiService = ApiClient(requireActivity().applicationContext).getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         val repository = TaskRepository(apiService)
         TaskListViewModel(repository)
     }

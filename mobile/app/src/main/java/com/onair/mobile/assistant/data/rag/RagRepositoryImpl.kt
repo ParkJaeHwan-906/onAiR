@@ -16,7 +16,7 @@ class RagRepositoryImpl() {
     private val TAG = "RagRepository"
     
     private val api: RagApiService by lazy {
-        ApiClient.getFastApiRetrofit().create(RagApiService::class.java)
+        ApiClient.fastApiRetrofit.create(RagApiService::class.java)
     }
     
     /**

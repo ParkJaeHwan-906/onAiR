@@ -18,8 +18,8 @@ import kotlin.getValue
 
 class TaskListFragment: Fragment() {
     private val mainViewModel: MainViewModel by activityViewModelByFactory {
-        val apiService = ApiClient(requireContext()).getRetrofit().create(ApiService::class.java)
-        val repository = AuthRepository(apiService, PreferenceUtil(requireContext()))
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
+        val repository = AuthRepository(apiService, PreferenceUtil)
 
         MainViewModel(repository)
     }
