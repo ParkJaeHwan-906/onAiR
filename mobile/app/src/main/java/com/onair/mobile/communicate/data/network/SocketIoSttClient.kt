@@ -314,6 +314,12 @@ class SocketIoSttClient(
                 }
                 Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
             }
+            socket?.on("service_start_clicked") { args ->
+                _wakewordFlow.tryEmit(WakewordEvent.Detected)
+            }
+            socket?.on("service_end_clicked") { args ->
+                _endService.trySend(Unit)
+            }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
                 _callEnd.tryEmit(Unit)
@@ -418,7 +424,7 @@ class SocketIoSttClient(
             e.printStackTrace()
         }
     }
-    private fun activeMediaPipe() {
+    fun activeMediaPipe() {
         if (!isConnected()) {
             Log.w(TAG, "⚠️ 소켓이 연결되지 않아 MediaPipe 활성화 이벤트를 보낼 수 없습니다.")
             return
