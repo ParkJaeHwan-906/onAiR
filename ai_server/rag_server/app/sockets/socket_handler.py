@@ -146,6 +146,7 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
+    sio.on("wakeword_init")(on_wakeword_init)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -855,3 +856,10 @@ async def delete_marker(sid, data):
             idx += 1
     
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+
+async def on_wakeword_init(sid):
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device != "raspi":
+        return
+    
+    await broadcast_to('mobile', "wakeword_init", {})
