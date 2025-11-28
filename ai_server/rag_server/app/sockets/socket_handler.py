@@ -46,7 +46,7 @@ _pending_cv_detection: Optional[Dict[str, Any]] = None
 sio = socketio.AsyncServer(
     async_mode='asgi',
     cors_allowed_origins='*',  # 모든 Origin 허용
-    logger=False,  # 로거 비활성화
+    logger=True,  # 로거 비활성화
 )
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
