@@ -20,7 +20,7 @@ class STTCore:
         self.manager = manager
         self.mic = manager.mic
         self.wakeword_detector = init_wakeword_detector()
-        self.buffered_stt = GcpBufferedStt()
+        self.buffered_stt = GcpBufferedStt(socket_client=self.manager.socketio_client)
 
         # wakeword 오디오 송출이 완료되었는지 
         self.wakeword_audio_done = threading.Event()
@@ -40,20 +40,22 @@ class STTCore:
             # STT 결과를 socket_handler로 전달
             if msg["type"] == "final":
                 # self.manager.socketio_client.emit_stt_result(msg["text"])
-                self.manager.socketio_client.emit_stt_result(msg)
+                await self.manager.socketio_client.emit_stt_result(msg)
+                logger.info(f"stt result : {msg}")
             elif msg["type"] == "error":
                 logger.error(f"STT Error: {msg['text']}")
 
         try:
             await self.buffered_stt.run(self.mic, broadcaster)
         except Exception as e:
+            await self.manager.socketio_client.emit_wakeword_init()
             logger.error(f"❌ STT 세션 오류 또는 타임아웃: {e}")
         
         # STT 종료 → 다시 웨이크워드 모드로 복귀
         logger.info("🔄 STT 종료 → 웨이크워드 모드로 전환")
         self.ignore_wakeword = False
         self.wakeword_detector.resume()
-        self.manager.socketio_client.emit_wakeword_init()
+        # await self.manager.socketio_client.emit_wakeword_init()
 
 
 
@@ -343,7 +345,8 @@ class STTCore:
 
                         # 현재 단계에서는 wakeword 감지 중지
                         self.ignore_wakeword = True 
-                        self.wakeword_detector.pause() 
+                        self.wakeword_detector.pause()
+                        self.wakeword_detector.clear_events() 
 
                         # # STT 감지 시작
                         # self.manager.switch_to_stt()
@@ -374,6 +377,7 @@ class STTCore:
 
                     if self.manager.is_rtc_running:
                         self.wakeword_detector.pause()
+                        self.wakeword_detector.clear_events()
                         time.sleep(0.1)
                         continue
                     else:

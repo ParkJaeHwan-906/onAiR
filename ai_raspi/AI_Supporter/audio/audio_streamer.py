@@ -145,7 +145,6 @@ class AudioStreamer:
                     # Socket.IO로 audio_frame 이벤트 전송
                     if self.socketio_client and self.socketio_client.sio:
                         try:
-                            import asyncio
                             try:
                                 loop = self.socketio_client.loop
                             except RuntimeError:

@@ -27,9 +27,11 @@ SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
 # Gesture 인식 상태 관리 (클래스로 캡슐화)
 gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
 
+# settings는 wait_for_next_step에서 사용되므로 반드시 import 필요
+from app.core.config import settings
+
 try:
     import google.generativeai as genai
-    from app.core.config import settings
     genai_available = True
     if settings.GMS_API_KEY:
         genai.configure(api_key=settings.GMS_API_KEY)
@@ -242,7 +244,7 @@ async def handle_wakeword_detected(sid, data):
     if sender_device != "raspi":
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
-    print(data)
+    
     detected = data.get("detected", False)
 
     print("=" * 80)
@@ -529,6 +531,9 @@ async def handle_audio_playback_completed(sid, data):
                 "y": 165
             }
         })
+
+        await broadcast_to("raspi", "audio_playback_completed", {})
+
         await wait_for_next_step("서비스 종료 버튼 활성화 요청 전송 완료", "14-1")
 
 
@@ -786,7 +791,7 @@ async def on_gesture_service_start():
 async def on_gesture_service_end():
     print("Gesture END detected")
 
-    # 모바일로 시작 버튼 클릭 알림
+    # 모바일로 서비스 종료 버튼 클릭 알림
     await broadcast_to("mobile", "service_end_clicked", {})
     
     # 2. FastAPI 내부 상태 즉시 초기화 (모바일 응답 대기 없이)
