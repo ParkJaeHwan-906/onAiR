@@ -144,9 +144,12 @@ class GcpBufferedStt:
             if chunk is None:
                 if elapsed_time > INITIAL_GRACE_PERIOD:
                     if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
-                        error_msg = "음성 입력 타임아웃 (2초 동안 음성이 감지되지 않음)"
-                        await broadcaster({"type": "error", "text": error_msg})
-                        raise ValueError(error_msg)
+                        if buffer:
+                            break
+                        else:
+                            error_msg = "음성 입력 타임아웃 (2초 동안 음성이 감지되지 않음)"
+                            await broadcaster({"type": "error", "text": error_msg})
+                            raise ValueError(error_msg)
                 continue
 
             # ----------- chunk 있음 (오디오 들어옴) -----------
@@ -167,9 +170,12 @@ class GcpBufferedStt:
 
             if elapsed_time > INITIAL_GRACE_PERIOD:
                 if current_time - last_speech_time >= SPEECH_TIMEOUT_SEC:
-                    error_msg = "음성 입력 타임아웃 (2초 동안 음성이 감지되지 않음)"
-                    await broadcaster({"type": "error", "text": error_msg})
-                    raise ValueError(error_msg)
+                    if buffer:
+                        break
+                    else:
+                        error_msg = "음성 입력 타임아웃 (2초 동안 음성이 감지되지 않음)"
+                        await broadcaster({"type": "error", "text": error_msg})
+                        raise ValueError(error_msg)
 
         # --------------------------------------------------
         # 2) 버퍼 없음 → 에러 종료
