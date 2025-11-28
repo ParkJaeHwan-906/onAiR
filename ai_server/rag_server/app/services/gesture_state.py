@@ -1,5 +1,3 @@
-# app/services/gesture_state.py
-
 from app.services.gesture_service import process_gesture
 
 class GestureManager:
@@ -11,7 +9,6 @@ class GestureManager:
         self.waiting_for_end = False
 
     def reset_to_initial_state(self):
-        """제스처 인식 상태 초기화"""
         self.enabled = False
         self.waiting_for_start = False
         self.waiting_for_end = False
@@ -28,9 +25,8 @@ class GestureManager:
         finger_y = result["y"]
 
         left, top, right, bottom = self.button_rect
-        inside = (left <= finger_x <= right) and (top <= finger_y <= bottom)
+        inside = (left <= finger_x <= right and top <= finger_y <= bottom)
 
-        # END 버튼 모드인지 확인
         if result["is_end_button"]:
             if self.waiting_for_end and inside:
                 print("[Gesture] END detected")
@@ -38,7 +34,6 @@ class GestureManager:
                 await on_end()
             return
 
-        # START 감지
         if self.waiting_for_start and inside:
             print("[Gesture] START detected")
             self.waiting_for_start = False
