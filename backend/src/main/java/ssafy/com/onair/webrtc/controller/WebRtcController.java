@@ -24,6 +24,7 @@ import java.util.Map;
 public class WebRtcController {
 
     private final WebRtcService webRtcService;
+    private String lastRoomName;
 
     @PostMapping("/request")
     public ResponseEntity<?> request(
@@ -79,6 +80,9 @@ public class WebRtcController {
         // sender에 sse로 토큰 전달
         webRtcService.responseConnection(webRtcResponseDto, receiverDetails, senderAccessToken);
 
+        // 현재 방 이름 기록
+        this.lastRoomName = roomName;
+
         // 응답(토큰 포함)
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)
@@ -87,6 +91,27 @@ public class WebRtcController {
                 )));
     }
 
+    @GetMapping("/get-join-token")
+    public ResponseEntity<?> getJoinToken(){
+        if(this.lastRoomName == null){
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail("참가할 webrtc 방이 없습니다."));
+        }
+
+        String viewerAccessToken = webRtcService.createToken(
+                "viewer",
+                "viewerId",
+                "createdAt :  " + LocalDateTime.now(),
+                this.lastRoomName
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success(Map.of(
+                        "accessToken", viewerAccessToken
+                )));
+    }
 
 
     @GetMapping("/create-token")

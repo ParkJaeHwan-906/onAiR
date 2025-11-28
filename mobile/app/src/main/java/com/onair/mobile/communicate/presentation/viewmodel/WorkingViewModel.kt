@@ -1,18 +1,15 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.net.Socket
 
 class WorkingViewModel(
     private val taskRepository: TaskRepository,

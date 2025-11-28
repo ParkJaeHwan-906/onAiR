@@ -1,10 +1,9 @@
-package com.onair.mobile.communicate.presentation.ui
+package com.onair.mobile.communicate.presentation.viewmodel
 
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import io.livekit.android.AudioOptions
 import io.livekit.android.AudioType

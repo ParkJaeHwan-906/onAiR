@@ -1,6 +1,5 @@
 package com.onair.mobile.communicate.presentation.ui
 
-import android.app.Activity
 import android.content.Context
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -8,7 +7,6 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -19,7 +17,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -65,15 +62,14 @@ import com.onair.mobile.communicate.utils.viewModelByFactory
 import io.livekit.android.compose.ui.RendererType
 import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.collections.emptyList
 import androidx.core.graphics.toColorInt
-import androidx.lifecycle.lifecycleScope
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import com.onair.mobile.communicate.presentation.viewmodel.CallViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume

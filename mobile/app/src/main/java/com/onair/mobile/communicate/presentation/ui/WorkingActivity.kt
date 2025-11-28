@@ -1,19 +1,15 @@
 package com.onair.mobile.communicate.presentation.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.MediaPlayer
 import android.os.Bundle
-import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.runtime.LaunchedEffect
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -51,12 +47,14 @@ import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import com.onair.mobile.communicate.presentation.viewmodel.CommunicationViewModel
+import com.onair.mobile.communicate.presentation.viewmodel.OnAirState
+import com.onair.mobile.communicate.presentation.viewmodel.WorkingViewModel
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -134,9 +132,11 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "🟢 WorkingActivity onResume: Socket.IO 연결 시작")
         try {
             if (::socketIoSttClient.isInitialized) {
-                socketIoSttClient.connect()
-                Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
-                Log.d(TAG, hasSentCommunicationClose.toString())
+                if (!socketIoSttClient.isConnected()){
+                    socketIoSttClient.connect()
+                    Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
+                    Log.d(TAG, hasSentCommunicationClose.toString())
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Socket.IO 클라이언트 연결 실패: ${e.message}")
@@ -328,6 +328,7 @@ class WorkingActivity : AppCompatActivity() {
         binding.denyCall.setOnClickListener {
             workingViewModel.responseCall(
                 data.getLong("senderAccountId"), data.getString("name"), false)
+            binding.denyCall.visibility = View.GONE
         }
     }
     private fun goCall() {
@@ -629,7 +630,7 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "📩 Wakeword 감지 이벤트 수신: 음성 파일 재생 시작")
         
         // Wakeword 감지 시 communication_close 플래그 리셋 (새로운 서비스 시작)
-        hasSentCommunicationClose = false
+//        hasSentCommunicationClose = false
 
         lifecycleScope.launch {
             try {
@@ -665,11 +666,9 @@ class WorkingActivity : AppCompatActivity() {
     private fun handlePlayServiceEndAudio(audioFile: String) {
         // ⚠️ 주의: 이 함수는 CV 탐지 이상 케이스에서만 사용됨
         // 섹션별 카드가 표시되는 경우는 마지막 섹션 완료 후 직접 서비스 종료 오디오를 재생함
-        Log.i(TAG, "============================================================")
         Log.i(TAG, "📩 서비스 종료 오디오 재생 요청 수신 (handlePlayServiceEndAudio)")
         Log.i(TAG, "   파일: $audioFile")
         Log.i(TAG, "   ⚠️ 주의: 섹션별 카드가 있는 경우는 이 함수를 사용하지 않음")
-        Log.i(TAG, "============================================================")
 
         lifecycleScope.launch {
             try {
@@ -683,10 +682,8 @@ class WorkingActivity : AppCompatActivity() {
                 }
 
                 mediaPlayerController.playLocalAudio(fileToPlay) {
-                    Log.i(TAG, "============================================================")
                     Log.i(TAG, "✅ 서비스 종료 오디오 재생 완료")
                     Log.i(TAG, "📤 FastAPI로 audio_playback_completed (type: service_completed) 이벤트 전송 시작")
-                    Log.i(TAG, "============================================================")
 
                     // 모달 숨기기
                     runOnUiThread {
@@ -1059,63 +1056,63 @@ class WorkingActivity : AppCompatActivity() {
     /**
      * 비정상 종료 시 wakeword 대기 상태로 복귀하기 위한 통신 종료 이벤트 전송
      */
-    private fun sendCommunicationCloseForRecovery() {
-        try {
-            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
-                val success = socketIoSttClient.sendCommunicationClose()
-                if (success) {
-                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
-                    hasSentCommunicationClose = true
-                } else {
-                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
-                }
-            } else {
-                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
-            e.printStackTrace()
-        }
-    }
+//    private fun sendCommunicationCloseForRecovery() {
+//        try {
+//            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+//                val success = socketIoSttClient.sendCommunicationClose()
+//                if (success) {
+//                    Log.i(TAG, "✅ 통신 종료 이벤트 전송 완료 (wakeword 대기 상태로 복귀)")
+//                    hasSentCommunicationClose = true
+//                } else {
+//                    Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+//                }
+//            } else {
+//                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 통신 종료 이벤트를 전송할 수 없습니다")
+//            }
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 통신 종료 이벤트 전송 중 오류: ${e.message}")
+//            e.printStackTrace()
+//        }
+//    }
     
     /**
      * 상태 초기화 및 wakeword 대기 상태로 복귀
      * (onResume에서 호출하여 비정상 종료 후 다시 들어온 경우를 처리)
      */
-    private fun resetToWakewordWaitingState() {
-        try {
-            Log.i(TAG, "🔄 상태 초기화 시작")
-
-            // UI 초기화
-            runOnUiThread {
-                hideModal()
-            }
-            
-            // 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)
-            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
-            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
-                if (!hasSentCommunicationClose) {
-                    val success = socketIoSttClient.sendCommunicationClose()
-                    if (success) {
-                        Log.i(TAG, "✅ 상태 초기화 및 wakeword 대기 상태로 복귀 완료")
-                        hasSentCommunicationClose = true
-                    } else {
-                        Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
-                    }
-                } else {
-                    Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (상태 초기화만 수행)")
-                }
-            } else {
-                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 상태 복귀 이벤트를 전송할 수 없습니다")
-            }
-            
-            // 다음 wakeword 감지를 위해 플래그 리셋
-//            hasSentCommunicationClose = false
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 상태 초기화 중 오류: ${e.message}")
-            e.printStackTrace()
-        }
-    }
+//    private fun resetToWakewordWaitingState() {
+//        try {
+//            Log.i(TAG, "🔄 상태 초기화 시작")
+//
+//            // UI 초기화
+//            runOnUiThread {
+//                hideModal()
+//            }
+//
+//            // 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)
+//            // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
+//            if (::socketIoSttClient.isInitialized && socketIoSttClient.isConnected()) {
+//                if (!hasSentCommunicationClose) {
+//                    val success = socketIoSttClient.sendCommunicationClose()
+//                    if (success) {
+//                        Log.i(TAG, "✅ 상태 초기화 및 wakeword 대기 상태로 복귀 완료")
+//                        hasSentCommunicationClose = true
+//                    } else {
+//                        Log.w(TAG, "⚠️ 통신 종료 이벤트 전송 실패 (Socket.IO 연결 상태 확인 필요)")
+//                    }
+//                } else {
+//                    Log.i(TAG, "ℹ️ communication_close 이벤트는 이미 전송됨 (상태 초기화만 수행)")
+//                }
+//            } else {
+//                Log.w(TAG, "⚠️ Socket.IO 클라이언트가 연결되어 있지 않아 상태 복귀 이벤트를 전송할 수 없습니다")
+//            }
+//
+//            // 다음 wakeword 감지를 위해 플래그 리셋
+////            hasSentCommunicationClose = false
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 상태 초기화 중 오류: ${e.message}")
+//            e.printStackTrace()
+//        }
+//    }
     private suspend fun handleServiceEnd() {
         mediaPlayerController.stop()
         workingViewModel.onFlowCompleted()
