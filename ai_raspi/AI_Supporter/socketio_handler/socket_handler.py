@@ -60,7 +60,9 @@ class SocketIOClient:
             return False
         
         try:
-            await self.sio.emit("wakeword_detected", {"detected" : True})
+            await self.sio.emit("wakeword_detected", {
+                "detected": True
+            })
             return True
         except Exception as e:
             logger.error(f"❌ wakeword_detected 전송 실패: {e}")
@@ -127,7 +129,9 @@ class SocketIOClient:
     
     async def emit_wakeword_init(self):
         try:
-            await self.sio.emit("wakeword_detected", {"detected" : False})
+            await self.sio.emit("wakeword_detected", {
+                "detected": False
+            })
         except Exception as e:
             logger.error(f"❌ wakeword_init emit 오류: {e}")
     #=============================================================
