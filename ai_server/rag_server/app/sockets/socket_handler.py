@@ -800,6 +800,8 @@ async def on_gesture_service_end():
     
     # 3. 라즈베리파이에 초기 상태 복귀 요청
     await broadcast_to("raspi", "wakeword_start_waiting", {})
+    
+    print("✅ 서비스 종료 처리 완료 - 초기 상태로 복귀")
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
