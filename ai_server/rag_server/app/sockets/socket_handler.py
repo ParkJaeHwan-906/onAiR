@@ -5,6 +5,8 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 설계 요구사항:
 1. 라즈베리파이로부터 STT 텍스트 직접 수신 (WebSocket)
 """
+from this import d
+from google.generativeai.types import TunedModel
 import socketio
 import cv2
 import numpy as np
@@ -19,10 +21,13 @@ from app.ar import motion_core
 from app.services.yolo_overlay import get_latest_yolo_result
 from app.services.cv_service import run_anomaly_detection
 from app.services.final_guide import generate_final_guide
-from app.services.gesture_service import process_gesture
+from app.services.gesture_state import GestureManager
 
 # 서비스 종료 버튼 좌표 (left=1800, top=90, right=1950, bottom=240)
 SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
+
+# Gesture 인식 상태 관리 (클래스로 캡슐화)
+gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
 
 try:
     import google.generativeai as genai
@@ -146,7 +151,8 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
-    sio.on("wakeword_init")(on_wakeword_init)
+    sio.on("active_mediapipe")(handle_active_mediapipe)
+    sio.on("deactive_mediapipe")(handle_deactive_mediapipe)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -679,24 +685,14 @@ async def handle_video_frame(sid, data):
         ar_markers[:] = updated
         await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
-    # gesture로 서비스 종료 버튼 클릭 감지
-    gesture_result = process_gesture(frame, SERVICE_END_BUTTON_RECT)
+    # ================================
+    # 제스처로 서비스 종료 버튼 클릭 감지
+    # ================================
+    await gesture_manager.handle_frame(frame, broadcast_to, wait_for_next_step)
 
-    if gesture_result == "service_end_button_clicked":
-        print("=" * 80)
-        print("✅ [Gesture 감지] 서비스 종료 버튼 클릭 감지")
-        print("=" * 80)
-        
-        # 모바일로 서비스 종료 요청 전송
-        await broadcast_to("mobile", "service_end_requested", {
-            "timestamp": int(time.time() * 1000)
-        })
-        
-        # 모바일 응답 대기 없이 바로 raspi로 초기 상태 복귀 이벤트 전송
-        await broadcast_to("raspi", "wakeword_start_waiting", {})
-        await wait_for_next_step("서비스 종료 요청 및 초기 상태 복귀 이벤트 전송 완료", "14-2")
-
-
+    # ================================
+    # 이후 PC/ 모바일로 프레임 전송
+    # ================================
     # PC로 프레임 전송 (timestamp 포함)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
     await broadcast_to('pc', "video_frame", {
@@ -718,6 +714,38 @@ async def handle_video_frame(sid, data):
     except Exception as e:
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
 
+# ========================================
+# mobile로부터 mediapipe on 이벤트 받으면 켜기
+# ========================================
+async def handle_active_mediapipe(sid, data):
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device != "mobile":
+        return
+
+    rect=data.get("rect")
+    if not rect:
+        print("active_mediapipe: rect 없음")
+        return
+
+    # mediapipe 켜기
+    gesture_manager.enabled= True
+    gesture_manager.button_rect= (
+        rect['left'],
+        rect['top'],
+        rect['right'],
+        rect['bottom']
+    )
+
+    # on/off toggle Logic
+    if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+        # 첫 번째 active: 시작 버튼 대기 모드
+        gesture_manager.waiting_for_start= True
+        print("Gesture mode: waiting for start")
+    elif gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+        # 두 번째 active: 종료 버튼 대기 모드
+        gesture_manager.waiting_for_start= False
+        gesture_manager.waiting_for_end= True
+        print("Gesture mode: waiting for end")
 
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
@@ -857,9 +885,4 @@ async def delete_marker(sid, data):
     
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
-async def on_wakeword_init(sid):
-    sender_device = device_map.get(sid, "unknown")
-    if sender_device != "raspi":
-        return
     
-    await broadcast_to('mobile', "wakeword_init", {})
