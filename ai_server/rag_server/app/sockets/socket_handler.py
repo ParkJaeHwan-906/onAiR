@@ -154,6 +154,12 @@ def init_socketio():
     sio.on("active_mediapipe")(handle_active_mediapipe)
     
 
+# 장치 연결 확인
+def log_device_list(prefix: str):
+    devices = [f"{sid[:6]}={dev}" for sid, dev in device_map.items()]
+    print(f"[{prefix}] total={len(device_map)} devices={devices}")
+
+
 # === 타입별 브로드캐스트 (안전 버전) ===
 async def broadcast_to(device_types, event: str, payload: dict):
     """
@@ -208,6 +214,7 @@ async def handle_disconnect(sid):
     """클라이언트 연결 해제"""
     if sid in device_map:
         del device_map[sid]
+    log_device_list("disconnected")
 
 
 async def handle_register_device(sid, data):
@@ -217,6 +224,7 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
+    log_device_list("registered device")
 
 # ========================================
 # 공통 시작 파이프라인(버튼 클릭으로 시작/wakeword 감지로 시작작)
@@ -846,6 +854,7 @@ async def accept_communication(sid, data):
         "opacity": None
     }
     ar_markers.append(description)
+    log_device_list("accepted communication")
 
 # 웹에서 통신 종료 이벤트 전달
 @sio.on("communication_close")
@@ -865,6 +874,7 @@ async def communication_close(sid, data):
     
     await broadcast_to("mobile", "communication_close", {})
     await broadcast_to("raspi", "audio_playback_completed", {})
+    log_device_list("closed communication")
 
 
 # ========================================
