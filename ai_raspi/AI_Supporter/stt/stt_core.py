@@ -20,7 +20,7 @@ class STTCore:
         self.manager = manager
         self.mic = manager.mic
         self.wakeword_detector = init_wakeword_detector()
-        self.buffered_stt = GcpBufferedStt()
+        self.buffered_stt = GcpBufferedStt(socket_client=self.manager.socketio_client)
 
         # wakeword 오디오 송출이 완료되었는지 
         self.wakeword_audio_done = threading.Event()
@@ -48,13 +48,14 @@ class STTCore:
         try:
             await self.buffered_stt.run(self.mic, broadcaster)
         except Exception as e:
+            await self.manager.socketio_client.emit_wakeword_init()
             logger.error(f"❌ STT 세션 오류 또는 타임아웃: {e}")
         
         # STT 종료 → 다시 웨이크워드 모드로 복귀
         logger.info("🔄 STT 종료 → 웨이크워드 모드로 전환")
         self.ignore_wakeword = False
         self.wakeword_detector.resume()
-        await self.manager.socketio_client.emit_wakeword_init()
+        # await self.manager.socketio_client.emit_wakeword_init()
 
 
 
