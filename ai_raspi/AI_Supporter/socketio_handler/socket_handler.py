@@ -4,6 +4,13 @@ import logging
 import asyncio
 import time
 
+# 음성 데이터 테스트
+import os
+import wave
+import numpy as np
+from datetime import datetime
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SocketIOClient")
 
@@ -24,6 +31,13 @@ class SocketIOClient:
             reconnection=True,
             reconnection_attempts=0  # 무한 재연결
         )
+
+        # 음성 데이터 테스트
+        # self.sample_rate = 16000
+        # self.channels = 1
+        # self.audio_save_dir = "data/audio"
+        # os.makedirs(self.audio_save_dir, exist_ok=True)
+
 
         # 이벤트 핸들러 등록
         self.sio.on("connect", self.on_connect)
@@ -107,8 +121,37 @@ class SocketIOClient:
             logger.error(f"❌ stt_result 전송 실패: {e}")
             return False
     
+    # async def emit_audio_frame(self, timestamp, frame_bytes):
+    #     try:
+    #         await self.sio.emit(
+    #             "audio_frame",
+    #             {
+    #                 "timestamp": timestamp,
+    #                 "frame": frame_bytes
+    #             }
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"❌ audio_frame emit 오류: {e}")
+    
     async def emit_audio_frame(self, timestamp, frame_bytes):
+        # WAV 저장
+        # try:
+        #     samples = np.frombuffer(frame_bytes, dtype=np.float32)
+        #     pcm16 = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
+        #     fname = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
+        #     fpath = os.path.join(self.audio_save_dir, fname)
+        #     with wave.open(fpath, "wb") as wf:
+        #         wf.setnchannels(self.channels)
+        #         wf.setsampwidth(2)  # int16
+        #         wf.setframerate(self.sample_rate)
+        #         wf.writeframes(pcm16.tobytes())
+        #     logger.info(f"📤 audio_frame emit (file={fpath})")
+        # except Exception as e:
+        #     logger.error(f"❌ audio_frame 저장 실패: {e}")
+
+        # 기존 emit
         try:
+            logger.info("audio frame emit req")
             await self.sio.emit(
                 "audio_frame",
                 {
@@ -118,7 +161,8 @@ class SocketIOClient:
             )
         except Exception as e:
             logger.error(f"❌ audio_frame emit 오류: {e}")
-    
+
+
     async def emit_stt_result(self, msg):
         try:
             await self.sio.emit(
