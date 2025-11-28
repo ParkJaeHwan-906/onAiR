@@ -152,7 +152,6 @@ def init_socketio():
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
     sio.on("active_mediapipe")(handle_active_mediapipe)
-    sio.on("deactive_mediapipe")(handle_deactive_mediapipe)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -218,6 +217,15 @@ async def handle_register_device(sid, data):
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
+
+# ========================================
+# 공통 시작 파이프라인(버튼 클릭으로 시작/wakeword 감지로 시작작)
+# ========================================
+async def trigger_start_pipeline(source: str):
+    """
+    wakeword 또는 gesture start 클릭 시 동일한 시작 파이프라인 실행
+    """
+    print(f"Start pipeline triggered by: {source}")
 
 
 # ========================================
@@ -688,7 +696,11 @@ async def handle_video_frame(sid, data):
     # ================================
     # 제스처로 서비스 종료 버튼 클릭 감지
     # ================================
-    await gesture_manager.handle_frame(frame, broadcast_to, wait_for_next_step)
+    await gesture_manager.handle_frame(
+    frame,
+    on_gesture_service_start,
+    on_gesture_service_end
+    )
 
     # ================================
     # 이후 PC/ 모바일로 프레임 전송
@@ -714,6 +726,7 @@ async def handle_video_frame(sid, data):
     except Exception as e:
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
 
+
 # ========================================
 # mobile로부터 mediapipe on 이벤트 받으면 켜기
 # ========================================
@@ -737,16 +750,41 @@ async def handle_active_mediapipe(sid, data):
     )
 
     # on/off toggle Logic
+    # 첫 번째 active: 시작 버튼 대기 모드
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        # 첫 번째 active: 시작 버튼 대기 모드
+
         gesture_manager.waiting_for_start= True
         print("Gesture mode: waiting for start")
+
+    # 두 번째 active: 종료 버튼 대기 모드
     elif gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        # 두 번째 active: 종료 버튼 대기 모드
         gesture_manager.waiting_for_start= False
         gesture_manager.waiting_for_end= True
         print("Gesture mode: waiting for end")
 
+# ========================================
+# mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
+# ========================================
+async def on_gesture_service_start():
+    print("Gesture START detected")
+
+    # 모바일로 시작 버튼 클릭 알림
+    await broadcast_to("mobile", "service_start_clicked", {})
+
+    # wakeword 없이도 시작 로직 호출
+    await trigger_start_pipeline("gesture")
+
+# ========================================
+# mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
+# ========================================
+async def on_gesture_service_end():
+    print("Gesture END detected")
+
+    # 모바일로 시작 버튼 클릭 알림
+    await broadcast_to("mobile", "service_end_clicked", {})
+
+    # wakeword 없이도 시작 로직 호출
+    await trigger_start_pipeline("raspi", "wakeword_start_waiting", {})
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
