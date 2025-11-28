@@ -213,8 +213,8 @@ async def handle_register_device(sid, data):
     """디바이스 등록"""
     device = data.get("device", "unknown")
     device_map[sid] = device
-    logger.info(f"디바이스 등록됨 : {}", device)
-    logger.info(f"{device_map}")
+    print(f"디바이스 등록됨 : {}", device)
+    print(f"{device_map}")
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -827,8 +827,8 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
-    logger.info("오퍼레이터 통신 시작됨")
-    logger.info(f"{device_map}")
+    print("오퍼레이터 통신 시작됨")
+    print(f"{device_map}")
     global ar_markers
     ar_markers.clear()
 
@@ -856,8 +856,8 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
-    logger.info("오퍼레이터 통신을 종료합니다.")
-    logger.info(f"{device_map}")
+    print("오퍼레이터 통신을 종료합니다.")
+    print(f"{device_map}")
     global ar_markers
     
     sender_device = device_map.get(sid, "unknown")
