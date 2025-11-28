@@ -5,8 +5,6 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 설계 요구사항:
 1. 라즈베리파이로부터 STT 텍스트 직접 수신 (WebSocket)
 """
-from this import d
-from google.generativeai.types import TunedModel
 import socketio
 import cv2
 import numpy as np
@@ -152,7 +150,6 @@ def init_socketio():
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
     sio.on("active_mediapipe")(handle_active_mediapipe)
-    sio.on("deactive_mediapipe")(handle_deactive_mediapipe)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -219,6 +216,15 @@ async def handle_register_device(sid, data):
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
 
+# ========================================
+# 공통 시작 파이프라인(버튼 클릭으로 시작/wakeword 감지로 시작작)
+# ========================================
+async def trigger_start_pipeline(source: str):
+    """
+    wakeword 또는 gesture start 클릭 시 동일한 시작 파이프라인 실행
+    """
+    print(f"Start pipeline triggered by: {source}")
+
 
 # ========================================
 # Wakeword 이벤트 핸들러
@@ -236,7 +242,9 @@ async def handle_wakeword_detected(sid, data):
     if sender_device != "raspi":
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
-    
+    print(data)
+    detected = data.get("detected", False)
+
     print("=" * 80)
     print("🎤 [Wakeword 감지] 라즈베리파이로부터 wakeword_detected 이벤트 수신")
     print(f"   세션 ID: {sid}")
@@ -254,7 +262,7 @@ async def handle_wakeword_detected(sid, data):
     
     # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
     await broadcast_to("mobile", "wakeword_detected", {
-        "timestamp": None
+        "detected": detected
     })
     
     print("✅ 모바일로 wakeword_detected 이벤트 전송 완료")
@@ -688,10 +696,14 @@ async def handle_video_frame(sid, data):
     # ================================
     # 제스처로 서비스 종료 버튼 클릭 감지
     # ================================
-    await gesture_manager.handle_frame(frame, broadcast_to, wait_for_next_step)
+    await gesture_manager.handle_frame(
+    frame,
+    on_gesture_service_start,
+    on_gesture_service_end
+    )
 
     # ================================
-    # 이후 PC/ 모바일로 프레임 전송
+    # 이후 PC/모바일로 프레임 전송
     # ================================
     # PC로 프레임 전송 (timestamp 포함)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -713,6 +725,7 @@ async def handle_video_frame(sid, data):
                 await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
     except Exception as e:
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
+
 
 # ========================================
 # mobile로부터 mediapipe on 이벤트 받으면 켜기
@@ -736,17 +749,59 @@ async def handle_active_mediapipe(sid, data):
         rect['bottom']
     )
 
-    # on/off toggle Logic
+    # START 모드 요청
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        # 첫 번째 active: 시작 버튼 대기 모드
+
         gesture_manager.waiting_for_start= True
         print("Gesture mode: waiting for start")
-    elif gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        # 두 번째 active: 종료 버튼 대기 모드
+        return
+
+    # END 모드 요청
+    if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
         gesture_manager.waiting_for_start= False
         gesture_manager.waiting_for_end= True
         print("Gesture mode: waiting for end")
+        return
 
+    # 그 외: 다시 초기화(비활성화일 때처럼)
+    gesture_manager.waiting_for_start= True
+    gesture_manager.waiting_for_end= False
+    print("Gesture mode reset-> waiting for start")
+
+# ========================================
+# mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
+# ========================================
+async def on_gesture_service_start():
+    print("Gesture START detected")
+
+    # 모바일로 시작 버튼 클릭 알림
+    await broadcast_to("mobile", "service_start_clicked", {})
+
+    # wakeword 없이도 시작 로직 호출- wakeword 이후 흐름을 그대로 실행하게 하는 진입점
+    await trigger_start_pipeline("gesture")
+
+# ========================================
+# mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
+# ========================================
+async def on_gesture_service_end():
+    print("Gesture END detected")
+
+    # 모바일로 시작 버튼 클릭 알림
+    await broadcast_to("mobile", "service_end_clicked", {})
+    
+    # 2. FastAPI 내부 상태 즉시 초기화 (모바일 응답 대기 없이)
+    global _pending_cv_detection
+    
+    # 제스처 인식 비활성화 (필수 - 다음 서비스 시작 전까지 인식 방지)
+    gesture_manager.enabled = False
+    
+    # CV 탐지 결과 초기화 (필수 - 다음 서비스 시작 시 이전 값 방지)
+    _pending_cv_detection = None
+    
+    # 3. 라즈베리파이에 초기 상태 복귀 요청
+    await broadcast_to("raspi", "wakeword_start_waiting", {})
+    
+    print("✅ 서비스 종료 처리 완료 - 초기 상태로 복귀")
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
