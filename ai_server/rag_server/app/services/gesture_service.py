@@ -35,21 +35,16 @@ def recognize_gesture(fingers):
     return None
 
 
-class GestureToggleState:
-    """글로벌 토글(ON/OFF) 상태 저장"""
-    def __init__(self):
-        self.service_on = False  # 초기값 OFF
-
-
-gesture_state = GestureToggleState()
-
-
 def process_gesture(frame, button_rect):
-    """
-    frame: OpenCV 이미지
-    button_rect: (x1, y1, x2, y2)
+    f"""
     return:
-        "service_on_trigger", "service_off_trigger", "service_end_button_clicked", None
+        {
+            "gesture": "point",
+            "x": ix,
+            "y": iy,
+            "is_end_button": True/False
+        }
+        또는 None
     """
     try:
         if frame is None or frame.size == 0:
@@ -65,35 +60,28 @@ def process_gesture(frame, button_rect):
         x1, y1, x2, y2 = button_rect
 
         SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
-        is_service_end_button = (x1, y1, x2, y2) == SERVICE_END_BUTTON_RECT
+        is_button = (x1, y1, x2, y2) == SERVICE_END_BUTTON_RECT
 
         for hand_landmarks in result.multi_hand_landmarks:
             fingers = get_finger_status(hand_landmarks)
             gesture = recognize_gesture(fingers)
+
+            if gesture != "point":
+                continue
 
             # 검지 손가락 좌표
             index_tip = hand_landmarks.landmark[8]
             ix = int(index_tip.x * w)
             iy = int(index_tip.y * h)
 
-            if gesture == "point":
-                inside = (x1 <= ix <= x2 and y1 <= iy <= y2)
-
-                if inside:
-                    # 서비스 종료 버튼
-                    if is_service_end_button:
-                        return "service_end_button_clicked"
-
-                    # 일반 토글 버튼
-                    if not gesture_state.service_on:
-                        gesture_state.service_on = True
-                        return "service_on_trigger"
-                    else:
-                        gesture_state.service_on = False
-                        return "service_off_trigger"
+            return{
+                "gesture": point,
+                "x": ix,
+                "y": iy,
+                "is_end_button": is_end_button
+            }
 
         return None
-
+    
     except Exception:
-        # mediapipe 오류 발생 시 조용히 무시
         return None
