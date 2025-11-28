@@ -24,8 +24,8 @@ class LoginActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContentView(binding.root)
 
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
-        val repository = AuthRepository(apiService, PreferenceUtil(this))
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
+        val repository = AuthRepository(apiService, PreferenceUtil)
         val viewModel = LoginViewModel(repository)
 
         binding.loginButton.setOnClickListener {

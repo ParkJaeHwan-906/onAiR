@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val mainViewModel: MainViewModel by viewModelByFactory {
-        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         val repository = AuthRepository(apiService, PreferenceUtil)
 
         MainViewModel(repository)

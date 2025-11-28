@@ -16,6 +16,7 @@ object ApiClient {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(TokenInterceptor())
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         })
@@ -38,7 +39,7 @@ object ApiClient {
         .build()
 
 
-    fun getSpringRetrofit(): Retrofit { return springRetrofit }
-    fun getFastApiRetrofit(): Retrofit { return fastApiRetrofit }
+//    fun getSpringRetrofit(): Retrofit { return springRetrofit }
+//    fun getFastApiRetrofit(): Retrofit { return fastApiRetrofit }
     fun getOkHttpClient(): OkHttpClient { return okHttpClient }
 }
