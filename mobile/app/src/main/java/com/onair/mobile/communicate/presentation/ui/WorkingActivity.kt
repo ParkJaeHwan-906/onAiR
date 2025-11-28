@@ -59,7 +59,7 @@ import kotlinx.coroutines.withContext
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
-        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
         val workingRepository = WorkingRepository(apiService)
         WorkingViewModel(taskRepository, workingRepository)
@@ -78,7 +78,7 @@ class WorkingActivity : AppCompatActivity() {
 //    private lateinit var tokenManager: TokenManager
 //    private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
-    private lateinit var preferenceUtil: PreferenceUtil
+    private val preferenceUtil = PreferenceUtil
     private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
     private var aiOnDialog: AiOnDialog? = null
     private var onAirOnDialog:  OnAirOnDialog? = null
@@ -106,7 +106,7 @@ class WorkingActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // 로그인 상태 확인
-        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         authRepository = AuthRepository(apiService, preferenceUtil)
 
         val refreshToken = authRepository.getRefreshToken()
@@ -198,7 +198,7 @@ class WorkingActivity : AppCompatActivity() {
 //            }
             socketIoSttClient.disconnect()
             workingViewModel.onFlowCompleted()
-            Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
+            Log.d(TAG, "현재 상태1: ${workingViewModel.onAirState}")
         }
         if (::sttRepository.isInitialized) {
             sttRepository.cleanup()
@@ -293,19 +293,26 @@ class WorkingActivity : AppCompatActivity() {
                     }
                 }
             }
+//            launch {
+//                workingViewModel.wakewordFlow.collectLatest { value ->
+//                    Log.d(TAG, "wakeword 감지")
+//
+//                    workingViewModel.onWakewordDetected()
+//                }
+//            }
             launch {
-                workingViewModel.wakewordFlow.collectLatest { value ->
-                    Log.d(TAG, "wakeword 감지")
-                    workingViewModel.onWakewordDetected()
-                }
-            }
-            launch {
-                workingViewModel.onAirState.collect { onAirState ->
+                workingViewModel.onAirState.collectLatest { onAirState ->
+                    Log.d(TAG, "현재 상태2: $onAirState")
                     when (onAirState) {
                         OnAirState.Started -> handleWakewordDetected()
                         OnAirState.Processing -> Log.d(TAG, "Processing")
                         OnAirState.Waiting -> Log.d(TAG, "Waiting")
                     }
+                }
+            }
+            launch {
+                workingViewModel.endService.collect {
+                    handleServiceEnd()
                 }
             }
         }
@@ -1018,7 +1025,7 @@ class WorkingActivity : AppCompatActivity() {
 //                handleCvDetectionAnomaly(cvAnomaly)
             },
             onWakewordDetected = {
-                handleWakewordDetected()
+//                handleWakewordDetected()
             },
             onPlayServiceEndAudio = { audioFile ->
                 handlePlayServiceEndAudio(audioFile)
@@ -1110,6 +1117,7 @@ class WorkingActivity : AppCompatActivity() {
 //        }
 //    }
     private suspend fun handleServiceEnd() {
+        Log.d(TAG, "Service 종료")
         mediaPlayerController.stop()
         workingViewModel.onFlowCompleted()
         try {
@@ -1135,6 +1143,7 @@ class WorkingActivity : AppCompatActivity() {
                 showOnModal()
                 mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
                     hideOnModal()
+                    Log.d(TAG, "서비스 종료 완료")
                     socketIoSttClient.sendServiceCompletedAudioCompleted()
                 }
             }

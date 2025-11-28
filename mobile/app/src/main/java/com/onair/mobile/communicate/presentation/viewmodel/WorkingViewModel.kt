@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
+import com.onair.mobile.communicate.data.network.SocketIoSttClient
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,17 +33,22 @@ class WorkingViewModel(
     val endService = SocketHolder.socketClient.endService
     val wakewordFlow = SocketHolder.socketClient.wakewordFlow
 
-//    init {
-//        Log.d("WorkingVM", "WorkingViewModel init 실행됨")
-//        viewModelScope.launch {
-//            SocketHolder.socketClient.wakewordFlow.collect {
-//                Log.d("working viewmodel", "현재 상태: ${_onAirState.value}")
+    init {
+        Log.d("WorkingVM", "WorkingViewModel init 실행됨")
+        viewModelScope.launch {
+            SocketHolder.socketClient.wakewordFlow.collect { value ->
+                Log.d("working view model", "현재 wake word: ${value}")
+                _onAirState.value = when (value) {
+                    SocketIoSttClient.WakewordEvent.Detected -> OnAirState.Started
+                    SocketIoSttClient.WakewordEvent.Ready -> OnAirState.Waiting
+                }
+                Log.d("working viewmodel", "현재 상태: ${_onAirState.value}")
 //                if (_onAirState.value == OnAirState.Waiting) {
 //                    _onAirState.value = OnAirState.Started
 //                }
-//            }
-//        }
-//    }
+            }
+        }
+    }
 
 
     fun endTask(taskId: Long, solution: String) {
@@ -94,9 +100,7 @@ class WorkingViewModel(
             _onAirState.value = OnAirState.Started
         }
     }
-    fun onServiceStarted() {
-        _onAirState.value = OnAirState.Processing
-    }
+
     fun onFlowCompleted() {
         _onAirState.value = OnAirState.Waiting
         SocketHolder.socketClient.resetShared()
