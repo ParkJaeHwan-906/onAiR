@@ -16,12 +16,6 @@ class WorkingViewModel(
     private val taskRepository: TaskRepository,
     private val workingRepository: WorkingRepository
 ): ViewModel() {
-//    enum class OnAirState {
-//        WAITING_WAKEWORD,
-//        WAKEWORD_DETECTED,
-//        PROCESSING_AI,
-//        PROCESSING_OPERATOR
-//    }
     private val _endStatus = MutableStateFlow(false)
     val endStatus = _endStatus.asStateFlow()
     private val _liveKitToken = MutableStateFlow("")

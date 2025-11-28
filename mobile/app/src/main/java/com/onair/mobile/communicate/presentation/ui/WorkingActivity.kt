@@ -149,19 +149,7 @@ class WorkingActivity : AppCompatActivity() {
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
             workingViewModel.onFlowCompleted()
-            // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
-            // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
-//            if (!isActivityResumed) {
-//                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
-//                resetToWakewordWaitingState()
-//                if (workingViewModel.onAirState.value != OnAirState.Waiting) {
-//                    Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
-//                    workingViewModel.onFlowCompleted()
-//                }
-//                isActivityResumed = true
-//            } else {
-//                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
-//            }
+            socketIoSttClient.activeMediaPipe()
         }
         lifecycleScope.launch {
             workingViewModel.endService.collect {
@@ -251,7 +239,6 @@ class WorkingActivity : AppCompatActivity() {
         if (targetHeight >= srcHeight) return this
 
         val top = (srcHeight - targetHeight) / 2
-//        val top = srcHeight - targetHeight
 
         return Bitmap.createBitmap(
             this,
@@ -287,10 +274,11 @@ class WorkingActivity : AppCompatActivity() {
             }
             launch {
                 workingViewModel.finalAnswer.collect { answer ->
-                    showAiAnswer(answer)
                     withContext(Dispatchers.Main) {
                         binding.serviceEndButton.visibility = View.VISIBLE
                     }
+                    socketIoSttClient.activeMediaPipe()
+                    showAiAnswer(answer)
                 }
             }
 //            launch {
@@ -639,7 +627,9 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 Log.i(TAG, "🔊 로컬 음성 파일 재생 시작: $WAKEWORD_AUDIO_FILE")
 
+
                 runOnUiThread {
+                    binding.serviceStartButton.visibility = View.GONE
                     showOnModal()
                 }
 
