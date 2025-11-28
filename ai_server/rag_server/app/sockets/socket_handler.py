@@ -5,8 +5,6 @@ FastAPI 서버용 Socket.IO 이벤트 핸들러
 설계 요구사항:
 1. 라즈베리파이로부터 STT 텍스트 직접 수신 (WebSocket)
 """
-from this import d
-from google.generativeai.types import TunedModel
 import socketio
 import cv2
 import numpy as np
