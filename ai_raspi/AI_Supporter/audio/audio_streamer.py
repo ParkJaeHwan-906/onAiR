@@ -34,24 +34,24 @@ class AudioStreamer:
         self.lock = threading.Lock()           # 콜백 thread-safe
 
         # WAV 저장 디렉토리
-        self.save_dir = "data/audio"
-        os.makedirs(self.save_dir, exist_ok=True)
+        # self.save_dir = "data/audio"
+        # os.makedirs(self.save_dir, exist_ok=True)
 
-        self.wav_file = None                   # 현재 파일 객체
+        # self.wav_file = None                   # 현재 파일 객체
 
 
     # ---------------------------------------------------
     # WAV 파일 시작
     # ---------------------------------------------------
-    def _open_wav_file(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = f"{self.save_dir}/{timestamp}.wav"
-        wf = wave.open(path, 'wb')
-        wf.setnchannels(self.channels)
-        wf.setsampwidth(2)            # int16
-        wf.setframerate(self.sample_rate)
-        self.wav_file = wf
-        logger.info(f"🎤 WAV 저장 시작 → {path}")
+    # def _open_wav_file(self):
+    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     path = f"{self.save_dir}/{timestamp}.wav"
+    #     wf = wave.open(path, 'wb')
+    #     wf.setnchannels(self.channels)
+    #     wf.setsampwidth(2)            # int16
+    #     wf.setframerate(self.sample_rate)
+    #     self.wav_file = wf
+    #     logger.info(f"🎤 WAV 저장 시작 → {path}")
 
 
     # ---------------------------------------------------
@@ -147,6 +147,7 @@ class AudioStreamer:
                     audio_bytes = self.buffer.astype(np.float32).tobytes()
 
                     # emit
+                    logger.info("버퍼 가득 차서 전송")
                     self._emit_safe(timestamp, audio_bytes)
 
                     # 초기화
