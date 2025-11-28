@@ -1,10 +1,10 @@
 package com.onair.mobile.communicate.data
 
 import android.util.Log
-import com.onair.mobile.communicate.data.api.ApiService
-import com.onair.mobile.communicate.data.api.dto.ApiResponse
-import com.onair.mobile.communicate.data.api.dto.EndTaskRequest
-import com.onair.mobile.communicate.data.api.dto.TaskResponse
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
+import com.onair.mobile.communicate.data.model.dto.ApiResponse
+import com.onair.mobile.communicate.data.model.dto.EndTaskRequest
+import com.onair.mobile.communicate.data.model.dto.TaskResponse
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response

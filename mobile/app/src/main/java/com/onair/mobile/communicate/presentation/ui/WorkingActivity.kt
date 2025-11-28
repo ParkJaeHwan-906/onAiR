@@ -22,8 +22,8 @@ import com.onair.mobile.R
 import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import com.onair.mobile.databinding.ActivityWorkingBinding
 import kotlinx.coroutines.flow.collectLatest
@@ -36,7 +36,7 @@ import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
 import com.onair.mobile.assistant.data.rag.RagRepositoryImpl
 import com.onair.mobile.assistant.data.raspberry.RaspberryPiControlRepository
-import com.onair.mobile.assistant.data.stt.SocketIoSttClient
+import com.onair.mobile.communicate.data.network.SocketIoSttClient
 import com.onair.mobile.assistant.data.stt.SttRepositoryImpl
 import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
@@ -59,7 +59,7 @@ import kotlinx.coroutines.withContext
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
         val workingRepository = WorkingRepository(apiService)
         WorkingViewModel(taskRepository, workingRepository)
@@ -106,8 +106,7 @@ class WorkingActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // 로그인 상태 확인
-        preferenceUtil = PreferenceUtil(applicationContext)
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.getSpringRetrofit().create(ApiService::class.java)
         authRepository = AuthRepository(apiService, preferenceUtil)
 
         val refreshToken = authRepository.getRefreshToken()
@@ -367,20 +366,20 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "🚀 Assistant 로직 초기화 시작")
 
         // STT Repository 초기화
-        sttRepository = SttRepositoryImpl(this)
+        sttRepository = SttRepositoryImpl()
 
         // Intent Repository 초기화
-        intentRepository = IntentRepositoryImpl(this, null)
+        intentRepository = IntentRepositoryImpl()
 
         // RAG Repository 초기화
-        val ragRepository = RagRepositoryImpl(FASTAPI_SERVER_URL)
+        val ragRepository = RagRepositoryImpl()
         llmRepository = LlmRepositoryImpl(ragRepository)
 
         // MediaPlayer Controller 초기화
         mediaPlayerController = MediaPlayerController(this)
 
         // TTS Repository 초기화
-        ttsRepository = TtsRepositoryImpl(this, mediaPlayerController, FASTAPI_SERVER_URL)
+        ttsRepository = TtsRepositoryImpl(mediaPlayerController)
 
         // Socket.IO 클라이언트 초기화 (연결은 onResume에서)
         socketIoSttClient = SocketHolder.socketClient
@@ -392,9 +391,6 @@ class WorkingActivity : AppCompatActivity() {
 
         // 토큰 관리자 초기화
 //        tokenManager = TokenManager(this)
-
-        // WebRTC Repository 초기화
-//        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
 
         // 토큰 갱신
         lifecycleScope.launch {
