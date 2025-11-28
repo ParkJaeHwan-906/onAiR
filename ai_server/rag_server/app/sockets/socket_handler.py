@@ -231,6 +231,8 @@ async def handle_wakeword_detected(sid, data):
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
     
+    detected = data.get("detected", False)
+
     print("=" * 80)
     print("🎤 [Wakeword 감지] 라즈베리파이로부터 wakeword_detected 이벤트 수신")
     print(f"   세션 ID: {sid}")
@@ -248,7 +250,7 @@ async def handle_wakeword_detected(sid, data):
     
     # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
     await broadcast_to("mobile", "wakeword_detected", {
-        "timestamp": None
+        "detected": detected
     })
     
     print("✅ 모바일로 wakeword_detected 이벤트 전송 완료")
