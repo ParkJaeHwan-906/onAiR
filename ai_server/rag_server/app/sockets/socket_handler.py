@@ -244,7 +244,7 @@ async def handle_wakeword_detected(sid, data):
     if sender_device != "raspi":
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
-    
+    print(data)
     detected = data.get("detected", False)
 
     print("=" * 80)
