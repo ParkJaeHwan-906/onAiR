@@ -2,9 +2,7 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 from app.core.config import settings
-from app.services.gms_client import call_gemini_via_gms, call_openai_via_gms
-
-import json
+from app.services.gms_client import call_openai_via_gms
 
 # ✅ GMS API 키 확인
 if settings.GMS_API_KEY:
@@ -26,38 +24,32 @@ def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Di
     CV 탐지 성공 시 간단한 알림 메시지 생성
     "어떤 모듈에서 발생한 어떤 오류가 탐지되었습니다." 형식
     """
-    if not gms_api_key:
-        # Fallback: 간단한 메시지
-        detected_items = []
-        for module_name, module_res in anomalies.items():
-            if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
-                detail = module_res.get("detail")
-                if detail:
-                    detected_items.append(f"{module_name}의 {detail}")
-                else:
-                    detected_items.append(module_name)
-        
-        if detected_items:
-            return f"{device_type}에서 {', '.join(detected_items)} 오류가 탐지되었습니다."
-        return f"{device_type}에서 이상이 탐지되었습니다."
-    
-    # GPT-4o로 자연스러운 알림 메시지 생성
+    # detected_items 추출 (공통 로직)
     detected_items = []
     for module_name, module_res in anomalies.items():
         if isinstance(module_res, dict) and module_res.get("status") == "anomaly":
             detail = module_res.get("detail")
             if detail:
-                detected_items.append(f"{module_name}.{detail}")
+                # GPT-4o용: "모듈.상세" 형식, Fallback용: "모듈의 상세" 형식
+                detected_items.append((f"{module_name}.{detail}", f"{module_name}의 {detail}"))
             else:
-                detected_items.append(module_name)
+                detected_items.append((module_name, module_name))
     
     if not detected_items:
         return f"{device_type}에서 이상이 탐지되었습니다."
     
+    # Fallback: 간단한 메시지
+    if not gms_api_key:
+        fallback_items = [item[1] for item in detected_items]
+        return f"{device_type}에서 {', '.join(fallback_items)} 오류가 탐지되었습니다."
+    
+    # GPT-4o로 자연스러운 알림 메시지 생성
+    gpt_items = [item[0] for item in detected_items]
+    
     prompt = f"""다음 정보를 바탕으로 간단하고 명확한 탐지 알림 메시지를 생성하세요.
 
 장비: {device_type}
-탐지된 오류: {', '.join(detected_items)}
+탐지된 오류: {', '.join(gpt_items)}
 
 요구사항:
 - "어떤 모듈에서 발생한 어떤 오류가 탐지되었습니다." 형식
@@ -81,10 +73,11 @@ def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Di
     except Exception as e:
         print(f"⚠️ CV 탐지 알림 메시지 생성 실패: {e}")
         # Fallback
-        if len(detected_items) == 1:
-            return f"{device_type}에서 {detected_items[0]} 오류가 탐지되었습니다."
+        fallback_items = [item[1] for item in detected_items]
+        if len(fallback_items) == 1:
+            return f"{device_type}에서 {fallback_items[0]} 오류가 탐지되었습니다."
         else:
-            return f"{device_type}에서 {len(detected_items)}개의 오류가 탐지되었습니다."
+            return f"{device_type}에서 {len(fallback_items)}개의 오류가 탐지되었습니다."
 
 def _generate_fallback_answer(
     error_code: str,
@@ -461,59 +454,45 @@ def llm_generate_answer(
         # ----------------------------
         # 9) 구조화된 JSON 생성
         # ----------------------------
+        # TTS용 첫 번째 항목 추출 (요약형 우선, 없으면 상세형)
+        first_cause = summary_causes[0] if summary_causes else (causes[0] if causes else None)
+        first_action = summary_actions[0] if summary_actions else (actions[0] if actions else None)
+        first_warning = summary_warnings[0] if summary_warnings else (warnings[0] if warnings else None)
+        
         result = {
             "error_code": error_code,
             # 모바일 화면용 요약형 마크다운 (간결) - 전체 마크다운
             "markdown_text": summary_markdown if summary_markdown else detailed_text,  # 요약형 우선, 없으면 상세형
-            "markdown_text_detailed": detailed_text,  # 상세형 (백업용)
-            # 요약형 데이터 (모바일 화면용) - 리스트 형태
-            "summary_causes": summary_causes if summary_causes else causes[:2],  # 요약형 원인, 없으면 상세형에서 2개만
-            "summary_actions": summary_actions if summary_actions else actions[:2],  # 요약형 조치, 없으면 상세형에서 2개만
-            "summary_warnings": summary_warnings if summary_warnings else warnings[:1],  # 요약형 주의사항, 없으면 상세형에서 1개만
             # 요약형 마크다운 (모바일 화면용) - 섹션별 마크다운
             "summary_causes_markdown": summary_causes_markdown if summary_causes_markdown else (causes_markdown if not summary_causes else ""),  # 요약형 원인 마크다운
             "summary_actions_markdown": summary_actions_markdown if summary_actions_markdown else (actions_markdown if not summary_actions else ""),  # 요약형 조치 마크다운
             "summary_warnings_markdown": summary_warnings_markdown if summary_warnings_markdown else (warnings_markdown if not summary_warnings else ""),  # 요약형 주의사항 마크다운
-            # TTS 변환용 (리스트 형태) - 상세형 사용 (원본 문장)
-            "possible_causes": causes,
-            "recommended_actions": [{"action": a, "priority": "medium"} for a in actions],
-            "safety_warnings": warnings,
-            # 상세형 마크다운 (백업용, TTS 변환용 텍스트 추출에 사용)
-            "possible_causes_markdown": causes_markdown,  # "## 🟥 원인\n- 필터 막힘...\n- 댐퍼..."
-            "recommended_actions_markdown": actions_markdown,  # "## 🛠 조치\n1. 프리필터...\n2. 댐퍼..."
-            "safety_warnings_markdown": warnings_markdown,  # "## ⚠ 주의사항\n- 압력 1.5bar..."
             "query": query,
             "citations": citations
         }
         
         print(f"✅ [Generator] 답변 생성 완료: error_code={error_code}")
-        print(f"   요약형: 원인={len(result['summary_causes'])}개, 조치={len(result['summary_actions'])}개, 주의사항={len(result['summary_warnings'])}개")
+        print(f"   요약형: 원인={len(summary_causes) if summary_causes else 0}개, 조치={len(summary_actions) if summary_actions else 0}개, 주의사항={len(summary_warnings) if summary_warnings else 0}개")
         print(f"   상세형: 원인={len(causes)}개, 조치={len(actions)}개, 주의사항={len(warnings)}개")
         
         # ----------------------------
         # 8) TTS friendly 변환 (요약형 기반)
         # ----------------------------
         tts_parts = []
-        # 요약형 우선 사용, 없으면 상세형 사용
-        use_causes = summary_causes if summary_causes else causes
-        use_actions = summary_actions if summary_actions else actions
-        use_warnings = summary_warnings if summary_warnings else warnings
-        
-        if use_causes and use_actions and use_warnings:
+        if first_cause and first_action and first_warning:
             tts_parts.append(f"{error_code}에 대한 정비 가이드입니다.")
-            tts_parts.append("원인은 " + use_causes[0] + "입니다.")
-            tts_parts.append("조치는 " + use_actions[0] + "입니다.")
-            tts_parts.append("주의사항은 " + use_warnings[0] + "입니다.")
+            tts_parts.append("원인은 " + first_cause + "입니다.")
+            tts_parts.append("조치는 " + first_action + "입니다.")
+            tts_parts.append("주의사항은 " + first_warning + "입니다.")
         else:
             # Fallback: 기존 방식
-            tts_text_parts = []
-            tts_text_parts.append(f"{error_code}에 대한 정비 가이드입니다.")
-            if use_causes:
-                tts_text_parts.append("원인은 " + use_causes[0] + "입니다.")
-            if use_actions:
-                tts_text_parts.append("조치는 " + use_actions[0] + "입니다.")
-            if use_warnings:
-                tts_text_parts.append("주의사항은 " + use_warnings[0] + "입니다.")
+            tts_text_parts = [f"{error_code}에 대한 정비 가이드입니다."]
+            if first_cause:
+                tts_text_parts.append("원인은 " + first_cause + "입니다.")
+            if first_action:
+                tts_text_parts.append("조치는 " + first_action + "입니다.")
+            if first_warning:
+                tts_text_parts.append("주의사항은 " + first_warning + "입니다.")
             tts_parts = tts_text_parts
         
         result["tts_text"] = format_for_tts(". ".join(tts_parts))
@@ -526,9 +505,8 @@ def llm_generate_answer(
         # possible_causes TTS (요약형 우선 사용)
         causes_audio = None
         causes_audio_encoding = None
-        use_cause = summary_causes[0] if summary_causes else (causes[0] if causes else None)
-        if use_cause:
-            causes_text = f"원인은 {use_cause}입니다."
+        if first_cause:
+            causes_text = f"원인은 {first_cause}입니다."
             try:
                 causes_tts = text_to_speech(format_for_tts(causes_text))
                 causes_audio = causes_tts.get("audio_content")
@@ -539,9 +517,8 @@ def llm_generate_answer(
         # recommended_actions TTS (요약형 우선 사용)
         actions_audio = None
         actions_audio_encoding = None
-        use_action = summary_actions[0] if summary_actions else (actions[0] if actions else None)
-        if use_action:
-            actions_text = f"조치는 {use_action}입니다."
+        if first_action:
+            actions_text = f"조치는 {first_action}입니다."
             try:
                 actions_tts = text_to_speech(format_for_tts(actions_text))
                 actions_audio = actions_tts.get("audio_content")
@@ -552,9 +529,8 @@ def llm_generate_answer(
         # safety_warnings TTS (요약형 우선 사용)
         warnings_audio = None
         warnings_audio_encoding = None
-        use_warning = summary_warnings[0] if summary_warnings else (warnings[0] if warnings else None)
-        if use_warning:
-            warnings_text = f"주의사항은 {use_warning}입니다."
+        if first_warning:
+            warnings_text = f"주의사항은 {first_warning}입니다."
             try:
                 warnings_tts = text_to_speech(format_for_tts(warnings_text))
                 warnings_audio = warnings_tts.get("audio_content")
