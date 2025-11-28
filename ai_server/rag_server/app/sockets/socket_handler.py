@@ -803,8 +803,8 @@ async def on_gesture_service_end():
     # CV 탐지 결과 초기화 (필수 - 다음 서비스 시작 시 이전 값 방지)
     _pending_cv_detection = None
     
-    # 3. 라즈베리파이에 초기 상태 복귀 요청
-    await broadcast_to("raspi", "wakeword_start_waiting", {})
+    # 3. 라즈베리파이에 서비스 종료 알림 (내부 초기화 로직 자동 실행)
+    await broadcast_to("raspi", "audio_playback_completed", {})
     
     print("✅ 서비스 종료 처리 완료 - 초기 상태로 복귀")
 # ========================================
@@ -864,7 +864,7 @@ async def communication_close(sid, data):
     await asyncio.sleep(0.3)
     
     await broadcast_to("mobile", "communication_close", {})
-    await broadcast_to("raspi", "wakeword_start_waiting", {})
+    await broadcast_to("raspi", "audio_playback_completed", {})
 
 
 # ========================================
