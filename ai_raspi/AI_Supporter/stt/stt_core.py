@@ -53,6 +53,8 @@ class STTCore:
         logger.info("🔄 STT 종료 → 웨이크워드 모드로 전환")
         self.ignore_wakeword = False
         self.wakeword_detector.resume()
+        self.manager.socketio_client.emit_wakeword_init()
+
 
 
     # ---------------------------------

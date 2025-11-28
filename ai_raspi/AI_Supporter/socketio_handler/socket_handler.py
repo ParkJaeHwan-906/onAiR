@@ -124,6 +124,12 @@ class SocketIOClient:
             )
         except Exception as e:
             logger.error(f"❌ stt_result emit 오류: {e}")
+    
+    async def emit_wakeword_init(self):
+        try:
+            await self.sio.emit("wakeword_init", {})
+        except Exception as e:
+            logger.error(f"❌ wakeword_init emit 오류: {e}")
     #=============================================================
     async def on_wakeword_audio_completed(self, data):
         """
