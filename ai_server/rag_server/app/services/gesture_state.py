@@ -10,6 +10,12 @@ class GestureManager:
         self.waiting_for_start = False
         self.waiting_for_end = False
 
+    def reset_to_initial_state(self):
+        """제스처 인식 상태 초기화"""
+        self.enabled = False
+        self.waiting_for_start = False
+        self.waiting_for_end = False
+
     async def handle_frame(self, frame, on_start, on_end):
         if not self.enabled:
             return
