@@ -32,6 +32,30 @@ class STTCore:
         # Threshold
         self.WAKEWORD_LCS_THRESHOLD_ENG = 0.60
         self.WAKEWORD_LCS_THRESHOLD_KOR = 0.60
+    
+    async def start_main_stt_session(self):
+        logger.info("🎤 메인 STT 세션 시작")
+
+        async def broadcaster(msg):
+            # STT 결과를 socket_handler로 전달
+            if msg["type"] == "final":
+                # self.manager.socketio_client.emit_stt_result(msg["text"])
+                self.manager.socketio_client.emit_stt_result(msg)
+            elif msg["type"] == "error":
+                logger.error(f"STT Error: {msg['text']}")
+
+        try:
+            await self.buffered_stt.run(self.mic, broadcaster)
+        except Exception as e:
+            logger.error(f"❌ STT 세션 오류 또는 타임아웃: {e}")
+        
+        # STT 종료 → 다시 웨이크워드 모드로 복귀
+        logger.info("🔄 STT 종료 → 웨이크워드 모드로 전환")
+        self.ignore_wakeword = False
+        self.wakeword_detector.resume()
+        self.manager.socketio_client.emit_wakeword_init()
+
+
 
     # ---------------------------------
     # 유틸 함수
@@ -219,8 +243,8 @@ class STTCore:
                             logger.warning("⚠️ Wakeword 감지기가 중지되었습니다. 재시작합니다...")
                             self.wakeword_detector.start()
                         
-                        if self.wakeword_detector.is_paused:
-                            self.wakeword_detector.resume()
+                        # if self.wakeword_detector.is_paused:
+                        #     self.wakeword_detector.resume()
                         
                         # 마이크 상태 확인
                         if not self.mic.is_active():
@@ -311,48 +335,56 @@ class STTCore:
                         logger.info("✅ Wakeword 검증 성공!")
                         # Wakeword 성공
                         self.manager.on_wakeword_detected()
-                        self.manager.wakeword_count += 1
+                        # self.manager.wakeword_count += 1
                         
                         # Wakeword 오디오 FastAPI 전송 완료 대기
                         self.wakeword_audio_done.clear()
                         self.wakeword_audio_done.wait()
-                        time.sleep(3)     
-                    
+
                         # 현재 단계에서는 wakeword 감지 중지
                         self.ignore_wakeword = True 
                         self.wakeword_detector.pause() 
 
-                        # # 홀수 → STT
-                        # if self.manager.wakeword_count % 2 == 1:
-                        #     # 시연 시에는, AI 서포터로 무조건 
-                        #     self.manager.switch_to_stt()
-                        #     # AI 서포터 전송
-                        #     self.manager.on_ai_supporter()
-                        #     time.sleep(1.0)
-                        # else:
-                        #     # 오퍼레이터 통신 전송
-                        #     self.manager.on_connect_operator()
-                        #     # 수락을 했을 때
-                        #     self.operator_accept.clear()
-                        #     self.operator_accept.wait()
-                        #     # 시연 시에는, 오퍼레이터 통신으로 무조건
-                        #     self.manager.switch_to_rtc()
-                        #     time.sleep(1.0)
+                        # # STT 감지 시작
+                        # self.manager.switch_to_stt()
+                        # loop = self.manager.socketio_client.loop
+                        # asyncio.run_coroutine_threadsafe(self.start_main_stt_session(), loop)
 
-                    # 시연 시에는, AI 서포터로 무조건 
-                    self.manager.switch_to_stt()
-                    # AI 서포터 전송
-                    self.manager.on_ai_supporter()
-                    time.sleep(1.0)
+                        # STT 감지 시작
+                        self.manager.switch_to_stt()
+
+                        loop = self.manager.socketio_client.loop
+                        logger.info(f"[STT] Loop running: {loop.is_running()}")   # ① loop 상태 확인
+
+                        # ② STT 실제 실행 + future 객체 받기
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.start_main_stt_session(),
+                            loop
+                        )
+
+                        # ③ future 예외 또는 완료 로그 찍기
+                        def _cb(f):
+                            try:
+                                result = f.result()  # 내부 예외 있으면 여기서 잡힘
+                                logger.info(f"[STT] start_main_stt_session() finished: {result}")
+                            except Exception as e:
+                                logger.error(f"[STT] start_main_stt_session() ERROR: {e}")
+
+                        future.add_done_callback(_cb)
 
                     if self.manager.is_rtc_running:
                         self.wakeword_detector.pause()
                         time.sleep(0.1)
                         continue
+                    else:
+                        # RTC가 종료된 상태인데 아직 ignore_wakeword=True이면 즉시 초기화
+                        if self.ignore_wakeword:
+                            logger.info("🔄 RTC 종료 감지 → 초기 상태로 복귀")
+                            self.reset_to_initial_state()
 
                     # RTC 모드가 종료되면 초기 상태로 복귀
-                    self.ignore_wakeword = False
-                    self.wakeword_detector.resume()
+                    # self.ignore_wakeword = False
+                    # self.wakeword_detector.resume()
 
                 except Exception as e:
                     logger.error(f"❌ STT Core 루프 오류: {e}")
