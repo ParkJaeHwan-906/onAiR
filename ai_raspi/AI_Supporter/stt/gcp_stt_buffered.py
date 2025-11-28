@@ -12,7 +12,7 @@ import numpy as np
 
 
 class GcpBufferedStt:
-    def __init__(self):
+    def __init__(self, socket_client=None):
         # GCP 인증 키 파일 경로 설정
         if hasattr(settings, 'GCP_CREDENTIAL_PATH') and settings.GCP_CREDENTIAL_PATH:
             if os.path.exists(settings.GCP_CREDENTIAL_PATH):
@@ -27,6 +27,7 @@ class GcpBufferedStt:
         self.rate = settings.RATE
         self.client = speech.SpeechClient()
         self.buffer_duration = settings.STT_BUFFER_DURATION_SEC
+        self.socket_client = socket_client
     
     def _normalize_audio_volume(self, audio_data: bytes, target_level: float = 0.8) -> bytes:
         """
@@ -117,7 +118,7 @@ class GcpBufferedStt:
         # 파라미터 설정
         INITIAL_GRACE_PERIOD = 1.0
         SPEECH_TIMEOUT_SEC = 3.0
-        MIN_RMS_THRESHOLD = 500.0
+        MIN_RMS_THRESHOLD = 80.0
         CHUNK_READ_TIMEOUT = 0.1
 
         buffer = []
@@ -238,6 +239,7 @@ class GcpBufferedStt:
 
         except Exception as e:
             await broadcaster({"type": "error", "text": str(e)})
+            await self.socket_client.emit_wakeword_init()
             raise
 
 
