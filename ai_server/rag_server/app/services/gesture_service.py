@@ -1,11 +1,18 @@
 import cv2
 import mediapipe as mp
+import os
+
+# Docker 환경에서 GPU 사용 불가 시 CPU 모드로 강제 설정
+# GPU 관련 오류 방지
+os.environ['GLOG_minloglevel'] = '2'  # Mediapipe 로그 레벨 낮춤 (경고 억제)
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
+    static_image_mode=False,
     max_num_hands=1,
     min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
+    min_tracking_confidence=0.5,
+    model_complexity=1  # CPU 모드에서도 안정적으로 동작
 )
 
 def get_finger_status(hand):
