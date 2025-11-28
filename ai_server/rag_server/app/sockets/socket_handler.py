@@ -705,7 +705,7 @@ async def handle_video_frame(sid, data):
     )
 
     # ================================
-    # 이후 PC/ 모바일로 프레임 전송
+    # 이후 PC/모바일로 프레임 전송
     # ================================
     # PC로 프레임 전송 (timestamp 포함)
     _, jpeg_bytes = cv2.imencode(".jpg", frame)
@@ -751,18 +751,24 @@ async def handle_active_mediapipe(sid, data):
         rect['bottom']
     )
 
-    # on/off toggle Logic
-    # 첫 번째 active: 시작 버튼 대기 모드
+    # START 모드 요청
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
 
         gesture_manager.waiting_for_start= True
         print("Gesture mode: waiting for start")
+        return
 
-    # 두 번째 active: 종료 버튼 대기 모드
-    elif gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+    # END 모드 요청
+    if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
         gesture_manager.waiting_for_start= False
         gesture_manager.waiting_for_end= True
         print("Gesture mode: waiting for end")
+        return
+
+    # 그 외: 다시 초기화(비활성화일 때처럼)
+    gesture_manager.waiting_for_start= True
+    gesture_manager.waiting_for_end= False
+    print("Gesture mode reset-> waiting for start")
 
 # ========================================
 # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
@@ -773,7 +779,7 @@ async def on_gesture_service_start():
     # 모바일로 시작 버튼 클릭 알림
     await broadcast_to("mobile", "service_start_clicked", {})
 
-    # wakeword 없이도 시작 로직 호출
+    # wakeword 없이도 시작 로직 호출- wakeword 이후 흐름을 그대로 실행하게 하는 진입점
     await trigger_start_pipeline("gesture")
 
 # ========================================
@@ -784,9 +790,18 @@ async def on_gesture_service_end():
 
     # 모바일로 시작 버튼 클릭 알림
     await broadcast_to("mobile", "service_end_clicked", {})
-
-    # wakeword 없이도 시작 로직 호출
-    await trigger_start_pipeline("raspi", "wakeword_start_waiting", {})
+    
+    # 2. FastAPI 내부 상태 즉시 초기화 (모바일 응답 대기 없이)
+    global _pending_cv_detection
+    
+    # 제스처 인식 비활성화 (필수 - 다음 서비스 시작 전까지 인식 방지)
+    gesture_manager.enabled = False
+    
+    # CV 탐지 결과 초기화 (필수 - 다음 서비스 시작 시 이전 값 방지)
+    _pending_cv_detection = None
+    
+    # 3. 라즈베리파이에 초기 상태 복귀 요청
+    await broadcast_to("raspi", "wakeword_start_waiting", {})
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
