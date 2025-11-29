@@ -22,8 +22,8 @@ import com.onair.mobile.R
 import com.onair.mobile.communicate.data.SseEvent
 import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.utils.viewModelByFactory
 import com.onair.mobile.databinding.ActivityWorkingBinding
 import kotlinx.coroutines.flow.collectLatest
@@ -36,7 +36,7 @@ import com.onair.mobile.assistant.data.intent.IntentRepositoryImpl
 import com.onair.mobile.assistant.data.llm.LlmRepositoryImpl
 import com.onair.mobile.assistant.data.rag.RagRepositoryImpl
 import com.onair.mobile.assistant.data.raspberry.RaspberryPiControlRepository
-import com.onair.mobile.assistant.data.stt.SocketIoSttClient
+import com.onair.mobile.communicate.data.network.SocketIoSttClient
 import com.onair.mobile.assistant.data.stt.SttRepositoryImpl
 import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.assistant.data.tts.TtsRepositoryImpl
@@ -59,7 +59,7 @@ import kotlinx.coroutines.withContext
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
         val workingRepository = WorkingRepository(apiService)
         WorkingViewModel(taskRepository, workingRepository)
@@ -78,7 +78,7 @@ class WorkingActivity : AppCompatActivity() {
 //    private lateinit var tokenManager: TokenManager
 //    private lateinit var webRtcRepository: WebRtcRepository
     private lateinit var authRepository: AuthRepository
-    private lateinit var preferenceUtil: PreferenceUtil
+    private val preferenceUtil = PreferenceUtil
     private var description: String = ""  // 기본값 설정 (CV 탐지 실패/정상 케이스에서도 사용)
     private var aiOnDialog: AiOnDialog? = null
     private var onAirOnDialog:  OnAirOnDialog? = null
@@ -106,8 +106,7 @@ class WorkingActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // 로그인 상태 확인
-        preferenceUtil = PreferenceUtil(applicationContext)
-        val apiService = ApiClient(this).getRetrofit().create(ApiService::class.java)
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         authRepository = AuthRepository(apiService, preferenceUtil)
 
         val refreshToken = authRepository.getRefreshToken()
@@ -150,19 +149,7 @@ class WorkingActivity : AppCompatActivity() {
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
             workingViewModel.onFlowCompleted()
-            // 비정상 종료 후 다시 들어온 경우를 대비하여 상태 초기화 및 wakeword 대기 상태로 복귀
-            // 단, 이미 resume 상태였다가 다시 resume된 경우는 제외 (중복 방지)
-//            if (!isActivityResumed) {
-//                Log.i(TAG, "🔄 WorkingActivity onResume: 상태 초기화 및 wakeword 대기 상태로 복귀")
-//                resetToWakewordWaitingState()
-//                if (workingViewModel.onAirState.value != OnAirState.Waiting) {
-//                    Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
-//                    workingViewModel.onFlowCompleted()
-//                }
-//                isActivityResumed = true
-//            } else {
-//                Log.i(TAG, "ℹ️ WorkingActivity onResume: 이미 resume 상태 (상태 초기화 생략)")
-//            }
+            socketIoSttClient.activeMediaPipe()
         }
         lifecycleScope.launch {
             workingViewModel.endService.collect {
@@ -199,7 +186,7 @@ class WorkingActivity : AppCompatActivity() {
 //            }
             socketIoSttClient.disconnect()
             workingViewModel.onFlowCompleted()
-            Log.d(TAG, "현재 상태: ${workingViewModel.onAirState}")
+            Log.d(TAG, "현재 상태1: ${workingViewModel.onAirState}")
         }
         if (::sttRepository.isInitialized) {
             sttRepository.cleanup()
@@ -252,7 +239,6 @@ class WorkingActivity : AppCompatActivity() {
         if (targetHeight >= srcHeight) return this
 
         val top = (srcHeight - targetHeight) / 2
-//        val top = srcHeight - targetHeight
 
         return Bitmap.createBitmap(
             this,
@@ -288,25 +274,33 @@ class WorkingActivity : AppCompatActivity() {
             }
             launch {
                 workingViewModel.finalAnswer.collect { answer ->
-                    showAiAnswer(answer)
                     withContext(Dispatchers.Main) {
                         binding.serviceEndButton.visibility = View.VISIBLE
                     }
+                    socketIoSttClient.activeMediaPipe()
+                    showAiAnswer(answer)
                 }
             }
+//            launch {
+//                workingViewModel.wakewordFlow.collectLatest { value ->
+//                    Log.d(TAG, "wakeword 감지")
+//
+//                    workingViewModel.onWakewordDetected()
+//                }
+//            }
             launch {
-                workingViewModel.wakewordFlow.collectLatest { value ->
-                    Log.d(TAG, "wakeword 감지")
-                    workingViewModel.onWakewordDetected()
-                }
-            }
-            launch {
-                workingViewModel.onAirState.collect { onAirState ->
+                workingViewModel.onAirState.collectLatest { onAirState ->
+                    Log.d(TAG, "현재 상태2: $onAirState")
                     when (onAirState) {
                         OnAirState.Started -> handleWakewordDetected()
                         OnAirState.Processing -> Log.d(TAG, "Processing")
                         OnAirState.Waiting -> Log.d(TAG, "Waiting")
                     }
+                }
+            }
+            launch {
+                workingViewModel.endService.collect {
+                    handleServiceEnd()
                 }
             }
         }
@@ -367,20 +361,20 @@ class WorkingActivity : AppCompatActivity() {
         Log.i(TAG, "🚀 Assistant 로직 초기화 시작")
 
         // STT Repository 초기화
-        sttRepository = SttRepositoryImpl(this)
+        sttRepository = SttRepositoryImpl()
 
         // Intent Repository 초기화
-        intentRepository = IntentRepositoryImpl(this, null)
+        intentRepository = IntentRepositoryImpl()
 
         // RAG Repository 초기화
-        val ragRepository = RagRepositoryImpl(FASTAPI_SERVER_URL)
+        val ragRepository = RagRepositoryImpl()
         llmRepository = LlmRepositoryImpl(ragRepository)
 
         // MediaPlayer Controller 초기화
         mediaPlayerController = MediaPlayerController(this)
 
         // TTS Repository 초기화
-        ttsRepository = TtsRepositoryImpl(this, mediaPlayerController, FASTAPI_SERVER_URL)
+        ttsRepository = TtsRepositoryImpl(mediaPlayerController)
 
         // Socket.IO 클라이언트 초기화 (연결은 onResume에서)
         socketIoSttClient = SocketHolder.socketClient
@@ -392,9 +386,6 @@ class WorkingActivity : AppCompatActivity() {
 
         // 토큰 관리자 초기화
 //        tokenManager = TokenManager(this)
-
-        // WebRTC Repository 초기화
-//        webRtcRepository = WebRtcRepository(SPRING_SERVER_URL)
 
         // 토큰 갱신
         lifecycleScope.launch {
@@ -636,7 +627,9 @@ class WorkingActivity : AppCompatActivity() {
             try {
                 Log.i(TAG, "🔊 로컬 음성 파일 재생 시작: $WAKEWORD_AUDIO_FILE")
 
+
                 runOnUiThread {
+                    binding.serviceStartButton.visibility = View.GONE
                     showOnModal()
                 }
 
@@ -1022,7 +1015,7 @@ class WorkingActivity : AppCompatActivity() {
 //                handleCvDetectionAnomaly(cvAnomaly)
             },
             onWakewordDetected = {
-                handleWakewordDetected()
+//                handleWakewordDetected()
             },
             onPlayServiceEndAudio = { audioFile ->
                 handlePlayServiceEndAudio(audioFile)
@@ -1114,6 +1107,7 @@ class WorkingActivity : AppCompatActivity() {
 //        }
 //    }
     private suspend fun handleServiceEnd() {
+        Log.d(TAG, "Service 종료")
         mediaPlayerController.stop()
         workingViewModel.onFlowCompleted()
         try {
@@ -1139,6 +1133,7 @@ class WorkingActivity : AppCompatActivity() {
                 showOnModal()
                 mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
                     hideOnModal()
+                    Log.d(TAG, "서비스 종료 완료")
                     socketIoSttClient.sendServiceCompletedAudioCompleted()
                 }
             }

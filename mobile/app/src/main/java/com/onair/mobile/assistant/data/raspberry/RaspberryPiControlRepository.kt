@@ -1,7 +1,7 @@
 package com.onair.mobile.assistant.data.raspberry
 
 import android.util.Log
-import com.onair.mobile.assistant.data.stt.SocketIoSttClient
+import com.onair.mobile.communicate.data.network.SocketIoSttClient
 
 /**
  * 라즈베리파이 제어 API Repository 구현체

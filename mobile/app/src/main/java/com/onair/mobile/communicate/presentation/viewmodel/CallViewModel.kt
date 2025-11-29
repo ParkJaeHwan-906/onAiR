@@ -115,7 +115,6 @@ class CallViewModel(
         viewModelScope.launch {
             SocketHolder.socketClient.videoFrames.collect { frame ->
                 _frameState.emit(frame)
-                Log.d("Call view model", frame.toString())
             }
         }
     }

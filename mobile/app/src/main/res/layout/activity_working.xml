@@ -228,6 +228,25 @@
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+<!--            <Button-->
+<!--                style="?attr/materialIconButtonFilledStyle"-->
+<!--                android:layout_width="wrap_content"-->
+<!--                android:layout_height="wrap_content"-->
+<!--                android:id="@+id/service_start_button"-->
+<!--                android:visibility="visible"-->
+<!--                app:icon="@drawable/onair_logo"-->
+<!--                app:layout_constraintEnd_toEndOf="parent"-->
+<!--                app:layout_constraintTop_toTopOf="parent" />-->
+            <ImageButton
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:src="@drawable/white_background_logo"
+                android:id="@+id/service_start_button"
+                android:visibility="visible"
+                android:scaleType="centerInside"
+                android:backgroundTint="@color/white"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
             <Button
                 style="?attr/materialIconButtonFilledStyle"
                 android:layout_width="wrap_content"
