@@ -26,7 +26,7 @@ from app.services.gesture_state import GestureManager
 SERVICE_END_BUTTON_RECT = (1710, 45, 1860, 195)
 
 # Gesture 인식 상태 관리 (클래스로 캡슐화)
-gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
+# gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
 
 # settings는 wait_for_next_step에서 사용되므로 반드시 import 필요
 from app.core.config import settings
@@ -426,8 +426,19 @@ async def handle_intent_audio_completed(sid, data):
                 })
                 return
 
+            # 장비 고정을 위해 modules 의 dic 에서 label 과 has_anomaly 만 우선 추출
+            filtered = [
+                {
+                    "label": m.get("label"),
+                    "has_anomaly": m.get("has_anomaly")
+                }
+                for m in modules_raw
+            ]
+            # 정상 상태인 항목에 대해서 우선 순위를 부여
+            sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"])
+
             # 시연용 fan 으로 탐지 되어있을 때는 반드시 오류 탐지로 이동할 수 있도록
-            if device_type == "fan":
+            if device_type == "AHU" and sorted_filtered[0]["label"] == "fan":
                 has_anomaly = True
 
             # -------------------------
@@ -717,7 +728,7 @@ async def handle_video_frame(sid, data):
             return
         
         # 원본 프레임 저장 (제스처 인식용 - 좌표계 일치를 위해 반전하지 않음)
-        frame_for_gesture = frame_original.copy()
+        # frame_for_gesture = frame_original.copy()
         
         # 반전된 프레임 생성 (AR 마커/모션 추정용)
         try:
@@ -781,12 +792,12 @@ async def handle_video_frame(sid, data):
     # 제스처로 서비스 종료 버튼 클릭 감지
     # 원본 프레임 사용 (반전되지 않은 프레임) - 모바일 화면 좌표계와 일치
     # ================================
-    if gesture_manager.enabled:
-        await gesture_manager.handle_frame(
-            frame_for_gesture,
-            on_gesture_service_start,
-            on_gesture_service_end
-        )
+    # if gesture_manager.enabled:
+    #     await gesture_manager.handle_frame(
+    #         frame_for_gesture,
+    #         on_gesture_service_start,
+    #         on_gesture_service_end
+    #     )
 
     # ================================
     # 이후 PC/모바일로 프레임 전송
@@ -813,109 +824,109 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
 
 
-# ========================================
-# mobile로부터 mediapipe on 이벤트 받으면 켜기
-# ========================================
-async def handle_active_mediapipe(sid, data):
-    """
-    모바일로부터 active_mediapipe 이벤트 수신
-    - data는 None일 수 있음 (모바일에서 null을 보낼 수 있음)
-    - rect 정보가 없으면 하드코딩된 좌표 사용
-    """
-    try:
-        sender_device = device_map.get(sid, "unknown")
+# # ========================================
+# # mobile로부터 mediapipe on 이벤트 받으면 켜기
+# # ========================================
+# async def handle_active_mediapipe(sid, data):
+#     """
+#     모바일로부터 active_mediapipe 이벤트 수신
+#     - data는 None일 수 있음 (모바일에서 null을 보낼 수 있음)
+#     - rect 정보가 없으면 하드코딩된 좌표 사용
+#     """
+#     try:
+#         sender_device = device_map.get(sid, "unknown")
         
-        if sender_device != "mobile":
-            return
+#         if sender_device != "mobile":
+#             return
 
-        # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
-        rect = None
+#         # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
+#         rect = None
         
-        if data is None:
-            rect = None
-        elif isinstance(data, (list, tuple)) and len(data) > 0:
-            first_item = data[0]
-            if isinstance(first_item, dict):
-                rect = first_item.get("rect") if first_item else None
-        elif isinstance(data, dict):
-            rect = data.get("rect")
-        elif hasattr(data, 'get') and callable(getattr(data, 'get', None)):
-            try:
-                if data is not None:
-                    rect = data.get("rect")
-            except (AttributeError, TypeError):
-                rect = None
+#         if data is None:
+#             rect = None
+#         elif isinstance(data, (list, tuple)) and len(data) > 0:
+#             first_item = data[0]
+#             if isinstance(first_item, dict):
+#                 rect = first_item.get("rect") if first_item else None
+#         elif isinstance(data, dict):
+#             rect = data.get("rect")
+#         elif hasattr(data, 'get') and callable(getattr(data, 'get', None)):
+#             try:
+#                 if data is not None:
+#                     rect = data.get("rect")
+#             except (AttributeError, TypeError):
+#                 rect = None
         
-        if rect and isinstance(rect, dict):
-            button_rect = (
-                rect.get('left'),
-                rect.get('top'),
-                rect.get('right'),
-                rect.get('bottom')
-            )
-            if not all(v is not None for v in button_rect):
-                button_rect = SERVICE_END_BUTTON_RECT
-        else:
-            button_rect = SERVICE_END_BUTTON_RECT
+#         if rect and isinstance(rect, dict):
+#             button_rect = (
+#                 rect.get('left'),
+#                 rect.get('top'),
+#                 rect.get('right'),
+#                 rect.get('bottom')
+#             )
+#             if not all(v is not None for v in button_rect):
+#                 button_rect = SERVICE_END_BUTTON_RECT
+#         else:
+#             button_rect = SERVICE_END_BUTTON_RECT
         
-        gesture_manager.enabled = True
-        gesture_manager.button_rect = button_rect
+#         gesture_manager.enabled = True
+#         gesture_manager.button_rect = button_rect
 
-        # START 모드 요청 (첫 번째 active_mediapipe 호출)
-        if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-            gesture_manager.waiting_for_start = True
-            print("✅ [Gesture] 서비스 시작 버튼 클릭 대기 모드", flush=True)
-            return
+#         # START 모드 요청 (첫 번째 active_mediapipe 호출)
+#         if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+#             gesture_manager.waiting_for_start = True
+#             print("✅ [Gesture] 서비스 시작 버튼 클릭 대기 모드", flush=True)
+#             return
 
-        # END 모드 요청 (두 번째 active_mediapipe 호출)
-        if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-            gesture_manager.waiting_for_start = False
-            gesture_manager.waiting_for_end = True
-            print("✅ [Gesture] 서비스 종료 버튼 클릭 대기 모드", flush=True)
-            return
+#         # END 모드 요청 (두 번째 active_mediapipe 호출)
+#         if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+#             gesture_manager.waiting_for_start = False
+#             gesture_manager.waiting_for_end = True
+#             print("✅ [Gesture] 서비스 종료 버튼 클릭 대기 모드", flush=True)
+#             return
 
-        # 그 외: 다시 초기화
-        gesture_manager.waiting_for_start = True
-        gesture_manager.waiting_for_end = False
-    except Exception as e:
-        print(f"❌ [Gesture] active_mediapipe 처리 오류: {e}", flush=True)
-        # 에러가 발생해도 기본 좌표로 설정하여 서비스가 계속 작동하도록 함
-        try:
-            gesture_manager.enabled = True
-            gesture_manager.button_rect = SERVICE_END_BUTTON_RECT
-        except Exception:
-            pass
+#         # 그 외: 다시 초기화
+#         gesture_manager.waiting_for_start = True
+#         gesture_manager.waiting_for_end = False
+#     except Exception as e:
+#         print(f"❌ [Gesture] active_mediapipe 처리 오류: {e}", flush=True)
+#         # 에러가 발생해도 기본 좌표로 설정하여 서비스가 계속 작동하도록 함
+#         try:
+#             gesture_manager.enabled = True
+#             gesture_manager.button_rect = SERVICE_END_BUTTON_RECT
+#         except Exception:
+#             pass
 
-# ========================================
-# mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
-# ========================================
-async def on_gesture_service_start():
-    print("✅ [Gesture] 서비스 시작 버튼 클릭", flush=True)
-    await broadcast_to("mobile", "service_start_clicked", {})
-    await trigger_start_pipeline("gesture")
+# # ========================================
+# # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
+# # ========================================
+# async def on_gesture_service_start():
+#     print("✅ [Gesture] 서비스 시작 버튼 클릭", flush=True)
+#     await broadcast_to("mobile", "service_start_clicked", {})
+#     await trigger_start_pipeline("gesture")
 
-# ========================================
-# mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
-# ========================================
-async def on_gesture_service_end():
-    print("✅ [Gesture] 서비스 종료 버튼 클릭", flush=True)
-    await broadcast_to("mobile", "service_end_clicked", {})
+# # ========================================
+# # mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
+# # ========================================
+# async def on_gesture_service_end():
+#     print("✅ [Gesture] 서비스 종료 버튼 클릭", flush=True)
+#     await broadcast_to("mobile", "service_end_clicked", {})
     
-    global _pending_cv_detection
-    gesture_manager.enabled = False
-    _pending_cv_detection = None
-    await broadcast_to("raspi", "audio_playback_completed", {})
-# ========================================
-# Raspberry Pi 오디오 프레임 처리
-# ========================================
-@sio.on("audio_frame")
-async def handle_audio_frame(sid, data):
-    """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
-    sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown" or not data:
-        return
+#     global _pending_cv_detection
+#     gesture_manager.enabled = False
+#     _pending_cv_detection = None
+#     await broadcast_to("raspi", "audio_playback_completed", {})
+# # ========================================
+# # Raspberry Pi 오디오 프레임 처리
+# # ========================================
+# @sio.on("audio_frame")
+# async def handle_audio_frame(sid, data):
+#     """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
+#     sender_device = device_map.get(sid, "unknown")
+#     if sender_device == "unknown" or not data:
+#         return
 
-    await broadcast_to("pc", "audio_frame", data)
+#     await broadcast_to("pc", "audio_frame", data)
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
