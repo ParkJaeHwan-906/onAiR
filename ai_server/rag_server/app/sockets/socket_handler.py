@@ -22,7 +22,8 @@ from app.services.final_guide import generate_final_guide
 from app.services.gesture_state import GestureManager
 
 # 서비스 종료 버튼 좌표 (left=1800, top=90, right=1950, bottom=240)
-SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
+# SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
+SERVICE_END_BUTTON_RECT = (1710, 45, 1860, 195)
 
 # Gesture 인식 상태 관리 (클래스로 캡슐화)
 gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
@@ -46,7 +47,7 @@ _pending_cv_detection: Optional[Dict[str, Any]] = None
 sio = socketio.AsyncServer(
     async_mode='asgi',
     cors_allowed_origins='*',  # 모든 Origin 허용
-    logger=True,  # 로거 비활성화
+    logger=False,  # 로거 비활성화
 )
 
 # 디바이스 타입 저장 (세션 ID → 디바이스 타입)
@@ -153,6 +154,7 @@ def init_socketio():
     sio.on("delete-marker")(delete_marker)
     sio.on("active_mediapipe")(handle_active_mediapipe)
     
+
 # === 타입별 브로드캐스트 (안전 버전) ===
 async def broadcast_to(device_types, event: str, payload: dict):
     """
@@ -213,8 +215,6 @@ async def handle_register_device(sid, data):
     """디바이스 등록"""
     device = data.get("device", "unknown")
     device_map[sid] = device
-    print(f"디바이스 등록됨 : {device}")
-    print(f"{device_map}")
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -311,8 +311,7 @@ async def handle_wakeword_audio_completed(sid, data):
     else:
         print("⚠️ 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
 
-# 미리 값 할당
-_pending_final_guide = None
+
 async def handle_intent_audio_completed(sid, data):
     """
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
@@ -571,14 +570,14 @@ async def handle_stt_result(sid, data):
             return
         
         # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
-        # try:
-        #     await broadcast_to("mobile", "start_sse_connection", {
-        #         "text": stt_text,
-        #         "timestamp": None
-        #     })
-        #     await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
-        # except Exception as e:
-        #     print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
+        try:
+            await broadcast_to("mobile", "start_sse_connection", {
+                "text": stt_text,
+                "timestamp": None
+            })
+            await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
+        except Exception as e:
+            print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
         
         # 2. Gemini-Flash로 Intent 분류 및 모바일로 전송
         try:
@@ -599,9 +598,9 @@ async def handle_stt_result(sid, data):
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
             # 버퍼링 STT 세션 종료 이벤트 전송
-            # await broadcast_to("raspi", "stop_buffered_stt", {
-            #     "reason": "버퍼링 STT 결과 전송 완료, Intent 분류 진행"
-            # })
+            await broadcast_to("raspi", "stop_buffered_stt", {
+                "reason": "버퍼링 STT 결과 전송 완료, Intent 분류 진행"
+            })
             await wait_for_next_step("버퍼링 STT 세션 종료 이벤트 전송 완료", "8-0")
                     
         except Exception as e:
@@ -779,7 +778,9 @@ async def handle_active_mediapipe(sid, data):
 # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
 # ========================================
 async def on_gesture_service_start():
-    print("Gesture START detected")
+    print("=" * 80)
+    print("✅ [Gesture] 서비스 시작 버튼 클릭 이벤트 발생")
+    print("=" * 80)
 
     # 모바일로 시작 버튼 클릭 알림
     await broadcast_to("mobile", "service_start_clicked", {})
@@ -791,7 +792,9 @@ async def on_gesture_service_start():
 # mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
 # ========================================
 async def on_gesture_service_end():
-    print("Gesture END detected")
+    print("=" * 80)
+    print("✅ [Gesture] 서비스 종료 버튼 클릭 이벤트 발생")
+    print("=" * 80)
 
     # 모바일로 서비스 종료 버튼 클릭 알림
     await broadcast_to("mobile", "service_end_clicked", {})
@@ -820,7 +823,6 @@ async def handle_audio_frame(sid, data):
         return
 
     await broadcast_to("pc", "audio_frame", data)
-    print(f"{device_map}")
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
@@ -829,8 +831,6 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
-    print("오퍼레이터 통신 시작됨")
-    print(f"{device_map}")
     global ar_markers
     ar_markers.clear()
 
@@ -858,8 +858,6 @@ async def communication_close(sid, data):
     """
     오퍼레이터 통신 종료 이벤트
     """
-    print("오퍼레이터 통신을 종료합니다.")
-    print(f"{device_map}")
     global ar_markers
     
     sender_device = device_map.get(sid, "unknown")
