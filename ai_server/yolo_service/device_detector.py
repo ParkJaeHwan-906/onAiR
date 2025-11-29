@@ -30,7 +30,7 @@ async def device_detector_loop():
     candidate_label = None
     stable_counter = 0
 
-    # YOLO bbox smoothing (라벨 단위)
+    # YOLO bbox smoothing
     smoothing_buffers = {}
 
     # ROI 안정화 버퍼 (fan, thermometer, pressure_gauge)
@@ -61,7 +61,7 @@ async def device_detector_loop():
             frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
 
             # ------------------------
-            # 3) YOLO 추론 (conf/iou 강화)
+            # 3) YOLO 추론
             # ------------------------
             detections = yolo_infer(
                 _device_model,
