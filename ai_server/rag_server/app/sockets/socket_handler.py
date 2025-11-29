@@ -746,6 +746,10 @@ async def handle_active_mediapipe(sid, data):
         print("active_mediapipe: rect 없음")
         return
 
+    # 모바일에서 전달하는 좌표가 상대 좌표(0~1)인지 절대 좌표인지 확인
+    # 만약 상대 좌표라면 나중에 프레임 크기에 맞춰 변환 필요
+    # 현재는 절대 좌표로 가정하고 사용
+    
     # mediapipe 켜기
     gesture_manager.enabled= True
     gesture_manager.button_rect= (
@@ -754,6 +758,9 @@ async def handle_active_mediapipe(sid, data):
         rect['right'],
         rect['bottom']
     )
+    
+    # 디버깅: 버튼 좌표 정보 출력
+    print(f"🔍 [Gesture] 버튼 좌표 설정: ({rect['left']}, {rect['top']}, {rect['right']}, {rect['bottom']})")
 
     # START 모드 요청
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
