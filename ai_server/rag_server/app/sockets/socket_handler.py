@@ -639,30 +639,36 @@ async def handle_video_frame(sid, data):
     # JPEG → OpenCV 이미지 디코딩
     try:
         np_data = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        if frame is None:
+        frame_original = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+        if frame_original is None:
             print("⚠️ Failed to decode frame bytes")
             return
+        
+        # 원본 프레임 저장 (제스처 인식용 - 좌표계 일치를 위해 반전하지 않음)
+        frame_for_gesture = frame_original.copy()
+        
+        # 반전된 프레임 생성 (AR 마커/모션 추정용)
         try:
             # frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            frame = cv2.flip(frame, -1)
+            frame_flipped = cv2.flip(frame_original, -1)
         except Exception as e:
             print(f"⚠️ Frame rotation error: {e}")
+            frame_flipped = frame_original
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
 
-    # 프레임 스트림에 추가 (최근 N개만 유지)
+    # 프레임 스트림에 추가 (최근 N개만 유지) - 반전된 프레임 사용
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame, timestamp)
+        await add_frame(frame_flipped, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
-    # 모션 추정 (Optical Flow + RANSAC + Essential)
-    result = motion_core.process_frame(frame)
+    # 모션 추정 (Optical Flow + RANSAC + Essential) - 반전된 프레임 사용
+    result = motion_core.process_frame(frame_flipped)
     if result["status"] not in ("ok", "init"):
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        _, jpeg_bytes = cv2.imencode(".jpg", frame_flipped)
         await broadcast_to('pc', "video_frame", {
             "timestamp": timestamp,
             "frame": jpeg_bytes.tobytes()
@@ -670,7 +676,7 @@ async def handle_video_frame(sid, data):
         await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
         return
 
-    # AR 마커 업데이트 및 브로드캐스트
+    # AR 마커 업데이트 및 브로드캐스트 - 반전된 프레임 사용
     if ar_markers:
         updated = []
         for m in ar_markers:
@@ -701,9 +707,10 @@ async def handle_video_frame(sid, data):
 
     # ================================
     # 제스처로 서비스 종료 버튼 클릭 감지
+    # 원본 프레임 사용 (반전되지 않은 프레임) - 모바일 화면 좌표계와 일치
     # ================================
     await gesture_manager.handle_frame(
-    frame,
+    frame_for_gesture,
     on_gesture_service_start,
     on_gesture_service_end
     )
@@ -711,8 +718,8 @@ async def handle_video_frame(sid, data):
     # ================================
     # 이후 PC/모바일로 프레임 전송
     # ================================
-    # PC로 프레임 전송 (timestamp 포함)
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    # PC로 프레임 전송 (timestamp 포함) - 반전된 프레임 사용
+    _, jpeg_bytes = cv2.imencode(".jpg", frame_flipped)
     await broadcast_to('pc', "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
