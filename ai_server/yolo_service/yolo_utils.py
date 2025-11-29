@@ -8,12 +8,16 @@ def load_yolo_model(model_path: str):
     """
     return YOLO(model_path)
 
-def yolo_infer(model, frame: np.ndarray, return_boxes: bool = False):
-    """
-    YOLO 추론 + 후처리
-    - return_boxes=True → x1,y1,x2,y2 를 flat 필드로 추가
-    """
-    results = model(frame)
+def yolo_infer(
+    model,
+    frame: np.ndarray,
+    return_boxes: bool = False,
+    conf: float = 0.25,
+    iou: float = 0.45
+):
+    # YOLO 호출에 conf / iou 직접 전달
+    results = model(frame, conf=conf, iou=iou)
+
     detections = []
 
     for r in results:
@@ -21,8 +25,7 @@ def yolo_infer(model, frame: np.ndarray, return_boxes: bool = False):
         if boxes is None or boxes.shape[0] == 0:
             continue
 
-        for i in range(len(boxes)):
-            box = boxes[i]
+        for box in boxes:
             label_idx = int(box.cls[0])
             confidence = float(box.conf[0])
             label_name = model.names[label_idx]
@@ -33,9 +36,7 @@ def yolo_infer(model, frame: np.ndarray, return_boxes: bool = False):
             }
 
             if return_boxes:
-                # YOLO xyxy → numpy 변환 후 flatten
                 xyxy = box.xyxy[0].cpu().numpy().tolist()
-
                 det["x1"] = int(xyxy[0])
                 det["y1"] = int(xyxy[1])
                 det["x2"] = int(xyxy[2])
