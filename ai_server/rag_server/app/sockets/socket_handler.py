@@ -455,6 +455,11 @@ async def handle_intent_audio_completed(sid, data):
                         "vibration": 10.0
                     }
                 }
+                message_str = "팬 벨트가 감속 중 입니다."
+                cv_result["has_anomaly"] = True
+                cv_result["anomalies"] = anomalies
+                cv_result["messages"] = [message_str]
+                cv_result["message"] = message_str
 
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
