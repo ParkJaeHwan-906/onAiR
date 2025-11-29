@@ -54,6 +54,7 @@ async def device_detector_loop():
                     temp_value = None
 
                     is_anomaly = False
+                    final_value = None
                     # thermometer → 게이지 각도/값 계산
                     if label == "thermometer":
                         roi = frame[y1:y2, x1:x2]
@@ -64,6 +65,7 @@ async def device_detector_loop():
                             temp_value = round(float(value), 1)
                             if temp_value > 40:
                                 is_anomaly = True
+                            final_value = value
 
                             
                     elif label == "pressure_gauge":
@@ -76,9 +78,9 @@ async def device_detector_loop():
                             # 임계 판정
                             if press_value > 0.8 or press_value < 0.2:
                                 is_anomaly = True
-
+                            final_value = value
                             logger.info(f"[PRESS] angle={angle:.2f}°, value={press_value:.2f}")
-                    
+
                         elif label == "fan":
                             buf = await get_cv_buffer_frames()
                             frames_buf = [b["frame"] for b in buf if b.get("frame") is not None]
@@ -120,7 +122,8 @@ async def device_detector_loop():
                         "y1": y1,
                         "x2": x2,
                         "y2": y2,
-                        "anomaly" : is_anomaly
+                        "anomaly" : is_anomaly,
+                        "value" : final_value
                     })
             await save_yolo_result(ts, all_boxes)
 
