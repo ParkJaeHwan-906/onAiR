@@ -623,6 +623,11 @@ async def handle_video_frame(sid, data):
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown" or not data:
         return
+    
+    # 디버깅: 프레임 수신 확인 (너무 많은 로그 방지를 위해 주기적으로만)
+    import random
+    if random.random() < 0.01:  # 1% 확률로만 로그 출력
+        print(f"🔍 [Video Frame] 프레임 수신: sender={sender_device}, enabled={gesture_manager.enabled}, waiting_for_end={gesture_manager.waiting_for_end}")
 
     # timestamp + frame JSON 파싱
     if isinstance(data, dict):
@@ -709,6 +714,11 @@ async def handle_video_frame(sid, data):
     # 제스처로 서비스 종료 버튼 클릭 감지
     # 원본 프레임 사용 (반전되지 않은 프레임) - 모바일 화면 좌표계와 일치
     # ================================
+    if gesture_manager.enabled:
+        # 디버깅: 제스처 인식 실행 확인 (너무 많은 로그 방지를 위해 주기적으로만)
+        if random.random() < 0.01:  # 1% 확률로만 로그 출력
+            print(f"🔍 [Gesture] 제스처 인식 실행 중: enabled={gesture_manager.enabled}, waiting_for_end={gesture_manager.waiting_for_end}, button_rect={gesture_manager.button_rect}")
+    
     await gesture_manager.handle_frame(
     frame_for_gesture,
     on_gesture_service_start,
@@ -744,12 +754,22 @@ async def handle_video_frame(sid, data):
 # mobile로부터 mediapipe on 이벤트 받으면 켜기
 # ========================================
 async def handle_active_mediapipe(sid, data):
+    print("=" * 80)
+    print("🔔 [Gesture] active_mediapipe 이벤트 수신 시작")
+    print(f"   sid: {sid}")
+    print(f"   data: {data}")
+    print(f"   data type: {type(data)}")
+    print(f"   device_map: {device_map}")
+    
     sender_device = device_map.get(sid, "unknown")
+    print(f"   sender_device: {sender_device}")
+    
     if sender_device != "mobile":
         print(f"⚠️ [Gesture] active_mediapipe 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
+        print("=" * 80)
         return
 
-    print(f"🔍 [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}")
+    print(f"✅ [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}")
     
     # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
     rect = data.get("rect") if isinstance(data, dict) else None
