@@ -67,8 +67,8 @@ class GestureManager:
             print(f"   검지 좌표: ({finger_x}, {finger_y})")
             print(f"   버튼 영역: ({left}, {top}, {right}, {bottom})")
             print("=" * 80)
-                self.waiting_for_end = False
-                await on_end()
+            self.waiting_for_end = False
+            await on_end()
             return
 
         # 시작 버튼 클릭 체크
