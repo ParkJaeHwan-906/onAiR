@@ -551,14 +551,14 @@ async def handle_audio_playback_completed(sid, data):
         
         await broadcast_to("mobile", "enable_service_end_button", {
             "button_rect": {
-                "left": 1800,
-                "top": 90,
-                "right": 1950,
-                "bottom": 240
+                "left": SERVICE_END_BUTTON_RECT[0],
+                "top": SERVICE_END_BUTTON_RECT[1],
+                "right": SERVICE_END_BUTTON_RECT[2],
+                "bottom": SERVICE_END_BUTTON_RECT[3]
             },
             "center": {
-                "x": 1875,
-                "y": 165
+                "x": (SERVICE_END_BUTTON_RECT[0] + SERVICE_END_BUTTON_RECT[2]) // 2,
+                "y": (SERVICE_END_BUTTON_RECT[1] + SERVICE_END_BUTTON_RECT[3]) // 2
             }
         })
 
@@ -783,162 +783,94 @@ async def handle_video_frame(sid, data):
 # mobile로부터 mediapipe on 이벤트 받으면 켜기
 # ========================================
 async def handle_active_mediapipe(sid, data):
+    """
+    모바일로부터 active_mediapipe 이벤트 수신
+    - data는 None일 수 있음 (모바일에서 null을 보낼 수 있음)
+    - rect 정보가 없으면 하드코딩된 좌표 사용
+    """
     try:
-        print("=" * 80, flush=True)
-        print("🔔 [Gesture] active_mediapipe 이벤트 수신 시작", flush=True)
-        print(f"   sid: {sid}", flush=True)
-        print(f"   data: {data}", flush=True)
-        print(f"   data type: {type(data)}", flush=True)
-        print(f"   device_map: {device_map}", flush=True)
-        
         sender_device = device_map.get(sid, "unknown")
-        print(f"   sender_device: {sender_device}", flush=True)
         
         if sender_device != "mobile":
-            print(f"⚠️ [Gesture] active_mediapipe 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}", flush=True)
-            print("=" * 80, flush=True)
             return
 
-        print(f"✅ [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}", flush=True)
-        
         # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
-        # data가 None이거나 dict가 아닌 경우를 안전하게 처리
-        # 모바일에서 rect 없이 active_mediapipe 이벤트를 보내므로 data는 None일 수 있음
         rect = None
         
-        # data가 None인 경우 즉시 처리 (가장 흔한 경우)
         if data is None:
-            print("ℹ️ [Gesture] data가 None입니다. 하드코딩된 좌표를 사용합니다.", flush=True)
             rect = None
-        # data가 리스트나 튜플인 경우
-        elif isinstance(data, (list, tuple)):
-            if len(data) > 0:
-                # 첫 번째 요소가 dict인지 확인
-                first_item = data[0]
-                if isinstance(first_item, dict):
-                    rect = first_item.get("rect") if first_item else None
-                else:
-                    rect = None
-            else:
-                rect = None
-        # data가 dict인 경우
+        elif isinstance(data, (list, tuple)) and len(data) > 0:
+            first_item = data[0]
+            if isinstance(first_item, dict):
+                rect = first_item.get("rect") if first_item else None
         elif isinstance(data, dict):
             rect = data.get("rect")
-        # data가 dict-like 객체인 경우 (get 메서드가 있는 경우)
         elif hasattr(data, 'get') and callable(getattr(data, 'get', None)):
             try:
-                rect = data.get("rect")
-            except (AttributeError, TypeError) as e:
-                print(f"⚠️ [Gesture] dict-like 객체에서 rect 추출 실패: {e}", flush=True)
+                if data is not None:
+                    rect = data.get("rect")
+            except (AttributeError, TypeError):
                 rect = None
-        # 그 외의 경우
-        else:
-            print(f"⚠️ [Gesture] 알 수 없는 data 타입: {type(data)}, data={data}", flush=True)
-            rect = None
         
         if rect and isinstance(rect, dict):
-            # 모바일에서 전달한 좌표 사용
             button_rect = (
                 rect.get('left'),
                 rect.get('top'),
                 rect.get('right'),
                 rect.get('bottom')
             )
-            # 모든 값이 None이 아닌지 확인
-            if all(v is not None for v in button_rect):
-                print(f"🔍 [Gesture] 모바일에서 전달한 버튼 좌표 사용: {button_rect}", flush=True)
-            else:
+            if not all(v is not None for v in button_rect):
                 button_rect = SERVICE_END_BUTTON_RECT
-                print(f"⚠️ [Gesture] 모바일에서 전달한 좌표가 불완전함. 하드코딩된 좌표 사용: {button_rect}", flush=True)
         else:
-            # 하드코딩된 고정 좌표 사용
             button_rect = SERVICE_END_BUTTON_RECT
-            print(f"🔍 [Gesture] 하드코딩된 고정 버튼 좌표 사용: {button_rect}", flush=True)
         
-        # mediapipe 켜기
         gesture_manager.enabled = True
         gesture_manager.button_rect = button_rect
-        
-        # 디버깅: 최종 버튼 좌표 정보 출력
-        print(f"✅ [Gesture] 버튼 좌표 설정 완료: {button_rect}", flush=True)
-        print(f"   현재 상태: waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
 
         # START 모드 요청 (첫 번째 active_mediapipe 호출)
         if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
             gesture_manager.waiting_for_start = True
-            print("=" * 80, flush=True)
-            print("✅ [Gesture] 첫 번째 active_mediapipe 호출 → 서비스 시작 버튼 클릭 대기 모드", flush=True)
-            print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
-            print("=" * 80, flush=True)
+            print("✅ [Gesture] 서비스 시작 버튼 클릭 대기 모드", flush=True)
             return
 
         # END 모드 요청 (두 번째 active_mediapipe 호출)
         if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
             gesture_manager.waiting_for_start = False
             gesture_manager.waiting_for_end = True
-            print("=" * 80, flush=True)
-            print("✅ [Gesture] 두 번째 active_mediapipe 호출 → 서비스 종료 버튼 클릭 대기 모드", flush=True)
-            print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
-            print("=" * 80, flush=True)
+            print("✅ [Gesture] 서비스 종료 버튼 클릭 대기 모드", flush=True)
             return
 
-        # 그 외: 다시 초기화(비활성화일 때처럼)
+        # 그 외: 다시 초기화
         gesture_manager.waiting_for_start = True
         gesture_manager.waiting_for_end = False
-        print("Gesture mode reset-> waiting for start", flush=True)
-        print("=" * 80, flush=True)
     except Exception as e:
-        print(f"❌ [Gesture] handle_active_mediapipe 에러 발생: {e}", flush=True)
-        print(f"   에러 타입: {type(e).__name__}", flush=True)
-        import traceback
-        print(f"   트레이스백:\n{traceback.format_exc()}", flush=True)
-        print("=" * 80, flush=True)
+        print(f"❌ [Gesture] active_mediapipe 처리 오류: {e}", flush=True)
         # 에러가 발생해도 기본 좌표로 설정하여 서비스가 계속 작동하도록 함
         try:
             gesture_manager.enabled = True
             gesture_manager.button_rect = SERVICE_END_BUTTON_RECT
-            print(f"⚠️ [Gesture] 기본 버튼 좌표로 설정: {SERVICE_END_BUTTON_RECT}", flush=True)
-        except Exception as e2:
-            print(f"❌ [Gesture] 기본 좌표 설정도 실패: {e2}", flush=True)
+        except Exception:
+            pass
 
 # ========================================
 # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
 # ========================================
 async def on_gesture_service_start():
-    print("=" * 80)
-    print("✅ [Gesture] 서비스 시작 버튼 클릭 이벤트 발생")
-    print("=" * 80)
-
-    # 모바일로 시작 버튼 클릭 알림
+    print("✅ [Gesture] 서비스 시작 버튼 클릭", flush=True)
     await broadcast_to("mobile", "service_start_clicked", {})
-
-    # wakeword 없이도 시작 로직 호출- wakeword 이후 흐름을 그대로 실행하게 하는 진입점
     await trigger_start_pipeline("gesture")
 
 # ========================================
 # mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
 # ========================================
 async def on_gesture_service_end():
-    print("=" * 80)
-    print("✅ [Gesture] 서비스 종료 버튼 클릭 이벤트 발생")
-    print("=" * 80)
-
-    # 모바일로 서비스 종료 버튼 클릭 알림
+    print("✅ [Gesture] 서비스 종료 버튼 클릭", flush=True)
     await broadcast_to("mobile", "service_end_clicked", {})
     
-    # 2. FastAPI 내부 상태 즉시 초기화 (모바일 응답 대기 없이)
     global _pending_cv_detection
-    
-    # 제스처 인식 비활성화 (필수 - 다음 서비스 시작 전까지 인식 방지)
     gesture_manager.enabled = False
-    
-    # CV 탐지 결과 초기화 (필수 - 다음 서비스 시작 시 이전 값 방지)
     _pending_cv_detection = None
-    
-    # 3. 라즈베리파이에 서비스 종료 알림 (내부 초기화 로직 자동 실행)
     await broadcast_to("raspi", "audio_playback_completed", {})
-    
-    print("✅ 서비스 종료 처리 완료 - 초기 상태로 복귀")
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
