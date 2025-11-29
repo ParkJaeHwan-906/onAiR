@@ -426,6 +426,10 @@ async def handle_intent_audio_completed(sid, data):
                 })
                 return
 
+            # 시연용 fan 으로 탐지 되어있을 때는 반드시 오류 탐지로 이동할 수 있도록
+            if device_type == "fan":
+                has_anomaly = True
+
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
             # ★ detected = modules_detected = True인 경우
