@@ -916,17 +916,18 @@ async def handle_video_frame(sid, data):
 #     gesture_manager.enabled = False
 #     _pending_cv_detection = None
 #     await broadcast_to("raspi", "audio_playback_completed", {})
-# # ========================================
-# # Raspberry Pi 오디오 프레임 처리
-# # ========================================
-# @sio.on("audio_frame")
-# async def handle_audio_frame(sid, data):
-#     """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
-#     sender_device = device_map.get(sid, "unknown")
-#     if sender_device == "unknown" or not data:
-#         return
 
-#     await broadcast_to("pc", "audio_frame", data)
+# ========================================
+# Raspberry Pi 오디오 프레임 처리
+# ========================================
+@sio.on("audio_frame")
+async def handle_audio_frame(sid, data):
+    """라즈베리파이 → binary 오디오 수신 후 웹에 전송"""
+    sender_device = device_map.get(sid, "unknown")
+    if sender_device == "unknown" or not data:
+        return
+
+    await broadcast_to("pc", "audio_frame", data)
 
 # 웹에서 통신 요청 수락 이벤트 전달
 @sio.on("accept_communication")
