@@ -111,13 +111,19 @@ def process_gesture(frame, button_rect):
         fingers = get_finger_status(landmarks)
         gesture = recognize_gesture(fingers)
 
+        # 디버깅: 제스처 인식 상태 출력
         if gesture != "point":
+            # 주석 처리: 너무 많은 로그 방지
+            # print(f"🔍 [Gesture Debug] 제스처 미인식 - fingers: {fingers}, gesture: {gesture}")
             return None
 
         # 검지 끝
         index_tip = landmarks[8]
         ix = int(index_tip.x * w)
         iy = int(index_tip.y * h)
+        
+        # 디버깅: 제스처 인식 성공 시 좌표 출력 (주석 처리: 너무 많은 로그 방지)
+        # print(f"🔍 [Gesture Debug] 제스처 인식 성공 - 검지 좌표: ({ix}, {iy}), 프레임 크기: ({w}, {h}), MediaPipe 좌표: ({index_tip.x:.3f}, {index_tip.y:.3f})")
 
         return {
             "gesture": "point",
