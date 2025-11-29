@@ -65,7 +65,7 @@ async def device_detector_loop():
                             temp_value = round(float(value), 1)
                             if temp_value > 40:
                                 is_anomaly = True
-                            final_value = value
+                            final_value = temp_value
 
                             
                     elif label == "pressure_gauge":
@@ -78,7 +78,7 @@ async def device_detector_loop():
                             # 임계 판정
                             if press_value > 0.8 or press_value < 0.2:
                                 is_anomaly = True
-                            final_value = value
+                            final_value = press_value
                             logger.info(f"[PRESS] angle={angle:.2f}°, value={press_value:.2f}")
 
                         elif label == "fan":
