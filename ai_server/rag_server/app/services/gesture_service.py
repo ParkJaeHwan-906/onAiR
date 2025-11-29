@@ -81,14 +81,38 @@ def process_gesture(frame, button_rect):
 
     try:
         if frame is None or frame.size == 0:
+            if not hasattr(process_gesture, '_empty_frame_count'):
+                process_gesture._empty_frame_count = 0
+            process_gesture._empty_frame_count += 1
+            if process_gesture._empty_frame_count % 100 == 0:
+                print(f"⚠️ [Gesture Debug] 빈 프레임 수신 (총 {process_gesture._empty_frame_count}회)")
             return None
 
         h, w, _ = frame.shape
+        
+        # 디버깅: 프레임 정보 출력 (처음 몇 번만)
+        if not hasattr(process_gesture, '_frame_info_logged'):
+            process_gesture._frame_info_logged = False
+        if not process_gesture._frame_info_logged:
+            print(f"🔍 [Gesture Debug] 프레임 정보: 크기={w}x{h}, dtype={frame.dtype}, shape={frame.shape}, min={frame.min()}, max={frame.max()}")
+            process_gesture._frame_info_logged = True
 
         # OpenCV BGR → RGB 변환 (MediaPipe는 RGB를 기대)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # MediaPipe는 contiguous array를 요구하므로 메모리 레이아웃 확인 및 수정
+        if not frame_rgb.flags['C_CONTIGUOUS']:
+            frame_rgb = np.ascontiguousarray(frame_rgb)
+        
+        # 디버깅: RGB 변환 후 정보 확인
+        if not hasattr(process_gesture, '_rgb_info_logged'):
+            process_gesture._rgb_info_logged = False
+        if not process_gesture._rgb_info_logged:
+            print(f"🔍 [Gesture Debug] RGB 변환 후: dtype={frame_rgb.dtype}, shape={frame_rgb.shape}, min={frame_rgb.min()}, max={frame_rgb.max()}, contiguous={frame_rgb.flags['C_CONTIGUOUS']}")
+            process_gesture._rgb_info_logged = True
 
         # OpenCV -> MediaPipe Image
+        # MediaPipe는 uint8 numpy array를 기대하며, RGB 형식이어야 함
         mp_image = mp.Image(
             image_format=mp.ImageFormat.SRGB,
             data=frame_rgb

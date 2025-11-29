@@ -672,11 +672,53 @@ async def handle_video_frame(sid, data):
 
     # JPEG → OpenCV 이미지 디코딩
     try:
+        # 디버깅: 프레임 바이너리 정보 (처음 몇 번만)
+        if not hasattr(handle_video_frame, '_frame_bytes_logged'):
+            handle_video_frame._frame_bytes_logged = False
+        if not handle_video_frame._frame_bytes_logged:
+            frame_type = type(frame_bytes).__name__
+            frame_preview = None
+            if isinstance(frame_bytes, bytes):
+                frame_preview = frame_bytes[:20] if len(frame_bytes) >= 20 else frame_bytes
+            elif isinstance(frame_bytes, str):
+                frame_preview = frame_bytes[:50] if len(frame_bytes) >= 50 else frame_bytes
+            print(f"🔍 [Frame Debug] 수신된 프레임: type={frame_type}, len={len(frame_bytes) if frame_bytes else 0}, preview={frame_preview}")
+            handle_video_frame._frame_bytes_logged = True
+        
+        # 프레임이 문자열인 경우 (base64 또는 다른 인코딩) 처리
+        if isinstance(frame_bytes, str):
+            import base64
+            try:
+                frame_bytes = base64.b64decode(frame_bytes)
+                if not hasattr(handle_video_frame, '_base64_decoded_logged'):
+                    print(f"🔍 [Frame Debug] base64 디코딩 완료: len={len(frame_bytes)}")
+                    handle_video_frame._base64_decoded_logged = True
+            except Exception as e:
+                print(f"⚠️ [Frame Debug] base64 디코딩 실패: {e}, 문자열을 바이너리로 변환 시도")
+                frame_bytes = frame_bytes.encode('latin-1')  # fallback
+        
+        # 바이너리가 아닌 경우 에러
+        if not isinstance(frame_bytes, bytes):
+            print(f"⚠️ [Frame Debug] 프레임이 바이너리가 아님: type={type(frame_bytes)}")
+            return
+        
         np_data = np.frombuffer(frame_bytes, np.uint8)
         frame_original = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
         if frame_original is None:
-            print("⚠️ Failed to decode frame bytes")
+            if not hasattr(handle_video_frame, '_decode_fail_count'):
+                handle_video_frame._decode_fail_count = 0
+            handle_video_frame._decode_fail_count += 1
+            if handle_video_frame._decode_fail_count % 100 == 0:
+                print(f"⚠️ [Frame Debug] JPEG 디코딩 실패 (총 {handle_video_frame._decode_fail_count}회) - 프레임 바이너리 길이: {len(frame_bytes)}")
             return
+        
+        # 디버깅: 디코딩된 프레임 정보 (처음 몇 번만)
+        if not hasattr(handle_video_frame, '_decoded_frame_logged'):
+            handle_video_frame._decoded_frame_logged = False
+        if not handle_video_frame._decoded_frame_logged:
+            h, w = frame_original.shape[:2]
+            print(f"🔍 [Frame Debug] 디코딩 성공: 크기={w}x{h}, dtype={frame_original.dtype}, shape={frame_original.shape}, channels={frame_original.shape[2] if len(frame_original.shape) > 2 else 1}")
+            handle_video_frame._decoded_frame_logged = True
         
         # 원본 프레임 저장 (제스처 인식용 - 좌표계 일치를 위해 반전하지 않음)
         frame_for_gesture = frame_original.copy()
