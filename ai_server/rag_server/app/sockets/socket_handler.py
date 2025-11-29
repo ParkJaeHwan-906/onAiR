@@ -440,6 +440,9 @@ async def handle_intent_audio_completed(sid, data):
             # 시연용 fan 으로 탐지 되어있을 때는 반드시 오류 탐지로 이동할 수 있도록
             if device_type == "AHU" and sorted_filtered[0]["label"] == "fan":
                 has_anomaly = True
+                modules[0]["anomaly"] = True
+                messages = "팬 밸트가 감속 중 입니다."
+
 
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
