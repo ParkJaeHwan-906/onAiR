@@ -347,6 +347,7 @@ async def handle_intent_audio_completed(sid, data):
     AI_SUPPORTER인 경우 CV 로직 실행
     """
     global _pending_cv_detection
+    global _pending_final_guide
     
     sender_device = device_map.get(sid, "unknown")
 
@@ -448,6 +449,10 @@ async def handle_intent_audio_completed(sid, data):
             print(f"   messages: {messages}")
             print("=" * 80)
             await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+            
+            _pending_final_guide = await generate_final_guide(
+                device_type, modules, anomalies, cv_result, broadcast_to
+            )
 
             # 알림 메시지 생성
             notification_text = generate_cv_detection_notification(device_type, anomalies)
@@ -508,6 +513,7 @@ async def handle_audio_playback_completed(sid, data):
     # CV 탐지 관련 오디오 재생 완료 처리
     # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
     global _pending_cv_detection
+    global _pending_final_guide
     
     sender_device = device_map.get(sid, "unknown")
     
@@ -539,9 +545,17 @@ async def handle_audio_playback_completed(sid, data):
             print(f"   anomalies: {anomalies}")
             print("=" * 80)
             
-            # 전체 정비 가이드 생성 및 전송 (서비스 사용)
-            await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
-            _pending_cv_detection = None
+            if _pending_final_guide:
+                print("📦 [저장된 Final Guide 전송]")
+                await broadcast_to("mobile", "final_answer", _pending_final_guide)
+                _pending_final_guide = None
+            else:
+                print("⚠️ pending_final_guide 없음 → 빈 응답 전송")
+                await broadcast_to("mobile", "final_answer", {"answer": "내용 없음"})
+
+            # # 전체 정비 가이드 생성 및 전송 (서비스 사용)
+            # await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
+            # _pending_cv_detection = None
     
     elif audio_type == "sections_completed":
         # AI_Supporter 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
