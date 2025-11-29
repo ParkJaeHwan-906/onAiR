@@ -134,13 +134,24 @@ async def wait_for_next_step(step_name: str, step_number: str = ""):
 
 def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
+    print("=" * 80)
+    print("🔧 [Socket.IO] init_socketio() 호출 시작")
+    print("=" * 80)
+    
     if sio is None:
+        print("❌ [Socket.IO] sio가 None입니다. 이벤트 핸들러를 등록할 수 없습니다.")
         return
     
+    print("✅ [Socket.IO] sio 인스턴스 확인 완료")
+    
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
+    print("📝 [Socket.IO] 이벤트 핸들러 등록 시작...")
     sio.on("connect")(handle_connect)
+    print("   ✅ connect 핸들러 등록 완료")
     sio.on("disconnect")(handle_disconnect)
+    print("   ✅ disconnect 핸들러 등록 완료")
     sio.on("register_device")(handle_register_device)
+    print("   ✅ register_device 핸들러 등록 완료")
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)                # 라즈베리파이에서 Wakeword 감지 이벤트 수신
     sio.on("wakeword_waiting_ready")(handle_wakeword_waiting_ready)      # 라즈베리파이에서 Wakeword 대기 준비 완료 이벤트 수신 (YOLO 서버 API 요청 트리거)
@@ -153,6 +164,10 @@ def init_socketio():
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
     sio.on("active_mediapipe")(handle_active_mediapipe)
+    print("   ✅ active_mediapipe 핸들러 등록 완료")
+    print("=" * 80)
+    print("✅ [Socket.IO] 모든 이벤트 핸들러 등록 완료")
+    print("=" * 80)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
