@@ -13,7 +13,7 @@ class MicStream:
         self.chunk = int(self.mic_rate * settings.CHUNK_MS / 1000)
         self.channels = settings.CHANNELS
         self.device_index = settings.DEVICE_INDEX
-        self.q = queue.Queue()
+        self.q = queue.Queue(maxsize=10)
         self.stream = None
         self.is_paused = False
         self.wakeword_callback = None  # Wakeword 감지기 콜백
