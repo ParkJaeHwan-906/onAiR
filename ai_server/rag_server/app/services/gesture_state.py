@@ -26,18 +26,26 @@ class GestureManager:
         # 프레임 크기 가져오기
         frame_h, frame_w = frame.shape[:2]
         
-        # 모바일에서 전달한 button_rect를 프레임 크기에 맞춰 변환
-        # 모바일 좌표가 상대 좌표(0~1)인 경우를 대비한 변환 로직
-        # 현재는 절대 좌표로 가정하지만, 필요시 변환 가능하도록 구조화
+        # 버튼 좌표를 기준 해상도(1920x1080)에서 실제 프레임 해상도로 변환
+        # 버튼 좌표는 1920x1080 기준으로 하드코딩되어 있음
+        REFERENCE_WIDTH = 1920
+        REFERENCE_HEIGHT = 1080
         
-        # 만약 모바일에서 상대 좌표(0~1)로 전달한다면:
-        # left = int(self.button_rect[0] * frame_w)
-        # top = int(self.button_rect[1] * frame_h)
-        # right = int(self.button_rect[2] * frame_w)
-        # bottom = int(self.button_rect[3] * frame_h)
+        # 비율 계산하여 좌표 변환
+        scale_x = frame_w / REFERENCE_WIDTH
+        scale_y = frame_h / REFERENCE_HEIGHT
         
-        # 현재는 절대 좌표로 가정
-        left, top, right, bottom = self.button_rect
+        left = int(self.button_rect[0] * scale_x)
+        top = int(self.button_rect[1] * scale_y)
+        right = int(self.button_rect[2] * scale_x)
+        bottom = int(self.button_rect[3] * scale_y)
+        
+        # 디버깅: 프레임 크기와 변환된 버튼 좌표 출력 (처음 몇 번만)
+        if not hasattr(self, '_coord_log_count'):
+            self._coord_log_count = 0
+        if self._coord_log_count < 3:
+            print(f"🔍 [Gesture Debug] 프레임 크기: {frame_w}x{frame_h}, 원본 버튼 좌표: {self.button_rect}, 변환된 좌표: ({left}, {top}, {right}, {bottom})")
+            self._coord_log_count += 1
 
         result = process_gesture(frame, self.button_rect)
         if not result:
