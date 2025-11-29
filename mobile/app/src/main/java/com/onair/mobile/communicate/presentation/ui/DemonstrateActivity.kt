@@ -1,8 +1,10 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -60,6 +62,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.presentation.viewmodel.CallViewModel
 import com.onair.mobile.communicate.utils.viewModelByFactory
@@ -69,13 +72,16 @@ import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import kotlin.getValue
 import kotlin.math.roundToInt
 
 class DemonstrateActivity : AppCompatActivity() {
     private lateinit var description : String
-//    private var onAirOnDialog : OnAirOnDialog? = null
+    private lateinit var mediaPlayerController: MediaPlayerController
+    private var onAirOnDialog:  OnAirOnDialog? = null
+    private val TAG = "WorkingActivity"
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
@@ -110,6 +116,7 @@ class DemonstrateActivity : AppCompatActivity() {
                 CallScreen(callViewModel)
             }
         }
+        mediaPlayerController = MediaPlayerController(this)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 callViewModel.frameState.collect { value ->
@@ -238,11 +245,13 @@ class DemonstrateActivity : AppCompatActivity() {
             val context = LocalContext.current
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
-//                    showOnModal()
-//                    context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-                    Log.d("Demo", "오디오 함수 리턴")
-//                    hideOnModal()
-                    (context as? Activity)?.finish()
+                    showOnModal()
+                    mediaPlayerController.playLocalAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3") {
+                        Log.d("Demo", "오디오 함수 리턴")
+                        hideOnModal()
+                        (context as? Activity)?.finish()
+
+                    }
                 }
             }
 
@@ -482,5 +491,54 @@ class DemonstrateActivity : AppCompatActivity() {
 //            if (continuation.isActive) continuation.resume(Unit)
 //        }
 //    }
+    private fun showOnModal() {
+        try {
+            // 기존 모달이 있으면 먼저 숨기기
+            if (onAirOnDialog != null && onAirOnDialog?.isVisible == true) {
+                onAirOnDialog?.dismissAllowingStateLoss()
+                onAirOnDialog = null
+            }
+
+            // 새 모달 생성 및 표시
+            onAirOnDialog = OnAirOnDialog()
+            onAirOnDialog?.show(supportFragmentManager, "onAiR on")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ [모바일] showOnModal() 오류: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    private fun hideOnModal() {
+        try {
+            // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+            try {
+                val fragment = supportFragmentManager.findFragmentByTag("onAiR on")
+                if (fragment != null && fragment is OnAirOnDialog) {
+                    fragment.dismissAllowingStateLoss()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ FragmentManager에서 OnAir 모달 dismiss 오류: ${e.message}")
+            }
+
+            // 방법 2: onAirOnDialog를 통해 dismiss
+            if (onAirOnDialog != null) {
+                try {
+                    onAirOnDialog?.dismissAllowingStateLoss()
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ onAirOnDialog dismiss 오류: ${e.message}")
+                    try {
+                        onAirOnDialog?.dismiss()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "❌ onAirOnDialog dismiss()도 실패: ${e2.message}")
+                    }
+                }
+            }
+
+            onAirOnDialog = null
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ hideOnModal() 전체 오류: ${e.message}")
+            e.printStackTrace()
+        }
+    }
 
 }
