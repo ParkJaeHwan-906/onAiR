@@ -14,7 +14,7 @@ def yolo_infer(
     return_boxes: bool = False,
     conf: float = 0.25,
     iou: float = 0.45
-):
+    ):
     # YOLO 호출에 conf / iou 직접 전달
     results = model(frame, conf=conf, iou=iou)
 
