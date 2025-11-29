@@ -215,6 +215,8 @@ async def handle_register_device(sid, data):
     """디바이스 등록"""
     device = data.get("device", "unknown")
     device_map[sid] = device
+    print(f"📝 [Device Registration] 디바이스 등록: {device}, sid: {sid}")
+    print(f"   현재 등록된 디바이스: {device_map}")
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -794,25 +796,34 @@ async def handle_active_mediapipe(sid, data):
     
     # 디버깅: 최종 버튼 좌표 정보 출력
     print(f"✅ [Gesture] 버튼 좌표 설정 완료: {button_rect}")
+    print(f"   현재 상태: waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
 
-    # START 모드 요청
+    # START 모드 요청 (첫 번째 active_mediapipe 호출)
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-
-        gesture_manager.waiting_for_start= True
-        print("Gesture mode: waiting for start")
+        gesture_manager.waiting_for_start = True
+        print("=" * 80)
+        print("✅ [Gesture] 첫 번째 active_mediapipe 호출 → 서비스 시작 버튼 클릭 대기 모드")
+        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
+        print("=" * 80)
         return
 
-    # END 모드 요청
+    # END 모드 요청 (두 번째 active_mediapipe 호출)
     if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        gesture_manager.waiting_for_start= False
-        gesture_manager.waiting_for_end= True
-        print("Gesture mode: waiting for end")
+        gesture_manager.waiting_for_start = False
+        gesture_manager.waiting_for_end = True
+        print("=" * 80)
+        print("✅ [Gesture] 두 번째 active_mediapipe 호출 → 서비스 종료 버튼 클릭 대기 모드")
+        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
+        print("=" * 80)
         return
 
     # 그 외: 다시 초기화(비활성화일 때처럼)
-    gesture_manager.waiting_for_start= True
-    gesture_manager.waiting_for_end= False
-    print("Gesture mode reset-> waiting for start")
+    gesture_manager.waiting_for_start = True
+    gesture_manager.waiting_for_end = False
+    print("=" * 80)
+    print("🔄 [Gesture] active_mediapipe 호출 → 상태 초기화 후 서비스 시작 버튼 클릭 대기 모드")
+    print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
+    print("=" * 80)
 
 # ========================================
 # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
