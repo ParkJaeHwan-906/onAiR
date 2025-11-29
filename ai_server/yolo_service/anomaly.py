@@ -26,9 +26,6 @@ SHARPNESS_FRAMES = 10
 FAN_BELT_CLASSES = ("belt", "fan")
 
 
-# -----------------------------------------------------
-# ★ 정제 로직 (status 기반)
-# -----------------------------------------------------
 def _filter_anomalies(anomalies: dict):
     """status not_found/error/unknown 제거, normal/anomaly 상태만 유지"""
     filtered = {}
@@ -61,7 +58,7 @@ def _collect_messages(anomalies: dict):
 
 
 # -----------------------------------------------------
-# ★ 메인 로직
+# 메인 로직
 # -----------------------------------------------------
 async def run_anomaly_detection():
     logger.info("🚀 anomaly_detection() 시작")
@@ -115,14 +112,7 @@ async def run_anomaly_detection():
     # -------------------------
     if fan_belt_boxes:
         modules_detected = True  # ★ 모듈 탐지됨
-        # ★ 하드코딩: Fan/Belt 모듈이 탐지되면 무조건 "E_FAN_SLOWDOWN" 오류로 반환
-        # anomalies["fan_belt"] = {
-        #     "type": "fan_belt",
-        #     "status": "anomaly",  # 무조건 anomaly
-        #     "detail": "E_FAN_SLOWDOWN",  # 무조건 팬 벨트 감속
-        #     "message": "팬 벨트가 감속 중입니다",
-        #     "result": "E_FAN_SLOWDOWN"
-        # }
+        
         # 기존 분석 로직
         frames = await get_cv_buffer_frames(60)
         if len(frames) < 10:
@@ -157,14 +147,7 @@ async def run_anomaly_detection():
     # 4) Gauge 분석
     # -------------------------
     if gauge_boxes:
-        modules_detected = True  # ★ 모듈 탐지됨
-        # ★ 하드코딩: Gauge 모듈이 탐지되면 무조건 normal로 반환
-        # anomalies["gauge"] = {
-        #     "type": "gauge",
-        #     "status": "normal",  # 무조건 normal
-        #     "message": "압력계가 정상입니다"
-        # }
-        # 기존 분석 로직
+        modules_detected = True
         anomalies["gauge"] = await analyze_gauge(latest_frame, gauge_boxes)
     else:
         anomalies["gauge"] = {"status": "not_found"}
@@ -173,7 +156,7 @@ async def run_anomaly_detection():
     # 5) Panel 분석
     # -------------------------
     if panel_boxes:
-        modules_detected = True  # ★ 모듈 탐지됨
+        modules_detected = True 
         anomalies["panel"] = await analyze_panel(latest_frame, panel_boxes, panel_parts_boxes)
     else:
         anomalies["panel"] = {"status": "not_found"}
@@ -191,10 +174,10 @@ async def run_anomaly_detection():
 
     # -------------------------
     # 8) 최종 반환
-    # ★ detected = modules_detected로 동일하게 맞춤
+    detected = modules_detected
     # -------------------------
     return {
-        "detected": modules_detected,  # ★ modules_detected와 동일하게 설정
+        "detected": detected,
         "has_anomaly": has_anomaly,
         "device_type": device_label,
         "timestamp": latest_ts,
