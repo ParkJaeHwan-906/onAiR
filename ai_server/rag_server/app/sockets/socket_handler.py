@@ -311,7 +311,8 @@ async def handle_wakeword_audio_completed(sid, data):
     else:
         print("⚠️ 라즈베리파이 디바이스가 연결되어 있지 않습니다.")
 
-
+# 미리 값 할당
+_pending_final_guide = None
 async def handle_intent_audio_completed(sid, data):
     """
     모바일로부터 Intent 음성 파일 재생 완료 이벤트 수신
