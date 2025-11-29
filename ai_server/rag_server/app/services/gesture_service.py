@@ -99,12 +99,13 @@ def process_gesture(frame, button_rect):
         result = landmarker.detect(mp_image)
 
         if not result.hand_landmarks:
-            # 디버깅: 손 인식 실패 로그 (처음 몇 번만 출력)
+            # 디버깅: 손 인식 실패 로그 (주기적으로 출력)
             if not hasattr(process_gesture, '_no_hand_log_count'):
                 process_gesture._no_hand_log_count = 0
-            if process_gesture._no_hand_log_count < 3:  # 처음 3번만 로그 출력
-                print(f"🔍 [Gesture Debug] MediaPipe 실행됨, 하지만 손 인식 실패 (hand_landmarks 없음) - 손이 카메라에 보이지 않거나 제스처가 아님")
-                process_gesture._no_hand_log_count += 1
+            process_gesture._no_hand_log_count += 1
+            # 100프레임마다 한 번씩 로그 출력
+            if process_gesture._no_hand_log_count % 100 == 0:
+                print(f"🔍 [Gesture Debug] MediaPipe 실행됨, 하지만 손 인식 실패 (hand_landmarks 없음) - 손이 카메라에 보이지 않거나 제스처가 아님 (총 {process_gesture._no_hand_log_count}회 실패)")
             return None
 
         x1, y1, x2, y2 = button_rect
