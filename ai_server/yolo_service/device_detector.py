@@ -1,3 +1,5 @@
+# yolo_service/device_detector.py
+
 import asyncio
 import cv2
 import numpy as np
@@ -6,7 +8,8 @@ from collections import deque
 
 from ai_server.yolo_service.yolo_utils import load_yolo_model, yolo_infer
 from ai_server.yolo_service.redis_client import (
-    save_device_state, get_device_state, get_latest_frame, save_yolo_result, get_cv_buffer_frames
+    save_device_state, get_device_state, get_latest_frame,
+    save_yolo_result, get_cv_buffer_frames
 )
 from ai_server.yolo_service.config_all_model import ALL_MODEL_PATH, DEVICE_CLASSES
 from ai_server.yolo_service.gauge_anomaly import detect_gauge_angle_fast, THERMO_CONFIG, PRESS_CONFIG
@@ -16,6 +19,10 @@ DETECTION_INTERVAL = 0.5
 CONF_THRESHOLD = 0.75
 IOU_THRESHOLD = 0.55
 STABLE_COUNT_REQUIRED = 5
+
+# Gauge tuning
+GAUGE_JUMP = 3
+GAUGE_BUF = 2 
 
 _device_model = None
 
@@ -30,21 +37,15 @@ async def device_detector_loop():
     candidate_label = None
     stable_counter = 0
 
-    # YOLO bbox smoothing
+    # smoothing buffers
     smoothing_buffers = {}
-
-    # ROI 안정화 버퍼 (fan, thermometer, pressure_gauge)
-    roi_buffers = {
-        "fan": deque(maxlen=3),
-        "thermometer": deque(maxlen=3),
-        "pressure_gauge": deque(maxlen=3)
-    }
+    fan_roi_buffer = deque(maxlen=3)
 
     while True:
         try:
-            # ------------------------
-            # 1) 프레임 수신
-            # ------------------------
+            # ---------------------------------------------------------
+            # 1) 최신 프레임
+            # ---------------------------------------------------------
             res = await get_latest_frame()
             if res is None:
                 await asyncio.sleep(DETECTION_INTERVAL)
@@ -55,14 +56,11 @@ async def device_detector_loop():
                 await asyncio.sleep(DETECTION_INTERVAL)
                 continue
 
-            # ------------------------
-            # 2) Gaussian Blur
-            # ------------------------
             frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
 
-            # ------------------------
-            # 3) YOLO 추론
-            # ------------------------
+            # ---------------------------------------------------------
+            # 2) YOLO 추론
+            # ---------------------------------------------------------
             detections = yolo_infer(
                 _device_model,
                 frame_blur,
@@ -71,25 +69,26 @@ async def device_detector_loop():
                 iou=IOU_THRESHOLD
             )
 
-            # ------------------------
-            # 4) YOLO bbox smoothing
-            # ------------------------
+            # ---------------------------------------------------------
+            # 3) Label 기반 smoothing (mean 기반)
+            # → fan/기타용 공통 smoothing (게이지 제외)
+            # ---------------------------------------------------------
             smoothed_dets = []
-
             for d in detections:
                 if "x1" not in d:
                     continue
-
                 label = d["label"]
                 bbox = np.array([d["x1"], d["y1"], d["x2"], d["y2"]], dtype=float)
 
-                # smoothing 버퍼 생성
+                # 게이지는 개별 로직에서 처리
+                if label in ("thermometer", "pressure_gauge"):
+                    smoothed_dets.append(d)
+                    continue
+
                 if label not in smoothing_buffers:
                     smoothing_buffers[label] = deque(maxlen=3)
-
                 smoothing_buffers[label].append(bbox)
 
-                # smoothing 적용
                 if len(smoothing_buffers[label]) > 1:
                     avg = np.mean(smoothing_buffers[label], axis=0)
                     d["x1"], d["y1"], d["x2"], d["y2"] = avg.tolist()
@@ -98,9 +97,9 @@ async def device_detector_loop():
 
             detections = smoothed_dets
 
-            # ------------------------
-            # 5) 디텍션 처리 + ROI 안정화
-            # ------------------------
+            # ---------------------------------------------------------
+            # 4) 박스 단위 처리
+            # ---------------------------------------------------------
             all_boxes = []
 
             for d in detections:
@@ -115,78 +114,111 @@ async def device_detector_loop():
                 is_anomaly = False
                 final_value = None
 
-                # ===================================================================
-                # 📌 ROI 안정화 (fan / thermometer / pressure_gauge 공통 로직)
-                # ===================================================================
-                if label in roi_buffers:
-                    raw_roi = np.array([x1, y1, x2, y2], dtype=float)
-                    roi_buffers[label].append(raw_roi)
+                # -----------------------------------------------------
+                # 4-1) thermometer (게이지)
+                # -----------------------------------------------------
+                if label == "thermometer":
+                    raw = np.array([x1, y1, x2, y2], dtype=float)
 
-                    # sudden-jump threshold (fan은 12px, gauge는 6px)
-                    jump_th = 12 if label == "fan" else 6
+                    if "thermometer" not in smoothing_buffers:
+                        smoothing_buffers["thermometer"] = deque(maxlen=GAUGE_BUF)
+                    smoothing_buffers["thermometer"].append(raw)
 
-                    if len(roi_buffers[label]) >= 2:
-                        prev = roi_buffers[label][-2]
+                    if len(smoothing_buffers["thermometer"]) >= 2:
+                        prev = smoothing_buffers["thermometer"][-2]
                         dx = abs(prev[0] - x1)
                         dy = abs(prev[1] - y1)
 
-                        # sudden jump → 이전 ROI fallback
-                        if dx > jump_th or dy > jump_th:
-                            x1, y1, x2, y2 = map(int, prev)
+                        if dx > GAUGE_JUMP or dy > GAUGE_JUMP:
+                            med = np.median(smoothing_buffers["thermometer"], axis=0).astype(int)
+                            x1, y1, x2, y2 = med.tolist()
                         else:
-                            avg = np.mean(roi_buffers[label], axis=0).astype(int)
-                            x1, y1, x2, y2 = avg.tolist()
+                            med = np.median(smoothing_buffers["thermometer"], axis=0).astype(int)
+                            x1, y1, x2, y2 = med.tolist()
 
-                    # 게이지류는 ROI 확장 (fan은 유지)
-                    if label != "fan":
-                        x1 = max(x1 - 2, 0)
-                        y1 = max(y1 - 2, 0)
-                        x2 = min(x2 + 2, frame_blur.shape[1])
-                        y2 = min(y2 + 2, frame_blur.shape[0])
+                    x1 = max(x1 - 2, 0)
+                    y1 = max(y1 - 2, 0)
+                    x2 = min(x2 + 2, frame.shape[1])
+                    y2 = min(y2 + 2, frame.shape[0])
 
-                # ===================================================================
-                # thermometer 처리
-                # ===================================================================
-                if label == "thermometer":
-                    roi = frame_blur[y1:y2, x1:x2]
+                    # 게이지는 blur 금지 → 원본 frame 사용
+                    roi = frame[y1:y2, x1:x2]
                     angle_val = detect_gauge_angle_fast(roi, THERMO_CONFIG)
 
-                    if angle_val is not None:
+                    if angle_val:
                         angle, value = angle_val
-                        tval = round(float(value), 1)
-                        final_value = tval
-                        if tval > 40:
+                        temp_value = round(float(value), 1)
+                        final_value = temp_value
+                        if temp_value > 40:
                             is_anomaly = True
 
-                # ===================================================================
-                # pressure gauge 처리
-                # ===================================================================
+                # -----------------------------------------------------
+                # 4-2) pressure gauge
+                # -----------------------------------------------------
                 elif label == "pressure_gauge":
-                    roi = frame_blur[y1:y2, x1:x2]
+                    raw = np.array([x1, y1, x2, y2], dtype=float)
+
+                    if "pressure_gauge" not in smoothing_buffers:
+                        smoothing_buffers["pressure_gauge"] = deque(maxlen=GAUGE_BUF)
+                    smoothing_buffers["pressure_gauge"].append(raw)
+
+                    if len(smoothing_buffers["pressure_gauge"]) >= 2:
+                        prev = smoothing_buffers["pressure_gauge"][-2]
+                        dx = abs(prev[0] - x1)
+                        dy = abs(prev[1] - y1)
+
+                        # sudden jump → median
+                        if dx > GAUGE_JUMP or dy > GAUGE_JUMP:
+                            med = np.median(smoothing_buffers["pressure_gauge"], axis=0).astype(int)
+                            x1, y1, x2, y2 = med.tolist()
+                        else:
+                            med = np.median(smoothing_buffers["pressure_gauge"], axis=0).astype(int)
+                            x1, y1, x2, y2 = med.tolist()
+
+                    x1 = max(x1 - 2, 0)
+                    y1 = max(y1 - 2, 0)
+                    x2 = min(x2 + 2, frame.shape[1])
+                    y2 = min(y2 + 2, frame.shape[0])
+
+                    roi = frame[y1:y2, x1:x2]  # 원본 사용
                     angle_val = detect_gauge_angle_fast(roi, PRESS_CONFIG)
 
-                    if angle_val is not None:
+                    if angle_val:
                         angle, value = angle_val
-                        pval = round(float(value), 2)
-                        final_value = pval
-                        if pval > 0.8 or pval < 0.2:
+                        press_value = round(float(value), 2)
+                        final_value = press_value
+
+                        if press_value > 0.8 or press_value < 0.2:
                             is_anomaly = True
 
-                        logger.info(f"[PRESS] angle={angle:.2f}°, value={pval:.2f}")
-
-                # ===================================================================
-                # fan anomaly 처리
-                # ===================================================================
+                # -----------------------------------------------------
+                # 4-3) fan (기존 안정화 로직 그대로 유지)
+                # -----------------------------------------------------
                 elif label == "fan":
+                    fan_roi_buffer.append([x1, y1, x2, y2])
+
+                    if len(fan_roi_buffer) >= 2:
+                        prev = fan_roi_buffer[-2]
+                        dx = abs(prev[0] - x1)
+                        dy = abs(prev[1] - y1)
+                        if dx > 12 or dy > 12:
+                            x1, y1, x2, y2 = prev
+
+                    if len(fan_roi_buffer) > 1:
+                        avg = np.mean(fan_roi_buffer, axis=0).astype(int)
+                        x1, y1, x2, y2 = avg.tolist()
 
                     buf = await get_cv_buffer_frames()
-                    frames_buf = [
-                        cv2.GaussianBlur(b["frame"], (3, 3), 0)
-                        for b in buf if b.get("frame") is not None
-                    ]
+
+                    # buf는 numpy array list임 → 안전하게 처리
+                    frames_buf = []
+                    for b in buf:
+                        if isinstance(b, dict) and b.get("frame") is not None:
+                            frames_buf.append(cv2.GaussianBlur(b["frame"], (3, 3), 0))
+                        elif isinstance(b, np.ndarray):
+                            frames_buf.append(cv2.GaussianBlur(b, (3, 3), 0))
 
                     if len(frames_buf) < 10:
-                        logger.warning("[FAN] 프레임 부족 - skip")
                         analyze_fan_belt_result = {
                             "type": "fan_belt",
                             "status": "error",
@@ -202,14 +234,9 @@ async def device_detector_loop():
 
                     is_anomaly = analyze_fan_belt_result.get("status") == "anomaly"
 
-                    logger.info(
-                        f"[FAN] result={analyze_fan_belt_result.get('result')}, "
-                        f"status={analyze_fan_belt_result.get('status')}, "
-                        f"detail={analyze_fan_belt_result.get('detail')}, "
-                        f"msg={analyze_fan_belt_result.get('message')}"
-                    )
-
-                # 결과 저장
+                # -----------------------------------------------------
+                # 결과 push
+                # -----------------------------------------------------
                 all_boxes.append({
                     "label": display_label,
                     "confidence": conf,
@@ -221,9 +248,9 @@ async def device_detector_loop():
 
             await save_yolo_result(ts, all_boxes)
 
-            # ------------------------
-            # 6) 디바이스 후보 안정화
-            # ------------------------
+            # ---------------------------------------------------------
+            # 5) 디바이스 상태 안정화
+            # ---------------------------------------------------------
             device_candidates = [
                 d for d in detections
                 if d["label"] in DEVICE_CLASSES and d["confidence"] >= CONF_THRESHOLD
@@ -240,18 +267,20 @@ async def device_detector_loop():
             if label == prev_state:
                 candidate_label = None
                 stable_counter = 0
-            else:
-                if candidate_label != label:
-                    candidate_label = label
-                    stable_counter = 1
-                else:
-                    stable_counter += 1
+                await asyncio.sleep(DETECTION_INTERVAL)
+                continue
 
-                if stable_counter >= STABLE_COUNT_REQUIRED:
-                    prev_state = candidate_label
-                    await save_device_state(prev_state, confidence)
-                    candidate_label = None
-                    stable_counter = 0
+            if candidate_label != label:
+                candidate_label = label
+                stable_counter = 1
+            else:
+                stable_counter += 1
+
+            if stable_counter >= STABLE_COUNT_REQUIRED:
+                prev_state = candidate_label
+                await save_device_state(prev_state, confidence)
+                candidate_label = None
+                stable_counter = 0
 
         except Exception as e:
             logger.exception(f"[device_monitor] 🚨 오류: {e}")
