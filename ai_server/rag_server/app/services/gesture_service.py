@@ -99,6 +99,10 @@ def process_gesture(frame, button_rect):
         result = landmarker.detect(mp_image)
 
         if not result.hand_landmarks:
+            # 디버깅: 손 인식 실패 로그 (너무 많은 로그 방지를 위해 주기적으로만)
+            import random
+            if random.random() < 0.01:  # 1% 확률로만 로그 출력
+                print(f"🔍 [Gesture Debug] 손 인식 실패 (hand_landmarks 없음)")
             return None
 
         x1, y1, x2, y2 = button_rect

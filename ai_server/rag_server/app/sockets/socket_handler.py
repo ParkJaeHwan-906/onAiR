@@ -746,28 +746,34 @@ async def handle_video_frame(sid, data):
 async def handle_active_mediapipe(sid, data):
     sender_device = device_map.get(sid, "unknown")
     if sender_device != "mobile":
+        print(f"⚠️ [Gesture] active_mediapipe 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
 
-    rect=data.get("rect")
-    if not rect:
-        print("active_mediapipe: rect 없음")
-        return
-
-    # 모바일에서 전달하는 좌표가 상대 좌표(0~1)인지 절대 좌표인지 확인
-    # 만약 상대 좌표라면 나중에 프레임 크기에 맞춰 변환 필요
-    # 현재는 절대 좌표로 가정하고 사용
+    print(f"🔍 [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}")
+    
+    # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
+    rect = data.get("rect") if isinstance(data, dict) else None
+    
+    if rect:
+        # 모바일에서 전달한 좌표 사용
+        button_rect = (
+            rect['left'],
+            rect['top'],
+            rect['right'],
+            rect['bottom']
+        )
+        print(f"🔍 [Gesture] 모바일에서 전달한 버튼 좌표 사용: {button_rect}")
+    else:
+        # 하드코딩된 고정 좌표 사용
+        button_rect = SERVICE_END_BUTTON_RECT
+        print(f"🔍 [Gesture] 하드코딩된 고정 버튼 좌표 사용: {button_rect}")
     
     # mediapipe 켜기
-    gesture_manager.enabled= True
-    gesture_manager.button_rect= (
-        rect['left'],
-        rect['top'],
-        rect['right'],
-        rect['bottom']
-    )
+    gesture_manager.enabled = True
+    gesture_manager.button_rect = button_rect
     
-    # 디버깅: 버튼 좌표 정보 출력
-    print(f"🔍 [Gesture] 버튼 좌표 설정: ({rect['left']}, {rect['top']}, {rect['right']}, {rect['bottom']})")
+    # 디버깅: 최종 버튼 좌표 정보 출력
+    print(f"✅ [Gesture] 버튼 좌표 설정 완료: {button_rect}")
 
     # START 모드 요청
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
