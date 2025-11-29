@@ -38,14 +38,14 @@ class GestureManager:
         
         # 현재는 절대 좌표로 가정
         left, top, right, bottom = self.button_rect
-        
+
         result = process_gesture(frame, self.button_rect)
         if not result:
             return
 
         finger_x = result["x"]
         finger_y = result["y"]
-        
+
         # 디버깅: 프레임 크기 및 좌표 정보 출력
         if finger_x % 50 == 0 or finger_y % 50 == 0:  # 로그 스팸 방지
             print(f"🔍 [Gesture Debug] 프레임 크기: ({frame_w}, {frame_h}), 검지 좌표: ({finger_x}, {finger_y}), 버튼 영역: ({left}, {top}, {right}, {bottom})")
@@ -67,8 +67,8 @@ class GestureManager:
             print(f"   검지 좌표: ({finger_x}, {finger_y})")
             print(f"   버튼 영역: ({left}, {top}, {right}, {bottom})")
             print("=" * 80)
-            self.waiting_for_end = False
-            await on_end()
+                self.waiting_for_end = False
+                await on_end()
             return
 
         # 시작 버튼 클릭 체크
