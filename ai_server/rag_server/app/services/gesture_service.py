@@ -34,7 +34,7 @@ def _get_landmarker():
             min_hand_detection_confidence=0.5,
             min_hand_presence_confidence=0.5,
             min_tracking_confidence=0.5,
-)
+        )
         landmarker = HandLandmarker.create_from_options(options)
     return landmarker
 
@@ -115,28 +115,28 @@ def process_gesture(frame, button_rect):
         # 첫 번째 손만 사용
         landmarks = result.hand_landmarks[0]
         fingers = get_finger_status(landmarks)
-            gesture = recognize_gesture(fingers)
+        gesture = recognize_gesture(fingers)
 
         # 디버깅: 제스처 인식 상태 출력
-            if gesture != "point":
+        if gesture != "point":
             # 주석 처리: 너무 많은 로그 방지
             # print(f"🔍 [Gesture Debug] 제스처 미인식 - fingers: {fingers}, gesture: {gesture}")
             return None
 
         # 검지 끝
         index_tip = landmarks[8]
-            ix = int(index_tip.x * w)
-            iy = int(index_tip.y * h)
+        ix = int(index_tip.x * w)
+        iy = int(index_tip.y * h)
 
         # 디버깅: 제스처 인식 성공 시 좌표 출력 (주석 처리: 너무 많은 로그 방지)
         # print(f"🔍 [Gesture Debug] 제스처 인식 성공 - 검지 좌표: ({ix}, {iy}), 프레임 크기: ({w}, {h}), MediaPipe 좌표: ({index_tip.x:.3f}, {index_tip.y:.3f})")
 
         return {
             "gesture": "point",
-                "x": ix,
-                "y": iy,
+            "x": ix,
+            "y": iy,
             "is_end_button": is_end_button,
-            }
+        }
 
     except Exception as e:
         print(f"[GestureService ERROR] {e}")
