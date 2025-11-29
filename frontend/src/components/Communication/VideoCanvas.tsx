@@ -53,7 +53,7 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
   // 오디오 재생용 useEffect
   useEffect(() => {
     if (!socket) return;
-    let workletNode: AudioWorkletNode;
+    let workletNode: AudioWorkletNode | null = null;
 
     // 1️⃣ AudioContext 생성 (오디오 처리를 담당하는 컨텍스트)
     const audioContext = new AudioContext({
@@ -62,36 +62,38 @@ export const VideoCanvas = ({ penColor, currentTool }: VideoProps) => {
     });
     audioContextRef.current = audioContext;
 
+    // 소켓 이벤트 수신
+    const handleAudioFrame = (data: {
+      timestamp: number;
+      frame: ArrayBuffer;
+    }) => {
+      if(!workletNode) return;
+      
+      // console.log("[DEBUG] 오디오 프레임 수신: " + data.timestamp)
+      const floatData = new Float32Array(data.frame);
+      // AudioWorklet으로 전달
+      workletNode.port.postMessage({
+        type: "audio_frame",
+        frame: floatData,
+        timestamp: data.timestamp,
+      });
+    };
+
     // AudioWorklet 모듈 등록
     audioContext.audioWorklet.addModule("/audio-processor.js").then(() => {
       workletNode = new AudioWorkletNode(audioContext, "audio-processor");
       audioWorkletNodeRef.current = workletNode;
       workletNode.connect(audioContext.destination);
 
-      // 소켓 이벤트 수신
-      const handleAudioFrame = (data: {
-        timestamp: number;
-        frame: ArrayBuffer;
-      }) => {
-        // console.log("[DEBUG] 오디오 프레임 수신: " + data.timestamp)
-        const floatData = new Float32Array(data.frame);
-        // AudioWorklet으로 전달
-        workletNode.port.postMessage({
-          type: "audio_frame",
-          frame: floatData,
-          timestamp: data.timestamp,
-        });
-      };
-
       socket.on("audio_frame", handleAudioFrame); // 이벤트 리스너 등록
-
-      // 6️⃣ cleanup: 컴포넌트 언마운트 시 연결 해제 및 메모리 정리
-      return () => {
-        if (workletNode) workletNode.disconnect();
-        audioContext.close();
-        socket.off("audio_frame", handleAudioFrame);
-      };
     });
+
+    // 6️⃣ cleanup: 컴포넌트 언마운트 시 연결 해제 및 메모리 정리
+    return () => {
+      if (workletNode) workletNode.disconnect();
+      audioContext.close();
+      socket.off("audio_frame", handleAudioFrame);
+    };
   }, [socket]);
 
   // 비디오 재생용 useEffect (버퍼링 적용)
