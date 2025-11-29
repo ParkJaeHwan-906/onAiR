@@ -195,6 +195,12 @@ async def broadcast_to(device_types, event: str, payload: dict):
 
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
+    print("=" * 80)
+    print(f"🔌 [Connection] 클라이언트 연결: sid={sid}")
+    print(f"   IP: {environ.get('REMOTE_ADDR', 'unknown')}")
+    print(f"   User-Agent: {environ.get('HTTP_USER_AGENT', 'unknown')}")
+    print(f"   현재 등록된 디바이스: {device_map}")
+    print("=" * 80)
     try:
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
@@ -207,8 +213,14 @@ async def handle_connect(sid, environ):
 
 async def handle_disconnect(sid):
     """클라이언트 연결 해제"""
+    print("=" * 80)
+    print(f"🔌 [Connection] 클라이언트 연결 해제: sid={sid}")
     if sid in device_map:
+        device = device_map[sid]
+        print(f"   해제된 디바이스: {device}")
         del device_map[sid]
+    print(f"   남은 디바이스: {device_map}")
+    print("=" * 80)
 
 
 async def handle_register_device(sid, data):
