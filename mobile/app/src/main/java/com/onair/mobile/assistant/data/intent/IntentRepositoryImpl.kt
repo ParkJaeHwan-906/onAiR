@@ -13,10 +13,7 @@ import com.onair.mobile.assistant.domain.entity.IntentType
  * Intent 분류는 이제 Gemini-Flash를 사용합니다 (서버 측에서 처리)
  * 모바일은 Socket.IO로부터 intent_result 이벤트를 받아서 사용합니다.
  */
-class IntentRepositoryImpl(
-    private val context: Context,
-    private val embeddingRepository: Any? = null  // 더 이상 사용하지 않음 (타입 제거됨)
-) : IntentRepository {
+class IntentRepositoryImpl() : IntentRepository {
 
     private val TAG = "IntentRepository"
 

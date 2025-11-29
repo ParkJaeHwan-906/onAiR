@@ -1,4 +1,4 @@
-package com.onair.mobile.communicate.data.source.remote
+package com.onair.mobile.communicate.data.network
 
 import com.launchdarkly.eventsource.ConnectStrategy
 import com.launchdarkly.eventsource.EventSource
@@ -11,18 +11,19 @@ import okhttp3.OkHttpClient
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
-class SseClient(
+class
+SseClient(
     private val okHttpClient: OkHttpClient,
     private val sseBaseUrl: String
 ) {
-    val sseUrl = "https://onair.ai.kr/api/sse/stream"
+    private val SSE_URL = "https://onair.ai.kr/api/sse/stream"
     private var backgroundEventSource : BackgroundEventSource? = null
     fun initSSE(eventHandler: BackgroundEventHandler) {
         if (backgroundEventSource == null) {
 
             backgroundEventSource = BackgroundEventSource.Builder(eventHandler, EventSource.Builder(
                 ConnectStrategy
-                    .http(URL(sseUrl))
+                    .http(URL(SSE_URL))
                     .connectTimeout(30, TimeUnit.SECONDS)
                     .readTimeout(600, TimeUnit.SECONDS)
                     .httpClient(okHttpClient)
