@@ -118,19 +118,21 @@ async def generate_final_guide(
     print("=" * 60)
     print(f"   요약형 마크다운 전송 (모바일 화면 표시용)")
     print(f"   원본 기반 TTS 오디오 전송 (요약 전 문장으로 생성)")
-    await broadcast_to_func("mobile", "final_answer", {
-        "answer": answer_text,
-        "structured_answer": mobile_structured_answer,
-        "audio_content": None,
-        "audio_encoding": None,
-        "citations": structured_answer.get("citations", []),
-        "cv_detection_result": {
-            "device_type": device_type,
-            "modules": modules,
-            "anomalies": anomalies,
-            "message": cv_result.get('message', '')
-        }
-    })
+    
+    # await broadcast_to_func("mobile", "final_answer", {
+    #     "answer": answer_text,
+    #     "structured_answer": mobile_structured_answer,
+    #     "audio_content": None,
+    #     "audio_encoding": None,
+    #     "citations": structured_answer.get("citations", []),
+    #     "cv_detection_result": {
+    #         "device_type": device_type,
+    #         "modules": modules,
+    #         "anomalies": anomalies,
+    #         "message": cv_result.get('message', '')
+    #     }
+    # })
+    
     # await broadcast_to_func(["mobile", "pc"], "final_answer", {
     #     "answer": answer_text,
     #     "structured_answer": mobile_structured_answer,
@@ -144,13 +146,27 @@ async def generate_final_guide(
     #         "message": cv_result.get('message', '')
     #     }
     # })
-    print("✅ 모바일로 전체 정비 가이드 전송 완료")
-    print("=" * 60)
+    # print("✅ 모바일로 전체 정비 가이드 전송 완료")
+    # print("=" * 60)
     
     # 라즈베리파이로 CV 탐지 성공 알림
-    await broadcast_to_func("raspi", "cv_detection_success", cv_result.get('message', ''))
+    # await broadcast_to_func("raspi", "cv_detection_success", cv_result.get('message', ''))
     
-    return structured_answer
+    # return structured_answer
+
+    return {
+        "answer": answer_text,
+        "structured_answer": mobile_structured_answer,
+        "audio_content": None,
+        "audio_encoding": None,
+        "citations": structured_answer.get("citations", []),
+        "cv_detection_result": {
+            "device_type": device_type,
+            "modules": modules,
+            "anomalies": anomalies,
+            "message": cv_result.get('message', '')
+        }
+    }
 
 
 def _build_rag_query(device_type: str, anomalies: Dict[str, Any]) -> str:
