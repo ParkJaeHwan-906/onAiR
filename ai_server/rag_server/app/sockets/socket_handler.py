@@ -166,7 +166,7 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
-    sio.on("active_mediapipe")(handle_active_mediapipe)
+    # sio.on("active_mediapipe")(handle_active_mediapipe)
     print("   ✅ active_mediapipe 핸들러 등록 완료")
     print("=" * 80)
     print("✅ [Socket.IO] 모든 이벤트 핸들러 등록 완료")
