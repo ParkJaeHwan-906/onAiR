@@ -15,12 +15,6 @@ class GestureManager:
 
     async def handle_frame(self, frame, on_start, on_end):
         if not self.enabled:
-            # 디버깅: enabled가 False인 경우 로그 출력 (처음 몇 번만 출력)
-            if not hasattr(self, '_disabled_log_count'):
-                self._disabled_log_count = 0
-            if self._disabled_log_count < 3:  # 처음 3번만 로그 출력
-                print(f"🔍 [Gesture Debug] 제스처 인식 비활성화 상태 (enabled=False) - 프레임은 수신 중이지만 MediaPipe 실행 안 됨")
-                self._disabled_log_count += 1
             return
 
         # 프레임 크기 가져오기
@@ -39,13 +33,6 @@ class GestureManager:
         top = int(self.button_rect[1] * scale_y)
         right = int(self.button_rect[2] * scale_x)
         bottom = int(self.button_rect[3] * scale_y)
-        
-        # 디버깅: 프레임 크기와 변환된 버튼 좌표 출력 (처음 몇 번만)
-        if not hasattr(self, '_coord_log_count'):
-            self._coord_log_count = 0
-        if self._coord_log_count < 3:
-            print(f"🔍 [Gesture Debug] 프레임 크기: {frame_w}x{frame_h}, 원본 버튼 좌표: {self.button_rect}, 변환된 좌표: ({left}, {top}, {right}, {bottom})")
-            self._coord_log_count += 1
 
         result = process_gesture(frame, self.button_rect)
         if not result:
@@ -54,16 +41,7 @@ class GestureManager:
         finger_x = result["x"]
         finger_y = result["y"]
 
-        # 디버깅: 프레임 크기 및 좌표 정보 출력
-        if finger_x % 50 == 0 or finger_y % 50 == 0:  # 로그 스팸 방지
-            print(f"🔍 [Gesture Debug] 프레임 크기: ({frame_w}, {frame_h}), 검지 좌표: ({finger_x}, {finger_y}), 버튼 영역: ({left}, {top}, {right}, {bottom})")
-
         inside = (left <= finger_x <= right and top <= finger_y <= bottom)
-
-        # 디버깅: 제스처 감지 및 좌표 정보 출력
-        if inside:
-            print(f"🔍 [Gesture Debug] 검지 좌표: ({finger_x}, {finger_y}), 버튼 영역: ({left}, {top}, {right}, {bottom}), inside: {inside}")
-            print(f"🔍 [Gesture Debug] waiting_for_start: {self.waiting_for_start}, waiting_for_end: {self.waiting_for_end}")
 
         if not inside:
             return
