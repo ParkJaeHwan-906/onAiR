@@ -182,9 +182,9 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
         return {
             "type": "fan_belt",
             "status": status,
-            "detail": detail,  # ✅ detail 필드 추가 (다른 모듈과 일관성)
-            "result": final_state,  # 하위 호환성을 위해 유지
-            "message": message,  # ✅ message 필드 추가
+            "detail": detail,
+            "result": final_state,
+            "message": message,
             "percent": {
                 "normal": normal,
                 "slow": slow,
