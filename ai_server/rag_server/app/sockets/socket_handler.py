@@ -803,17 +803,27 @@ async def handle_active_mediapipe(sid, data):
         
         # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
         # data가 None이거나 dict가 아닌 경우를 안전하게 처리
+        # Socket.IO가 data를 튜플이나 리스트로 전달할 수도 있으므로 안전하게 처리
         rect = None
-        if data is None:
-            rect = None
-        elif isinstance(data, dict):
-            rect = data.get("rect")
-        elif hasattr(data, 'get'):  # dict-like 객체인 경우
-            try:
-                rect = data.get("rect")
-            except Exception:
+        try:
+            if data is None:
                 rect = None
-        else:
+            elif isinstance(data, (list, tuple)) and len(data) > 0:
+                # 튜플이나 리스트로 전달된 경우 첫 번째 요소 사용
+                data = data[0] if isinstance(data[0], dict) else None
+                if data and isinstance(data, dict):
+                    rect = data.get("rect") if data else None
+            elif isinstance(data, dict):
+                rect = data.get("rect")
+            elif hasattr(data, 'get'):  # dict-like 객체인 경우
+                try:
+                    rect = data.get("rect")
+                except Exception:
+                    rect = None
+            else:
+                rect = None
+        except Exception as e:
+            print(f"⚠️ [Gesture] data 파싱 중 에러 발생: {e}, data={data}", flush=True)
             rect = None
         
         if rect and isinstance(rect, dict):
@@ -880,9 +890,6 @@ async def handle_active_mediapipe(sid, data):
             print(f"⚠️ [Gesture] 기본 버튼 좌표로 설정: {SERVICE_END_BUTTON_RECT}", flush=True)
         except Exception as e2:
             print(f"❌ [Gesture] 기본 좌표 설정도 실패: {e2}", flush=True)
-    print("🔄 [Gesture] active_mediapipe 호출 → 상태 초기화 후 서비스 시작 버튼 클릭 대기 모드")
-    print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
-    print("=" * 80)
 
 # ========================================
 # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
