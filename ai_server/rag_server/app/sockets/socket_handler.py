@@ -570,14 +570,14 @@ async def handle_stt_result(sid, data):
             return
         
         # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
-        try:
-            await broadcast_to("mobile", "start_sse_connection", {
-                "text": stt_text,
-                "timestamp": None
-            })
-            await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
-        except Exception as e:
-            print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
+        # try:
+        #     await broadcast_to("mobile", "start_sse_connection", {
+        #         "text": stt_text,
+        #         "timestamp": None
+        #     })
+        #     await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
+        # except Exception as e:
+        #     print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
         
         # 2. Gemini-Flash로 Intent 분류 및 모바일로 전송
         try:
@@ -598,9 +598,9 @@ async def handle_stt_result(sid, data):
             await wait_for_next_step("모바일로 intent_result 이벤트 전송 완료", "8")
             
             # 버퍼링 STT 세션 종료 이벤트 전송
-            await broadcast_to("raspi", "stop_buffered_stt", {
-                "reason": "버퍼링 STT 결과 전송 완료, Intent 분류 진행"
-            })
+            # await broadcast_to("raspi", "stop_buffered_stt", {
+            #     "reason": "버퍼링 STT 결과 전송 완료, Intent 분류 진행"
+            # })
             await wait_for_next_step("버퍼링 STT 세션 종료 이벤트 전송 완료", "8-0")
                     
         except Exception as e:
