@@ -32,6 +32,8 @@ def classify_intent(text: str) -> dict:
             "reasoning": "판단 근거"
         }
     """
+    raise Exception("빠른 응답을 위해 수동으로 처리합니다.")
+    
     if not gms_api_key:
         # GMS API 키가 없으면 기본적으로 AI_SUPPORTER로 분류
         return {
