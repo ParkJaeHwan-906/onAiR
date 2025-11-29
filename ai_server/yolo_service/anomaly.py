@@ -111,10 +111,10 @@ async def run_anomaly_detection():
     # 2) Fan/Belt 분석
     # -------------------------
     if fan_belt_boxes:
-        modules_detected = True  # ★ 모듈 탐지됨
+        modules_detected = True
         
         # 기존 분석 로직
-        frames = await get_cv_buffer_frames(60)
+        frames = await get_cv_buffer_frames(30)
         if len(frames) < 10:
             anomalies["fan_belt"] = {
                 "type": "fan_belt",
