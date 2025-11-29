@@ -442,7 +442,19 @@ async def handle_intent_audio_completed(sid, data):
                 has_anomaly = True
                 modules[0]["anomaly"] = True
                 messages = "팬 밸트가 감속 중 입니다."
-
+                anomalies["fan_belt"] = {
+                    "type": "fan_belt",
+                    "status": "anomaly",
+                    "detail": "slow",
+                    "result": "E_SLOW",
+                    "message": "팬 벨트가 감속 중입니다.",
+                    "percent": {
+                        "normal": 10.0,
+                        "slow": 80.0,
+                        "accel": 0.0,
+                        "vibration": 10.0
+                    }
+                }
 
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
