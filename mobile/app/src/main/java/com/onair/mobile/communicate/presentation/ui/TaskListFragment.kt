@@ -9,8 +9,8 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.onair.mobile.R
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.AuthRepository
-import com.onair.mobile.communicate.data.api.ApiClient
-import com.onair.mobile.communicate.data.api.ApiService
+import com.onair.mobile.communicate.data.network.ApiClient
+import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.presentation.viewmodel.MainViewModel
 import com.onair.mobile.communicate.utils.activityViewModelByFactory
 import com.onair.mobile.databinding.FragmentTaskListBinding
@@ -18,8 +18,8 @@ import kotlin.getValue
 
 class TaskListFragment: Fragment() {
     private val mainViewModel: MainViewModel by activityViewModelByFactory {
-        val apiService = ApiClient(requireContext()).getRetrofit().create(ApiService::class.java)
-        val repository = AuthRepository(apiService, PreferenceUtil(requireContext()))
+        val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
+        val repository = AuthRepository(apiService, PreferenceUtil)
 
         MainViewModel(repository)
     }

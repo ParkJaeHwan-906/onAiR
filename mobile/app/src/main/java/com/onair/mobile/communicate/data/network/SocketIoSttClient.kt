@@ -1,19 +1,17 @@
-package com.onair.mobile.assistant.data.stt
+package com.onair.mobile.communicate.data.network
 
 import android.util.Log
+import com.google.gson.Gson
+import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
-import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
-import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.FinalAnswerDto
-import com.google.gson.Gson
+import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.communicate.data.socket.dto.ArMarker
 import com.onair.mobile.communicate.data.socket.dto.ArMarkerResponse
 import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import io.socket.client.IO
 import io.socket.client.Socket
-import org.json.JSONObject
-import java.net.URISyntaxException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,16 +19,16 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import org.json.JSONObject
+import java.net.URISyntaxException
 
 /**
  * Socket.IO 클라이언트를 사용하여 Socket.IO 서버에 연결하고 STT 결과를 수신
- * 
+ *
  * Socket.IO 서버에서 다음 이벤트를 수신:
  * - "stt_result": 버퍼링 STT 결과 (Intent 분류용)
  * - "intent_result": Intent 분류 결과 (Gemini-Flash)
@@ -59,25 +57,26 @@ class SocketIoSttClient(
     private val gson = Gson()
     private val _arMarkers = MutableSharedFlow<List<ArMarker>>(replay = 1)
     val arMarkers = _arMarkers.asSharedFlow()
-    private var _wakewordFlow = MutableSharedFlow<Unit>(
+    private var _wakewordFlow = MutableSharedFlow<WakewordEvent>(
         replay = 1,
         extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST)
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val wakewordFlow = _wakewordFlow.asSharedFlow()
 //    private var _wakewordFlow = Channel<Unit>(Channel.BUFFERED)
 //    val wakewordFlow = _wakewordFlow.receiveAsFlow()
 //    private val _callEnd = Channel<Unit>(Channel.BUFFERED)
 //    val callEnd = _callEnd.receiveAsFlow()
     private val _callEnd = MutableSharedFlow<Unit>(
-        replay = 0,             // 👈 0으로 설정하면 구독 전 데이터는 받지 않음
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
+    replay = 0,             // 👈 0으로 설정하면 구독 전 데이터는 받지 않음
+    extraBufferCapacity = 1,
+    onBufferOverflow = BufferOverflow.DROP_OLDEST
+)
     val callEnd = _callEnd.asSharedFlow()
     private var _finalAnswer = MutableSharedFlow<StructuredAnswer>(replay = 1)
     val finalAnswer = _finalAnswer.asSharedFlow()
 
-    private val _endService = Channel<Unit>(Channel.BUFFERED)
+    private val _endService = Channel<Unit>(Channel.Factory.BUFFERED)
     val endService = _endService.receiveAsFlow()
 
     private var _cvAnswer = MutableSharedFlow<CvDetectionAnomalyDto>(replay = 1)
@@ -108,10 +107,10 @@ class SocketIoSttClient(
                 // ForceNew: 기존 연결이 있으면 새로 연결
                 forceNew = true
             }
-            
+
             Log.i(TAG, "🔌 Socket.IO 연결 시도: serverUrl=$serverUrl, path=/ws (최종 경로: ${serverUrl}/ws)")
             Log.i(TAG, "   옵션: reconnection=${options.reconnection}, timeout=${options.timeout}, transports=${options.transports?.joinToString()}")
-            
+
             try {
                 socket = IO.socket(serverUrl, options)
                 Log.i(TAG, "✅ Socket.IO 인스턴스 생성 완료")
@@ -121,7 +120,7 @@ class SocketIoSttClient(
                 onConnectError?.invoke("Socket 인스턴스 생성 실패: ${e.message}")
                 return
             }
-            
+
             // 연결 이벤트
             socket?.on(Socket.EVENT_CONNECT) {
                 isConnected = true
@@ -129,23 +128,23 @@ class SocketIoSttClient(
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공: $serverUrl (경로: /ws)")
                 Log.i(TAG, "   Socket ID: ${socket?.id()}")
                 Log.i(TAG, "=".repeat(60))
-                
+
                 // 디바이스 등록
                 registerDevice()
-                
+
                 // 연결 성공 콜백 호출
                 onConnect?.invoke()
-                
+
                 // 디버깅: 이벤트 핸들러 등록 확인
                 Log.i(TAG, "🔍 이벤트 핸들러 등록 완료 (모든 이벤트 수신 대기 중)")
             }
-            
+
             socket?.on(Socket.EVENT_DISCONNECT) {
                 isConnected = false
                 Log.i(TAG, "🔌 Socket.IO 서버 연결 종료")
                 onDisconnect?.invoke()
             }
-            
+
             socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
                 val error = args?.getOrNull(0)?.toString() ?: "Unknown error"
                 Log.e(TAG, "❌ Socket.IO 연결 오류: $error")
@@ -156,7 +155,7 @@ class SocketIoSttClient(
                 isConnected = false
                 onConnectError?.invoke(error)
             }
-            
+
             // stt_result 이벤트 수신
             socket?.on("stt_result") { args ->
                 try {
@@ -165,7 +164,7 @@ class SocketIoSttClient(
                         val text = data.optString("text", "")
                         val type = data.optString("type", "final")  // "final" | "interim" | "error" | "info"
                         val confidence = data.optDouble("confidence", -1.0)
-                        
+
                         if (text.isNotBlank()) {
                             Log.i(TAG, "📩 STT 결과 수신: type=$type, text=$text")
                             val confidenceStr = if (confidence >= 0) confidence.toString() else null
@@ -178,7 +177,7 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-            
+
             // intent_result 이벤트 수신 (버퍼링 STT 후 Gemini-Flash Intent 분류 결과)
             socket?.on("intent_result") { args ->
                 Log.i(TAG, "🔔 [이벤트 수신] intent_result 이벤트 도착!")
@@ -188,7 +187,7 @@ class SocketIoSttClient(
                     if (data != null) {
                         val jsonString = data.toString()
                         Log.i(TAG, "📩 Intent 결과 수신: $jsonString")
-                        
+
                         val intentResult = gson.fromJson(jsonString, IntentResultDto::class.java)
                         Log.i(TAG, "   → Intent: ${intentResult.intent}, Text: ${intentResult.text}, Confidence: ${intentResult.confidence}")
                         onIntentResult?.invoke(intentResult)
@@ -201,7 +200,7 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-            
+
             // start_sse_connection 이벤트 수신 (버퍼링 STT 수신 시 SSE 연결 시작 요청)
             socket?.on("start_sse_connection") { args ->
                 try {
@@ -219,28 +218,6 @@ class SocketIoSttClient(
                     e.printStackTrace()
                 }
             }
-            
-            
-            // final_answer 이벤트 수신 (최종 답변)
-//            socket?.on("final_answer") { args ->
-//                try {
-//                    val data = args[0] as? JSONObject
-//                    if (data != null) {
-//                        val jsonString = data.toString()
-//                        Log.i(TAG, "📩 최종 답변 수신: $jsonString")
-//
-//                        val finalAnswer = gson.fromJson(jsonString, FinalAnswerDto::class.java)
-//                        Log.i(TAG, "   → Answer: ${finalAnswer.answer.take(100)}...")
-//                        onFinalAnswer?.invoke(finalAnswer)
-//                    } else {
-//                        Log.w(TAG, "⚠️ 최종 답변 수신: 데이터가 null입니다")
-//                    }
-//                } catch (e: Exception) {
-//                    Log.e(TAG, "❌ 최종 답변 처리 오류: ${e.message}")
-//                    e.printStackTrace()
-//                }
-//            }
-            
             // cv_detection_failed 이벤트 수신 (CV 모델 오류 탐지 실패)
             socket?.on("cv_detection_failed") { args ->
                 Log.i(TAG, "🔔 [이벤트 수신] cv_detection_failed 이벤트 도착!")
@@ -250,7 +227,7 @@ class SocketIoSttClient(
                     if (data != null) {
                         val jsonString = data.toString()
                         Log.i(TAG, "📩 CV 탐지 실패 수신: $jsonString")
-                        
+
                         val cvFailed = gson.fromJson(jsonString, CvDetectionFailedDto::class.java)
                         Log.i(TAG, "   → Message: ${cvFailed.message}")
                         onCvDetectionFailed?.invoke(cvFailed)
@@ -313,7 +290,7 @@ class SocketIoSttClient(
             socket?.on("ar-info") { args ->
                 try {
                     val data = args[0].toString()
-                    val markers = Json.decodeFromString<ArMarkerResponse>(data)
+                    val markers = Json.Default.decodeFromString<ArMarkerResponse>(data)
 
                     _arMarkers.tryEmit(markers.markers)
                 } catch (e: Exception) {
@@ -321,12 +298,27 @@ class SocketIoSttClient(
                 }
             }
 
-            
-            // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
-            socket?.on("wakeword_detected") {
-                _wakewordFlow.tryEmit(Unit)
-                    Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
 
+            // wakeword_detected 이벤트 수신 (Wakeword 감지 시 음성 파일 재생 시작)
+            socket?.on("wakeword_detected") { args ->
+                val data = args[0] as? JSONObject
+                Log.d(TAG, "wakeword detected data: $data")
+                if (data != null) {
+                    val isDetected = data.optBoolean("detected")
+                    val state = if (isDetected) {
+                        WakewordEvent.Detected
+                    } else {
+                        WakewordEvent.Ready
+                    }
+                    _wakewordFlow.tryEmit(state)
+                }
+                Log.i(TAG, "📩 Wakeword 감지 이벤트 수신")
+            }
+            socket?.on("service_start_clicked") { args ->
+                _wakewordFlow.tryEmit(WakewordEvent.Detected)
+            }
+            socket?.on("service_end_clicked") { args ->
+                _endService.trySend(Unit)
             }
             socket?.on("communication_close") { args ->
                 Log.d(TAG, "연결 종료 이벤트 수신")
@@ -341,10 +333,8 @@ class SocketIoSttClient(
                     if (data != null) {
                         val answerStr = data.getJSONObject("structured_answer").toString()
 
-                        // ✅ [수정] 파서를 먼저 정의합니다 (모르는 키 무시 옵션 추가)
                         val jsonParser = Json { ignoreUnknownKeys = true }
 
-                        // ✅ [수정] 위에서 만든 parser를 사용해 변환합니다
                         val answer = jsonParser.decodeFromString<StructuredAnswer>(answerStr)
                         Log.d(TAG, "답변 파싱 성공 ${answer.markdown_text}")
                         _finalAnswer.tryEmit(answer)
@@ -391,13 +381,13 @@ class SocketIoSttClient(
                 val msg = data?.optString("msg", "")
                 Log.d(TAG, "📨 서버 메시지: $msg")
             }
-            
+
             // 연결 시도
             Log.i(TAG, "🔌 Socket.IO 연결 시작...")
             Log.i(TAG, "   현재 Socket 상태: ${if (socket?.connected() == true) "연결됨" else "연결 안 됨"}")
             socket?.connect()
             Log.i(TAG, "✅ Socket.IO connect() 호출 완료 (연결 대기 중...)")
-            
+
             // 연결 상태 주기적 확인 (5초 후)
             CoroutineScope(Dispatchers.IO).launch {
                 delay(5000)
@@ -407,7 +397,7 @@ class SocketIoSttClient(
                     Log.w(TAG, "⚠️ Socket.IO 연결이 안 되어 있습니다. 이벤트를 수신할 수 없습니다.")
                 }
             }
-            
+
         } catch (e: URISyntaxException) {
             Log.e(TAG, "❌ Socket.IO URL 파싱 오류: ${e.message}")
             e.printStackTrace()
@@ -416,7 +406,7 @@ class SocketIoSttClient(
             e.printStackTrace()
         }
     }
-    
+
     /**
      * 디바이스 등록
      */
@@ -434,12 +424,24 @@ class SocketIoSttClient(
             e.printStackTrace()
         }
     }
+    fun activeMediaPipe() {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ 소켓이 연결되지 않아 MediaPipe 활성화 이벤트를 보낼 수 없습니다.")
+            return
+        }
+        try {
+            socket?.emit("active_mediapipe", null)
+            Log.i(TAG, "📤 MediaPipe 버튼 활성화 이벤트 전송 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ MediaPipe 버튼 활성화 이벤트 전송 실패: ${e.message}")
+        }
+    }
 
     /**
      * 연결 상태 확인
      */
     fun isConnected(): Boolean = isConnected && socket?.connected() == true
-    
+
     /**
      * 연결 종료
      */
@@ -454,11 +456,11 @@ class SocketIoSttClient(
             Log.e(TAG, "❌ 연결 종료 오류: ${e.message}")
         }
     }
-    
+
     /**
      * 라즈베리파이 제어 명령 전송
      * 모바일 → Socket.IO 서버 → 라즈베리파이로 제어 명령 전달
-     * 
+     *
      * @param command 제어 명령 ("start_streaming_stt" | "set_stt_mode" | "notify_intent_done")
      * @param data 추가 데이터 (mode, branch 등)
      * @return 전송 성공 여부
@@ -468,7 +470,7 @@ class SocketIoSttClient(
             Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다. 라즈베리파이 제어 명령을 전송할 수 없습니다.")
             return false
         }
-        
+
         return try {
             val payload = JSONObject().apply {
                 put("command", command)
@@ -482,7 +484,7 @@ class SocketIoSttClient(
                     }
                 }
             }
-            
+
             socket?.emit("control_raspi", payload)
             Log.i(TAG, "📤 라즈베리파이 제어 명령 전송: command=$command")
             true
@@ -492,10 +494,10 @@ class SocketIoSttClient(
             false
         }
     }
-    
+
     /**
      * 모바일 음성 파일 재생 완료 이벤트 전송 (Wakeword용)
-     * 
+     *
      * @return 전송 성공 여부
      */
     fun sendWakewordAudioCompleted(): Boolean {
@@ -503,12 +505,12 @@ class SocketIoSttClient(
             Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
             return false
         }
-        
+
         return try {
             val payload = JSONObject().apply {
                 put("timestamp", System.currentTimeMillis())
             }
-            
+
             socket?.emit("wakeword_audio_completed", payload)
             Log.i(TAG, "📤 모바일 Wakeword 음성 파일 재생 완료 이벤트 전송")
             true
@@ -525,6 +527,7 @@ class SocketIoSttClient(
         }
 
         return try {
+            Log.d(TAG, "accept_communication 이벤트 발신")
             socket?.emit("accept_communication", null)
             true
         } catch (e: Exception) {
@@ -532,10 +535,10 @@ class SocketIoSttClient(
             false
         }
     }
-    
+
     /**
      * Intent 결과에 따른 음성 파일 재생 완료 이벤트 전송 (AI_SUPPORTER용)
-     * 
+     *
      * @param intent Intent 타입 ("AI_SUPPORTER" | "OPERATOR")
      * @return 전송 성공 여부
      */
@@ -544,13 +547,13 @@ class SocketIoSttClient(
             Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
             return false
         }
-        
+
         return try {
             val payload = JSONObject().apply {
                 put("intent", intent)
                 put("timestamp", System.currentTimeMillis())
             }
-            
+
             socket?.emit("intent_audio_completed", payload)
             Log.i(TAG, "📤 모바일 Intent 음성 파일 재생 완료 이벤트 전송: intent=$intent")
             true
@@ -560,10 +563,10 @@ class SocketIoSttClient(
             false
         }
     }
-    
+
     /**
      * CV 탐지 실패 음성 파일 재생 완료 이벤트 전송
-     * 
+     *
      * @return 전송 성공 여부
      */
     fun sendCvDetectionFailedAudioCompleted(): Boolean {
@@ -571,13 +574,13 @@ class SocketIoSttClient(
             Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
             return false
         }
-        
+
         return try {
             val payload = JSONObject().apply {
                 put("type", "cv_detection_failed")
                 put("timestamp", System.currentTimeMillis())
             }
-            
+
             socket?.emit("audio_playback_completed", payload)
             Log.i(TAG, "📤 모바일 CV 탐지 실패 음성 파일 재생 완료 이벤트 전송")
             true
@@ -644,34 +647,34 @@ class SocketIoSttClient(
 
     /**
      * 최종 답변 TTS 재생 완료 이벤트 전송
-     * 
+     *
      * @return 전송 성공 여부
      */
-    fun sendFinalAnswerAudioCompleted(): Boolean {
-        if (!isConnected()) {
-            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-            return false
-        }
+//    fun sendFinalAnswerAudioCompleted(): Boolean {
+//        if (!isConnected()) {
+//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+//            return false
+//        }
+//
+//        return try {
+//            val payload = JSONObject().apply {
+//                put("type", "final_answer")
+//                put("timestamp", System.currentTimeMillis())
+//            }
+//
+//            socket?.emit("audio_playback_completed", payload)
+//            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
+//            true
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
+//            e.printStackTrace()
+//            false
+//        }
+//    }
 
-        return try {
-            val payload = JSONObject().apply {
-                put("type", "final_answer")
-                put("timestamp", System.currentTimeMillis())
-            }
-
-            socket?.emit("audio_playback_completed", payload)
-            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
-            e.printStackTrace()
-            false
-        }
-    }
-    
     /**
      * 섹션별 TTS 재생 완료 이벤트 전송
-     * 
+     *
      * @return 전송 성공 여부
      */
     fun sendSectionsCompletedAudioCompleted(): Boolean {
@@ -695,7 +698,7 @@ class SocketIoSttClient(
             false
         }
     }
-    
+
     /**
      * 서비스 종료 오디오 재생 완료 이벤트 전송
      *
@@ -725,29 +728,29 @@ class SocketIoSttClient(
 
     /**
      * 통신 종료 이벤트 전송 (WorkingActivity 비정상 종료 시 wakeword 대기 상태로 복귀)
-     * 
+     *
      * @return 전송 성공 여부
      */
-    fun sendCommunicationClose(): Boolean {
-        if (!isConnected()) {
-            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-            return false
-        }
-        
-        return try {
-            val payload = JSONObject().apply {
-                put("timestamp", System.currentTimeMillis())
-            }
-            
-            socket?.emit("communication_close", payload)
-            Log.i(TAG, "📤 모바일 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 모바일 통신 종료 이벤트 전송 실패: ${e.message}")
-            e.printStackTrace()
-            false
-        }
-    }
+//    fun sendCommunicationClose(): Boolean {
+//        if (!isConnected()) {
+//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+//            return false
+//        }
+//
+//        return try {
+//            val payload = JSONObject().apply {
+//                put("timestamp", System.currentTimeMillis())
+//            }
+//
+//            socket?.emit("communication_close", payload)
+//            Log.i(TAG, "📤 모바일 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)")
+//            true
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ 모바일 통신 종료 이벤트 전송 실패: ${e.message}")
+//            e.printStackTrace()
+//            false
+//        }
+//    }
 //    fun clearCallEndBuffer() {
 //        while (_callEnd.tryReceive().isSuccess) {
 //
@@ -761,7 +764,7 @@ class SocketIoSttClient(
 
 //        clearCallEndBuffer()
     }
-    
+
     /**
      * Ping 전송 (연결 테스트용)
      */
@@ -803,5 +806,9 @@ class SocketIoSttClient(
         if (onDisconnect != null) this.onDisconnect = onDisconnect
         if (onConnectError != null) this.onConnectError = onConnectError
     }
-}
 
+    sealed class WakewordEvent {
+        object Detected : WakewordEvent()
+        object Ready : WakewordEvent()
+    }
+}

@@ -3,9 +3,10 @@ package com.onair.mobile.communicate
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.onair.mobile.OnairApp
 
-class PreferenceUtil(context: Context) {
-    private val preferences: SharedPreferences = context.getSharedPreferences("livekit", Context.MODE_PRIVATE)
+object PreferenceUtil {
+    private val preferences: SharedPreferences = OnairApp.context().getSharedPreferences("livekit", Context.MODE_PRIVATE)
     fun getAccessToken() : String {
         return preferences.getString("ACCESS_TOKEN", "").toString()
     }
@@ -20,9 +21,5 @@ class PreferenceUtil(context: Context) {
     }
     fun reset() {
         preferences.edit { clear() }
-    }
-
-    companion object {
-
     }
 }
