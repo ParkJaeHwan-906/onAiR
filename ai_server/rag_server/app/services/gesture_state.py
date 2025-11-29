@@ -15,10 +15,12 @@ class GestureManager:
 
     async def handle_frame(self, frame, on_start, on_end):
         if not self.enabled:
-            # 디버깅: enabled가 False인 경우 로그 출력 (너무 많은 로그 방지를 위해 주기적으로만)
-            import random
-            if random.random() < 0.01:  # 1% 확률로만 로그 출력
-                print(f"🔍 [Gesture Debug] 제스처 인식 비활성화 상태 (enabled=False)")
+            # 디버깅: enabled가 False인 경우 로그 출력 (처음 몇 번만 출력)
+            if not hasattr(self, '_disabled_log_count'):
+                self._disabled_log_count = 0
+            if self._disabled_log_count < 3:  # 처음 3번만 로그 출력
+                print(f"🔍 [Gesture Debug] 제스처 인식 비활성화 상태 (enabled=False) - 프레임은 수신 중이지만 MediaPipe 실행 안 됨")
+                self._disabled_log_count += 1
             return
 
         # 프레임 크기 가져오기
