@@ -803,27 +803,37 @@ async def handle_active_mediapipe(sid, data):
         
         # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
         # data가 None이거나 dict가 아닌 경우를 안전하게 처리
-        # Socket.IO가 data를 튜플이나 리스트로 전달할 수도 있으므로 안전하게 처리
+        # 모바일에서 rect 없이 active_mediapipe 이벤트를 보내므로 data는 None일 수 있음
         rect = None
-        try:
-            if data is None:
-                rect = None
-            elif isinstance(data, (list, tuple)) and len(data) > 0:
-                # 튜플이나 리스트로 전달된 경우 첫 번째 요소 사용
-                data = data[0] if isinstance(data[0], dict) else None
-                if data and isinstance(data, dict):
-                    rect = data.get("rect") if data else None
-            elif isinstance(data, dict):
-                rect = data.get("rect")
-            elif hasattr(data, 'get'):  # dict-like 객체인 경우
-                try:
-                    rect = data.get("rect")
-                except Exception:
+        
+        # data가 None인 경우 즉시 처리 (가장 흔한 경우)
+        if data is None:
+            print("ℹ️ [Gesture] data가 None입니다. 하드코딩된 좌표를 사용합니다.", flush=True)
+            rect = None
+        # data가 리스트나 튜플인 경우
+        elif isinstance(data, (list, tuple)):
+            if len(data) > 0:
+                # 첫 번째 요소가 dict인지 확인
+                first_item = data[0]
+                if isinstance(first_item, dict):
+                    rect = first_item.get("rect") if first_item else None
+                else:
                     rect = None
             else:
                 rect = None
-        except Exception as e:
-            print(f"⚠️ [Gesture] data 파싱 중 에러 발생: {e}, data={data}", flush=True)
+        # data가 dict인 경우
+        elif isinstance(data, dict):
+            rect = data.get("rect")
+        # data가 dict-like 객체인 경우 (get 메서드가 있는 경우)
+        elif hasattr(data, 'get') and callable(getattr(data, 'get', None)):
+            try:
+                rect = data.get("rect")
+            except (AttributeError, TypeError) as e:
+                print(f"⚠️ [Gesture] dict-like 객체에서 rect 추출 실패: {e}", flush=True)
+                rect = None
+        # 그 외의 경우
+        else:
+            print(f"⚠️ [Gesture] 알 수 없는 data 타입: {type(data)}, data={data}", flush=True)
             rect = None
         
         if rect and isinstance(rect, dict):
