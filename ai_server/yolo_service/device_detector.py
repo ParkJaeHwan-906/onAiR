@@ -22,7 +22,7 @@ STABLE_COUNT_REQUIRED = 5
 
 # Gauge tuning
 GAUGE_JUMP = 3
-GAUGE_BUF = 2 
+GAUGE_BUF = 2
 
 _device_model = None
 
@@ -194,45 +194,45 @@ async def device_detector_loop():
                 # -----------------------------------------------------
                 # 4-3) fan (기존 안정화 로직 그대로 유지)
                 # -----------------------------------------------------
-                elif label == "fan":
-                    fan_roi_buffer.append([x1, y1, x2, y2])
+                # elif label == "fan":
+                #     fan_roi_buffer.append([x1, y1, x2, y2])
 
-                    if len(fan_roi_buffer) >= 2:
-                        prev = fan_roi_buffer[-2]
-                        dx = abs(prev[0] - x1)
-                        dy = abs(prev[1] - y1)
-                        if dx > 12 or dy > 12:
-                            x1, y1, x2, y2 = prev
+                #     if len(fan_roi_buffer) >= 2:
+                #         prev = fan_roi_buffer[-2]
+                #         dx = abs(prev[0] - x1)
+                #         dy = abs(prev[1] - y1)
+                #         if dx > 12 or dy > 12:
+                #             x1, y1, x2, y2 = prev
 
-                    if len(fan_roi_buffer) > 1:
-                        avg = np.mean(fan_roi_buffer, axis=0).astype(int)
-                        x1, y1, x2, y2 = avg.tolist()
+                #     if len(fan_roi_buffer) > 1:
+                #         avg = np.mean(fan_roi_buffer, axis=0).astype(int)
+                #         x1, y1, x2, y2 = avg.tolist()
 
-                    buf = await get_cv_buffer_frames()
+                    # buf = await get_cv_buffer_frames()
 
-                    # buf는 numpy array list임 → 안전하게 처리
-                    frames_buf = []
-                    for b in buf:
-                        if isinstance(b, dict) and b.get("frame") is not None:
-                            frames_buf.append(cv2.GaussianBlur(b["frame"], (3, 3), 0))
-                        elif isinstance(b, np.ndarray):
-                            frames_buf.append(cv2.GaussianBlur(b, (3, 3), 0))
+                    # # buf는 numpy array list임 → 안전하게 처리
+                    # frames_buf = []
+                    # for b in buf:
+                    #     if isinstance(b, dict) and b.get("frame") is not None:
+                    #         frames_buf.append(cv2.GaussianBlur(b["frame"], (3, 3), 0))
+                    #     elif isinstance(b, np.ndarray):
+                    #         frames_buf.append(cv2.GaussianBlur(b, (3, 3), 0))
 
-                    if len(frames_buf) < 10:
-                        analyze_fan_belt_result = {
-                            "type": "fan_belt",
-                            "status": "error",
-                            "detail": "not_enough_frames",
-                            "message": "프레임 부족",
-                            "percent": {}
-                        }
-                    else:
-                        analyze_fan_belt_result = await analyze_fan_belt(
-                            frames_buf,
-                            [{"x1": x1, "y1": y1, "x2": x2, "y2": y2}]
-                        )
+                    # if len(frames_buf) < 10:
+                    #     analyze_fan_belt_result = {
+                    #         "type": "fan_belt",
+                    #         "status": "error",
+                    #         "detail": "not_enough_frames",
+                    #         "message": "프레임 부족",
+                    #         "percent": {}
+                    #     }
+                    # else:
+                    #     analyze_fan_belt_result = await analyze_fan_belt(
+                    #         frames_buf,
+                    #         [{"x1": x1, "y1": y1, "x2": x2, "y2": y2}]
+                    #     )
 
-                    is_anomaly = analyze_fan_belt_result.get("status") == "anomaly"
+                    # is_anomaly = analyze_fan_belt_result.get("status") == "anomaly"
 
                 # -----------------------------------------------------
                 # 결과 push
