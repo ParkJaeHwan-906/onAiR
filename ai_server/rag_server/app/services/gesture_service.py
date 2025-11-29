@@ -102,8 +102,23 @@ def process_gesture(frame, button_rect):
         landmarker = _get_landmarker()
         result = landmarker.detect(mp_image)
 
+        # 손 인식 여부 확인 로그 (주기적으로 출력)
+        if not hasattr(process_gesture, '_hand_detection_log_count'):
+            process_gesture._hand_detection_log_count = 0
+        process_gesture._hand_detection_log_count += 1
+        
         if not result.hand_landmarks:
+            # 100프레임마다 손 인식 실패 로그 출력
+            if process_gesture._hand_detection_log_count % 100 == 0:
+                print(f"🔍 [Gesture] 손 인식 실패 (총 {process_gesture._hand_detection_log_count}회 시도)")
             return None
+        
+        # 손 인식 성공 시 로그 출력 (처음 몇 번만)
+        if not hasattr(process_gesture, '_hand_detected_logged'):
+            process_gesture._hand_detected_logged = False
+        if not process_gesture._hand_detected_logged:
+            print(f"✅ [Gesture] 손 인식 성공! hand_landmarks 개수: {len(result.hand_landmarks)}")
+            process_gesture._hand_detected_logged = True
 
         x1, y1, x2, y2 = button_rect
         # is_end_button은 현재 사용하지 않으므로 False로 설정
