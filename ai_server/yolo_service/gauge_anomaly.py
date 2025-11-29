@@ -4,17 +4,17 @@ from loguru import logger
 
 # gauge config
 THERMO_CONFIG = {
-    "min_angle": 240,
-    "max_angle": 330,
+    "min_angle": 225,
+    "max_angle": 315,
     "min_val": 0,
     "max_val": 100
 }
 
 PRESS_CONFIG = {
-    "min_angle": 210,
-    "max_angle": 330,
+    "min_angle": 230,
+    "max_angle": 325,
     "min_val": 0,
-    "max_val": 1.0
+    "max_val": 1.5
 }
 
 
