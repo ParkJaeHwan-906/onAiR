@@ -43,6 +43,9 @@ except Exception:
 # CV 탐지 결과 임시 저장 (audio_playback_completed에서 사용)
 _pending_cv_detection: Optional[Dict[str, Any]] = None
 
+_pending_final_guide: Optional[Dict[str, Any]] = None
+_final_guide_lock = asyncio.Lock()
+
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
 sio = socketio.AsyncServer(
     async_mode='asgi',
@@ -450,9 +453,14 @@ async def handle_intent_audio_completed(sid, data):
             print("=" * 80)
             await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
             
-            _pending_final_guide = await generate_final_guide(
-                device_type, modules, anomalies, cv_result, broadcast_to
-            )
+            # _pending_final_guide = await generate_final_guide(
+            #     device_type, modules, anomalies, cv_result, broadcast_to
+            # )
+
+            async with _final_guide_lock:
+                _pending_final_guide = await generate_final_guide(
+                    device_type, modules, anomalies, cv_result, broadcast_to
+                )
 
             # 알림 메시지 생성
             notification_text = generate_cv_detection_notification(device_type, anomalies)
@@ -545,17 +553,22 @@ async def handle_audio_playback_completed(sid, data):
             print(f"   anomalies: {anomalies}")
             print("=" * 80)
             
+            if _final_guide_lock.locked():
+                print("⏳ Final Guide 생성 중... audio_playback_completed 대기 중")
+                async with _final_guide_lock:
+                    pass
+                print("✅ Final Guide 생성 완료됨 → 응답 전송 진행")
+
             if _pending_final_guide:
-                print("📦 [저장된 Final Guide 전송]")
                 await broadcast_to("mobile", "final_answer", _pending_final_guide)
                 _pending_final_guide = None
             else:
-                print("⚠️ pending_final_guide 없음 → 빈 응답 전송")
                 await broadcast_to("mobile", "final_answer", {"answer": "내용 없음"})
+
 
             # # 전체 정비 가이드 생성 및 전송 (서비스 사용)
             # await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
-            # _pending_cv_detection = None
+            _pending_cv_detection = None
     
     elif audio_type == "sections_completed":
         # AI_Supporter 섹션별 TTS 재생 완료 → 서비스 종료 버튼 활성화 요청
