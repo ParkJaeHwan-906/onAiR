@@ -27,15 +27,19 @@ class GestureManager:
         left, top, right, bottom = self.button_rect
         inside = (left <= finger_x <= right and top <= finger_y <= bottom)
 
-        if result["is_end_button"]:
-            if self.waiting_for_end and inside:
-                print("[Gesture] END detected")
-                self.waiting_for_end = False
-                await on_end()
+        if not inside:
             return
 
-        if self.waiting_for_start and inside:
-            print("[Gesture] START detected")
+        # 종료 버튼 클릭 체크
+        if self.waiting_for_end:
+            print("✅ [Gesture] 서비스 종료 버튼 클릭 감지")
+            self.waiting_for_end = False
+            await on_end()
+            return
+
+        # 시작 버튼 클릭 체크
+        if self.waiting_for_start:
+            print("✅ [Gesture] 서비스 시작 버튼 클릭 감지")
             self.waiting_for_start = False
             await on_start()
             return

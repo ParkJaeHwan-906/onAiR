@@ -102,8 +102,9 @@ def process_gesture(frame, button_rect):
             return None
 
         x1, y1, x2, y2 = button_rect
-        SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
-        is_end_button = (button_rect == SERVICE_END_BUTTON_RECT)
+        # is_end_button은 현재 사용하지 않으므로 False로 설정
+        # (gesture_state.py에서 button_rect를 직접 비교하므로 불필요)
+        is_end_button = False
 
         # 첫 번째 손만 사용
         landmarks = result.hand_landmarks[0]
