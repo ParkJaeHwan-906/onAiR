@@ -432,7 +432,7 @@ async def handle_intent_audio_completed(sid, data):
                     "label": m.get("label"),
                     "has_anomaly": m.get("has_anomaly")
                 }
-                for m in modules_raw
+                for m in modules
             ]
             # 정상 상태인 항목에 대해서 우선 순위를 부여
             sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"])
