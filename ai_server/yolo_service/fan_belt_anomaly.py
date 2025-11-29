@@ -3,12 +3,12 @@ import numpy as np
 from loguru import logger
 from collections import deque, Counter
 
-MAG_THRESH = 0.5
+MAG_THRESH = 1.0
 SMOOTH_WINDOW = 4
 TREND_WINDOW = 10
-ACCEL_RATIO = 1.3
+ACCEL_RATIO = 1.10
 DECEL_RATIO = 0.90
-STABLE_TOL = 0.3
+STABLE_TOL = 0.1
 STATE_SMOOTH = 7
 INIT_IGNORE = 8
 
