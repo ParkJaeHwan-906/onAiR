@@ -783,71 +783,83 @@ async def handle_video_frame(sid, data):
 # mobile로부터 mediapipe on 이벤트 받으면 켜기
 # ========================================
 async def handle_active_mediapipe(sid, data):
-    print("=" * 80)
-    print("🔔 [Gesture] active_mediapipe 이벤트 수신 시작")
-    print(f"   sid: {sid}")
-    print(f"   data: {data}")
-    print(f"   data type: {type(data)}")
-    print(f"   device_map: {device_map}")
+    print("=" * 80, flush=True)
+    print("🔔 [Gesture] active_mediapipe 이벤트 수신 시작", flush=True)
+    print(f"   sid: {sid}", flush=True)
+    print(f"   data: {data}", flush=True)
+    print(f"   data type: {type(data)}", flush=True)
+    print(f"   device_map: {device_map}", flush=True)
     
     sender_device = device_map.get(sid, "unknown")
-    print(f"   sender_device: {sender_device}")
+    print(f"   sender_device: {sender_device}", flush=True)
     
     if sender_device != "mobile":
-        print(f"⚠️ [Gesture] active_mediapipe 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
-        print("=" * 80)
+        print(f"⚠️ [Gesture] active_mediapipe 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}", flush=True)
+        print("=" * 80, flush=True)
         return
 
-    print(f"✅ [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}")
+    print(f"✅ [Gesture] active_mediapipe 이벤트 수신: data={data}, type={type(data)}", flush=True)
     
     # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
-    rect = data.get("rect") if isinstance(data, dict) else None
+    # data가 None이거나 dict가 아닌 경우를 안전하게 처리
+    if data is None:
+        rect = None
+    elif isinstance(data, dict):
+        rect = data.get("rect")
+    else:
+        rect = None
     
-    if rect:
+    if rect and isinstance(rect, dict):
         # 모바일에서 전달한 좌표 사용
         button_rect = (
-            rect['left'],
-            rect['top'],
-            rect['right'],
-            rect['bottom']
+            rect.get('left'),
+            rect.get('top'),
+            rect.get('right'),
+            rect.get('bottom')
         )
-        print(f"🔍 [Gesture] 모바일에서 전달한 버튼 좌표 사용: {button_rect}")
+        # 모든 값이 None이 아닌지 확인
+        if all(v is not None for v in button_rect):
+            print(f"🔍 [Gesture] 모바일에서 전달한 버튼 좌표 사용: {button_rect}", flush=True)
+        else:
+            button_rect = SERVICE_END_BUTTON_RECT
+            print(f"⚠️ [Gesture] 모바일에서 전달한 좌표가 불완전함. 하드코딩된 좌표 사용: {button_rect}", flush=True)
     else:
         # 하드코딩된 고정 좌표 사용
         button_rect = SERVICE_END_BUTTON_RECT
-        print(f"🔍 [Gesture] 하드코딩된 고정 버튼 좌표 사용: {button_rect}")
+        print(f"🔍 [Gesture] 하드코딩된 고정 버튼 좌표 사용: {button_rect}", flush=True)
     
     # mediapipe 켜기
     gesture_manager.enabled = True
     gesture_manager.button_rect = button_rect
     
     # 디버깅: 최종 버튼 좌표 정보 출력
-    print(f"✅ [Gesture] 버튼 좌표 설정 완료: {button_rect}")
-    print(f"   현재 상태: waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
+    print(f"✅ [Gesture] 버튼 좌표 설정 완료: {button_rect}", flush=True)
+    print(f"   현재 상태: waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
 
     # START 모드 요청 (첫 번째 active_mediapipe 호출)
     if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
         gesture_manager.waiting_for_start = True
-        print("=" * 80)
-        print("✅ [Gesture] 첫 번째 active_mediapipe 호출 → 서비스 시작 버튼 클릭 대기 모드")
-        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
-        print("=" * 80)
+        print("=" * 80, flush=True)
+        print("✅ [Gesture] 첫 번째 active_mediapipe 호출 → 서비스 시작 버튼 클릭 대기 모드", flush=True)
+        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
+        print("=" * 80, flush=True)
         return
 
     # END 모드 요청 (두 번째 active_mediapipe 호출)
     if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
         gesture_manager.waiting_for_start = False
         gesture_manager.waiting_for_end = True
-        print("=" * 80)
-        print("✅ [Gesture] 두 번째 active_mediapipe 호출 → 서비스 종료 버튼 클릭 대기 모드")
-        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
-        print("=" * 80)
+        print("=" * 80, flush=True)
+        print("✅ [Gesture] 두 번째 active_mediapipe 호출 → 서비스 종료 버튼 클릭 대기 모드", flush=True)
+        print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}", flush=True)
+        print("=" * 80, flush=True)
         return
 
     # 그 외: 다시 초기화(비활성화일 때처럼)
     gesture_manager.waiting_for_start = True
     gesture_manager.waiting_for_end = False
-    print("=" * 80)
+    print("Gesture mode reset-> waiting for start", flush=True)
+    print("=" * 80, flush=True)
     print("🔄 [Gesture] active_mediapipe 호출 → 상태 초기화 후 서비스 시작 버튼 클릭 대기 모드")
     print(f"   waiting_for_start={gesture_manager.waiting_for_start}, waiting_for_end={gesture_manager.waiting_for_end}")
     print("=" * 80)

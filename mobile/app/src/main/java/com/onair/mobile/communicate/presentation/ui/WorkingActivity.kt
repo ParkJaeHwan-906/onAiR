@@ -149,7 +149,13 @@ class WorkingActivity : AppCompatActivity() {
         if (::socketIoSttClient.isInitialized) {
             setCallBack()
             workingViewModel.onFlowCompleted()
-            socketIoSttClient.activeMediaPipe()
+            // activeMediaPipe()는 onConnect 콜백에서 호출하도록 변경
+            // 연결이 완료된 경우에만 호출
+            if (socketIoSttClient.isConnected()) {
+                socketIoSttClient.activeMediaPipe()
+            } else {
+                Log.w(TAG, "⚠️ Socket.IO 연결 대기 중... activeMediaPipe()는 연결 완료 후 호출됩니다")
+            }
         }
         lifecycleScope.launch {
             workingViewModel.endService.collect {
@@ -1022,6 +1028,8 @@ class WorkingActivity : AppCompatActivity() {
             },
             onConnect = {
                 Log.i(TAG, "✅ Socket.IO 서버 연결 성공")
+                // 연결 완료 후 activeMediaPipe 호출
+                socketIoSttClient.activeMediaPipe()
             },
             onDisconnect = {
                 Log.i(TAG, "❌ Socket.IO 서버 연결 종료")
