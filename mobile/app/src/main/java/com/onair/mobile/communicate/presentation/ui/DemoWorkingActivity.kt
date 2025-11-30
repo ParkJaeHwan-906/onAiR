@@ -14,7 +14,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.card.MaterialCardView
 import com.onair.mobile.OnairApp
 import com.onair.mobile.R
@@ -43,19 +45,21 @@ import com.onair.mobile.assistant.domain.entity.IntentType
 import com.onair.mobile.assistant.core.model.dto.IntentResultDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionFailedDto
 import com.onair.mobile.assistant.core.model.dto.CvDetectionNormalDto
+import com.onair.mobile.assistant.core.model.dto.CvDetectionAnomalyDto
 import com.onair.mobile.communicate.data.socket.dto.StructuredAnswer
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import com.onair.mobile.communicate.presentation.viewmodel.CommunicationViewModel
 import com.onair.mobile.communicate.presentation.viewmodel.OnAirState
 import com.onair.mobile.communicate.presentation.viewmodel.WorkingViewModel
+import com.onair.mobile.databinding.ActivityDemoWorkingBinding
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
-class WorkingActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityWorkingBinding
+class DemoWorkingActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityDemoWorkingBinding
     private val workingViewModel: WorkingViewModel by viewModelByFactory {
         val apiService = ApiClient.springRetrofit.create(ApiService::class.java)
         val taskRepository = TaskRepository(apiService)
@@ -79,8 +83,9 @@ class WorkingActivity : AppCompatActivity() {
     private var aiOnDialog: AiOnDialog? = null
     private var onAirOnDialog:  OnAirOnDialog? = null
     private var isActivityResumed = false  // Activity가 resume 상태인지 추적
+    private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
-    private val TAG = "WorkingActivity"
+    private val TAG = "DemoWorkingActivity"
 
     companion object {
         private const val WAKEWORD_AUDIO_FILE = "001_onAir_서비스를_시작합니다_어떤_것을_도와드릴까요.mp3"
@@ -96,7 +101,7 @@ class WorkingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityWorkingBinding.inflate(layoutInflater)
+        binding = ActivityDemoWorkingBinding.inflate(layoutInflater)
         enableEdgeToEdge()
         setContentView(binding.root)
 
@@ -115,9 +120,7 @@ class WorkingActivity : AppCompatActivity() {
         initView()
         observeViewModel()
         goCall()
-        // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
-//        showAiAnswer()
         showCvAnswer()
     }
 
@@ -129,6 +132,7 @@ class WorkingActivity : AppCompatActivity() {
                 if (!socketIoSttClient.isConnected()){
                     socketIoSttClient.connect()
                     Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
+                    Log.d(TAG, hasSentCommunicationClose.toString())
                 }
             }
         } catch (e: Exception) {
@@ -183,7 +187,7 @@ class WorkingActivity : AppCompatActivity() {
         // WorkingActivity가 background로 가면 콜백 제거 및 wakeword 대기 상태로 복귀
         Log.i(TAG, "🟡 WorkingActivity onPause: 콜백 제거 및 wakeword 대기 상태로 복귀")
         isActivityResumed = false  // pause 상태로 변경
-        
+
         if (::socketIoSttClient.isInitialized) {
             removeCallback()
         }
@@ -194,7 +198,7 @@ class WorkingActivity : AppCompatActivity() {
         // 리소스 정리
         Log.i(TAG, "🛑 WorkingActivity onDestroy: 리소스 정리 및 wakeword 대기 상태로 복귀")
         isActivityResumed = false  // destroy 상태로 변경
-        
+
         // 비정상 종료 시 wakeword 대기 상태로 복귀
         // 중복 전송 방지: 아직 전송하지 않은 경우에만 전송
         if (::socketIoSttClient.isInitialized) {
@@ -223,6 +227,17 @@ class WorkingActivity : AppCompatActivity() {
         binding.endButton.setOnClickListener {
             workingViewModel.endTask(taskId, "")
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                socketIoSttClient.videoFrames.collect { value ->
+                    value.let {
+                        val bitmap = it.toBitmap()
+                        val cropped = bitmap?.toBottomCropped()
+                        binding.videoView.setImageBitmap(cropped)
+                    }
+                }
+            }
+        }
         binding.serviceEndButton.setOnClickListener {
             lifecycleScope.launch {
                 handleServiceEnd()
@@ -233,6 +248,26 @@ class WorkingActivity : AppCompatActivity() {
                 handleWakewordDetected()
             }
         }
+    }
+
+    private fun ByteArray.toBitmap(): Bitmap? {
+        return BitmapFactory.decodeByteArray(this, 0, this.size)
+    }
+    private fun Bitmap.toBottomCropped(targetRatio: Float = 4f/3f) : Bitmap {
+        val srcWidth = this.width
+        val srcHeight = this.height
+
+        val targetHeight = (srcWidth / targetRatio).toInt()
+
+        if (targetHeight >= srcHeight) return this
+
+        val top = (srcHeight - targetHeight) / 2
+
+        return Bitmap.createBitmap(
+            this,
+            0, top, srcWidth,
+            targetHeight
+        )
     }
 
     private fun observeViewModel() {
@@ -319,13 +354,13 @@ class WorkingActivity : AppCompatActivity() {
                 Log.d("RTC", "LiveKit 토큰 수신: ${if (token.isNotBlank()) "있음 (길이: ${token.length})" else "없음"}")
                 if (token.isNotBlank()) {
 
-//                    val intent = Intent(this@WorkingActivity, DemonstrateActivity::class.java).apply {
-                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
+                    val intent = Intent(this@DemoWorkingActivity, DemonstrateActivity::class.java).apply {
+//                    val intent = Intent(this@WorkingActivity, CallActivity::class.java).apply {
                         putExtra("server_url", "wss://onair-tbfd0pr1.livekit.cloud")
                         putExtra("token", token)
                         putExtra("description", description)
                     }
-                    
+
                     // FastAPI 서버로 accept_communication 이벤트 전송
                     socketIoSttClient.sendAcceptCommunication()
                     Log.i(TAG, "📤 FastAPI 서버로 accept_communication 이벤트 전송 완료")
@@ -381,13 +416,13 @@ class WorkingActivity : AppCompatActivity() {
                         Log.i(TAG, "✅ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 완료")
                     }.onFailure { e ->
                         Log.w(TAG, "⚠️ REFRESH_TOKEN으로 ACCESS_TOKEN 갱신 실패: ${e.message}")
-                        startActivity(Intent(this@WorkingActivity, LoginActivity::class.java))
+                        startActivity(Intent(this@DemoWorkingActivity, LoginActivity::class.java))
                         finish()
                     }
                 }
             } else {
                 Log.w(TAG, "⚠️ REFRESH_TOKEN이 없음 → 로그인 화면으로 이동")
-                startActivity(Intent(this@WorkingActivity, LoginActivity::class.java))
+                startActivity(Intent(this@DemoWorkingActivity, LoginActivity::class.java))
                 finish()
             }
         }
@@ -424,23 +459,23 @@ class WorkingActivity : AppCompatActivity() {
                         mediaPlayerController.playLocalAudio(AI_SUPPORTER_AUDIO_FILE) {
                             // 재생 완료 콜백
                             Log.i(TAG, "✅ AI_SUPPORTER 음성 파일 재생 완료")
-                            
+
                             // 모달 텍스트를 "AI 서포터가 오류 탐지 중..."으로 변경
                             runOnUiThread {
                                 aiOnDialog?.updateMessage("AI 서포터가 오류 탐지 중...")
                             }
-                            
+
                             // 2초 대기 후 FastAPI 서버로 재생 완료 이벤트 전송
                             lifecycleScope.launch {
                                 delay(2000)
-                                
+
                                 val success = socketIoSttClient.sendIntentAudioCompleted("AI_SUPPORTER")
                                 if (success) {
                                     Log.i(TAG, "📤 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 완료")
                                 } else {
                                     Log.e(TAG, "❌ 모바일 AI_SUPPORTER 음성 파일 재생 완료 이벤트 전송 실패")
                                 }
-                                
+
                                 // 모달은 CV 탐지 결과가 오면 자동으로 처리됨 (hideModal은 CV 탐지 결과에서 처리)
                             }
                         }
@@ -501,7 +536,7 @@ class WorkingActivity : AppCompatActivity() {
                 runOnUiThread {
                     aiOnDialog?.updateMessage("통신 연결 중...")
                 }
-                
+
                 // CV 탐지 실패 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 실패 음성 파일 재생 시작: $CV_DETECTION_FAILED_AUDIO_FILE")
                 mediaPlayerController.playLocalAudio(CV_DETECTION_FAILED_AUDIO_FILE) {
@@ -543,7 +578,7 @@ class WorkingActivity : AppCompatActivity() {
                 runOnUiThread {
                     aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
                 }
-                
+
                 // CV 탐지 정상 음성 파일 재생
                 Log.i(TAG, "🔊 CV 탐지 정상 음성 파일 재생 시작: $CV_DETECTION_NORMAL_AUDIO_FILE")
                 mediaPlayerController.playLocalAudio(CV_DETECTION_NORMAL_AUDIO_FILE) {
@@ -652,7 +687,7 @@ class WorkingActivity : AppCompatActivity() {
             }
         }
     }
- 
+
     private fun showModal(statusMessage: String) {
         // 이미 모달이 표시되어 있으면 숨기고 새로 표시
         if (aiOnDialog != null) {
@@ -676,7 +711,7 @@ class WorkingActivity : AppCompatActivity() {
                 onAirOnDialog?.dismissAllowingStateLoss()
                 onAirOnDialog = null
             }
-            
+
             // 새 모달 생성 및 표시
             onAirOnDialog = OnAirOnDialog()
             onAirOnDialog?.show(supportFragmentManager, "onAiR on")
@@ -714,7 +749,7 @@ class WorkingActivity : AppCompatActivity() {
                 Log.e(TAG, "❌ supportFragmentManager에서 모달 dismiss 오류: ${e.message}")
                 e.printStackTrace()
             }
-            
+
             // 방법 2: FragmentManager의 모든 Fragment를 순회하면서 DialogFragment 찾기
             try {
                 val fragments = supportFragmentManager.fragments
@@ -733,7 +768,7 @@ class WorkingActivity : AppCompatActivity() {
                 Log.e(TAG, "❌ FragmentManager 순회 중 오류: ${e.message}")
                 e.printStackTrace()
             }
-            
+
             // 방법 3: aiOnDialog를 통해 dismiss (백업 방법)
             if (aiOnDialog != null) {
                 Log.d(TAG, "aiOnDialog가 존재함, dismiss() 호출")
@@ -758,7 +793,7 @@ class WorkingActivity : AppCompatActivity() {
             Log.e(TAG, "❌ hideModal() 전체 오류: ${e.message}")
             e.printStackTrace()
         }
-        
+
         // aiOnDialog 참조 초기화
         aiOnDialog = null
         Log.d(TAG, "hideModal() 완료")
@@ -776,7 +811,7 @@ class WorkingActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ FragmentManager에서 OnAir 모달 dismiss 오류: ${e.message}")
             }
-            
+
             // 방법 2: onAirOnDialog를 통해 dismiss
             if (onAirOnDialog != null) {
                 try {
@@ -790,7 +825,7 @@ class WorkingActivity : AppCompatActivity() {
                     }
                 }
             }
-            
+
             onAirOnDialog = null
         } catch (e: Exception) {
             Log.e(TAG, "❌ hideOnModal() 전체 오류: ${e.message}")
@@ -817,7 +852,7 @@ class WorkingActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     showTypingEffect(binding.cvResultErrorText, value.message)
                 }
-                
+
                 // 오디오 재생
                 if (value.audio_content != null && value.audio_content.isNotBlank()) {
                     Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
@@ -826,19 +861,19 @@ class WorkingActivity : AppCompatActivity() {
                 } else {
                     Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
                 }
-                
+
                 // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
                 binding.cvResultError.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
                 // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
                 withContext(Dispatchers.Main) {
                     binding.cvResultError.visibility = View.GONE
                 }
-                
+
                 // 모달 표시 ("답변 생성 중...")
                 runOnUiThread {
                     showModal("답변 생성 중...")
                 }
-                
+
                 // FastAPI 서버로 재생 완료 이벤트 전송
                 val success = socketIoSttClient.sendCvDetectionAnomalyAudioCompleted()
                 if (success) {
@@ -961,6 +996,9 @@ class WorkingActivity : AppCompatActivity() {
             onCvDetectionFailed = { cv ->
                 handleCvDetectionFailed(cv)
             },
+            onCvDetectionAnomaly = { cvAnomaly ->
+//                handleCvDetectionAnomaly(cvAnomaly)
+            },
             onPlayServiceEndAudio = { audioFile ->
                 handlePlayServiceEndAudio(audioFile)
             },
@@ -984,6 +1022,7 @@ class WorkingActivity : AppCompatActivity() {
             onIntentResult = null,
             onCvDetectionNormal = null,
             onCvDetectionFailed = null,
+            onCvDetectionAnomaly = null,
             onPlayServiceEndAudio = null,
         )
     }

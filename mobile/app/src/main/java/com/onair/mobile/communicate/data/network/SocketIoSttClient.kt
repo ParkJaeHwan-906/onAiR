@@ -40,8 +40,6 @@ class SocketIoSttClient(
     private val serverUrl: String,  // 예: "http://192.168.0.100:5000"
     private var onSttResult: ((String, String, String?) -> Unit)? = null,  // (text, type, confidence)
     private var onIntentResult: ((IntentResultDto) -> Unit)? = null,  // Intent 결과 콜백 (Gemini-Flash 분류 결과)
-    private var onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
-    private var onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
     private var onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
     private var onWakewordDetected: (() -> Unit)? = null,  // Wakeword 감지 콜백
     private var onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
@@ -197,24 +195,6 @@ class SocketIoSttClient(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Intent 결과 처리 오류: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
-
-            // start_sse_connection 이벤트 수신 (버퍼링 STT 수신 시 SSE 연결 시작 요청)
-            socket?.on("start_sse_connection") { args ->
-                try {
-                    val data = args[0] as? JSONObject
-                    if (data != null) {
-                        val text = data.optString("text", "")
-                        Log.i(TAG, "📡 SSE 연결 시작 요청 수신: text=$text")
-                        onStartSseConnection?.invoke(text)
-                    } else {
-                        Log.i(TAG, "📡 SSE 연결 시작 요청 수신 (데이터 없음)")
-                        onStartSseConnection?.invoke(null)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ SSE 연결 시작 요청 처리 오류: ${e.message}")
                     e.printStackTrace()
                 }
             }
@@ -646,33 +626,6 @@ class SocketIoSttClient(
     }
 
     /**
-     * 최종 답변 TTS 재생 완료 이벤트 전송
-     *
-     * @return 전송 성공 여부
-     */
-//    fun sendFinalAnswerAudioCompleted(): Boolean {
-//        if (!isConnected()) {
-//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-//            return false
-//        }
-//
-//        return try {
-//            val payload = JSONObject().apply {
-//                put("type", "final_answer")
-//                put("timestamp", System.currentTimeMillis())
-//            }
-//
-//            socket?.emit("audio_playback_completed", payload)
-//            Log.i(TAG, "📤 모바일 최종 답변 TTS 재생 완료 이벤트 전송")
-//            true
-//        } catch (e: Exception) {
-//            Log.e(TAG, "❌ 모바일 최종 답변 TTS 재생 완료 이벤트 전송 실패: ${e.message}")
-//            e.printStackTrace()
-//            false
-//        }
-//    }
-
-    /**
      * 섹션별 TTS 재생 완료 이벤트 전송
      *
      * @return 전송 성공 여부
@@ -725,37 +678,6 @@ class SocketIoSttClient(
             false
         }
     }
-
-    /**
-     * 통신 종료 이벤트 전송 (WorkingActivity 비정상 종료 시 wakeword 대기 상태로 복귀)
-     *
-     * @return 전송 성공 여부
-     */
-//    fun sendCommunicationClose(): Boolean {
-//        if (!isConnected()) {
-//            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
-//            return false
-//        }
-//
-//        return try {
-//            val payload = JSONObject().apply {
-//                put("timestamp", System.currentTimeMillis())
-//            }
-//
-//            socket?.emit("communication_close", payload)
-//            Log.i(TAG, "📤 모바일 통신 종료 이벤트 전송 (wakeword 대기 상태로 복귀)")
-//            true
-//        } catch (e: Exception) {
-//            Log.e(TAG, "❌ 모바일 통신 종료 이벤트 전송 실패: ${e.message}")
-//            e.printStackTrace()
-//            false
-//        }
-//    }
-//    fun clearCallEndBuffer() {
-//        while (_callEnd.tryReceive().isSuccess) {
-//
-//        }
-//    }
     @OptIn(ExperimentalCoroutinesApi::class)
     fun resetShared() {
         _wakewordFlow.resetReplayCache()
@@ -782,8 +704,6 @@ class SocketIoSttClient(
     fun setCallbacks(
         onSttResult: ((String, String, String?) -> Unit)? = null,  // (text, type, confidence)
         onIntentResult: ((IntentResultDto) -> Unit)? = null,  // Intent 결과 콜백 (Gemini-Flash 분류 결과)
-        onFinalAnswer: ((FinalAnswerDto) -> Unit)? = null,  // 최종 답변 콜백
-        onStartSseConnection: ((String?) -> Unit)? = null,  // SSE 연결 시작 요청 콜백
         onCvDetectionNormal: ((CvDetectionNormalDto) -> Unit)? = null,  // CV 탐지 정상 콜백
         onCvDetectionFailed: ((CvDetectionFailedDto) -> Unit)? = null,  // CV 탐지 실패 콜백
         onCvDetectionAnomaly: ((CvDetectionAnomalyDto) -> Unit)? = null,  // CV 탐지 이상 콜백
@@ -795,8 +715,6 @@ class SocketIoSttClient(
     ) {
         if (onSttResult != null) this.onSttResult = onSttResult
         if (onIntentResult != null) this.onIntentResult = onIntentResult
-        if (onFinalAnswer != null) this.onFinalAnswer = onFinalAnswer
-        if (onStartSseConnection != null) this.onStartSseConnection = onStartSseConnection
         if (onCvDetectionNormal != null) this.onCvDetectionNormal = onCvDetectionNormal
         if (onCvDetectionFailed != null) this.onCvDetectionFailed = onCvDetectionFailed
         if (onCvDetectionAnomaly != null) this.onCvDetectionAnomaly = onCvDetectionAnomaly

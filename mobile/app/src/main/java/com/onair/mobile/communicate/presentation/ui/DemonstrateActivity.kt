@@ -154,7 +154,7 @@ class DemonstrateActivity : AppCompatActivity() {
                         .padding(16.dp)
                         .size(width = 220.dp, height = 160.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                        .background(Color.Black.copy(alpha = 0.6f))
                 ) {
                     VideoTrackView(
                         videoTrack = it,

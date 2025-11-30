@@ -109,6 +109,7 @@ class CallActivity : FragmentActivity() {
             ?: throw java.lang.NullPointerException("description is null")
         val socketClient = SocketHolder.socketClient
         Log.i("CallActivity", "📡 CallActivity에서 Socket 연결 상태 확인: isActive=${socketClient.isConnected()}")
+        mediaPlayerController = MediaPlayerController(this)
         setContent {
             MaterialTheme {
                 CallScreen(callViewModel)
@@ -124,7 +125,7 @@ class CallActivity : FragmentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-    //            .background(Color.Black)
+                .background(Color.Black)
         ) {
             WhiteboardCanvas(
                 viewModel = viewModel,
@@ -134,7 +135,7 @@ class CallActivity : FragmentActivity() {
             blueprintTrack?.let {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
+                        .align(Alignment.CenterStart)
                         .padding(16.dp)
                         .size(width = 220.dp, height = 160.dp)
                         .clip(RoundedCornerShape(16.dp))
@@ -308,7 +309,7 @@ class CallActivity : FragmentActivity() {
                         }
                     }
                 }
-                Log.d("CallActivity marker", markers.toString())
+//                Log.d("CallActivity marker", markers.toString())
                 markers.forEach { marker ->
                     val p = transform(marker.info.x, marker.info.y)
                     if (marker.type == "description") {
