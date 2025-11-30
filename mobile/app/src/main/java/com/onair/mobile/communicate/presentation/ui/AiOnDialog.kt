@@ -2,9 +2,11 @@ package com.onair.mobile.communicate.presentation.ui
 
 import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.fragment.app.DialogFragment
 import androidx.core.graphics.drawable.toDrawable
 import com.bumptech.glide.Glide
@@ -38,7 +40,20 @@ class AiOnDialog(val statusMessage: String) : DialogFragment(
 
         binding.aiStatusText.text = statusMessage
     }
-    
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.apply {
+            setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+
+            val params = attributes
+            params.gravity = Gravity.BOTTOM or Gravity.START
+            params.x = 30
+            params.y = 30
+            attributes = params
+        }
+    }
+
     fun updateMessage(newMessage: String) {
         if (::binding.isInitialized) {
             binding.aiStatusText.apply {

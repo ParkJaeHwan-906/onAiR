@@ -306,15 +306,10 @@ class WorkingActivity : AppCompatActivity() {
                     }
                     socketIoSttClient.activeMediaPipe()
                     showAiAnswer(answer)
+                    delay(3000)
+                    handleServiceEnd()
                 }
             }
-//            launch {
-//                workingViewModel.wakewordFlow.collectLatest { value ->
-//                    Log.d(TAG, "wakeword 감지")
-//
-//                    workingViewModel.onWakewordDetected()
-//                }
-//            }
             launch {
                 workingViewModel.onAirState.collectLatest { onAirState ->
                     Log.d(TAG, "현재 상태2: $onAirState")
