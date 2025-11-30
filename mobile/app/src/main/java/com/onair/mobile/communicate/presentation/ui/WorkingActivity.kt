@@ -54,6 +54,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
 
 class WorkingActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWorkingBinding
@@ -116,7 +118,6 @@ class WorkingActivity : AppCompatActivity() {
         initView()
         observeViewModel()
         goCall()
-        // Assistant 로직 초기화 (연결은 onResume에서)
         initAssistantLogic()
 //        showAiAnswer()
         showCvAnswer()
@@ -152,31 +153,34 @@ class WorkingActivity : AppCompatActivity() {
                 Log.w(TAG, "⚠️ Socket.IO 연결 대기 중... activeMediaPipe()는 연결 완료 후 호출됩니다")
             }
         }
-        lifecycleScope.launch {
-            workingViewModel.endService.collect {
-                handleServiceEnd()
-            }
+        binding.serviceStartButton.apply {
+            if (isGone) visibility = View.VISIBLE
         }
-        binding.serviceStartButton.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                // 1. 좌표 구하기
-                val location = IntArray(2)
-                binding.serviceStartButton.getLocationOnScreen(location)
-
-                val x = location[0] // 시작점 X (픽셀)
-                val y = location[1] // 시작점 Y (픽셀)
-                val width = binding.serviceStartButton.width
-                val height = binding.serviceStartButton.height
-
-                // 2. MediaPipe 연동을 위한 영역 정의 (Hit Box)
-                // 예: x ~ x+width, y ~ y+height 범위가 버튼의 영역임
-                Log.d("ButtonPos", "X: $x, Y: $y, W: $width, H: $height")
-
-                // 3. 리스너 제거 (중복 호출 방지)
-                binding.serviceStartButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-            }
-        })
+//        lifecycleScope.launch {
+//            workingViewModel.endService.collect {
+//                handleServiceEnd()
+//            }
+//        }
+//        binding.serviceStartButton.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+//            override fun onGlobalLayout() {
+//                // 1. 좌표 구하기
+//                val location = IntArray(2)
+//                binding.serviceStartButton.getLocationOnScreen(location)
+//
+//                val x = location[0] // 시작점 X (픽셀)
+//                val y = location[1] // 시작점 Y (픽셀)
+//                val width = binding.serviceStartButton.width
+//                val height = binding.serviceStartButton.height
+//
+//                // 2. MediaPipe 연동을 위한 영역 정의 (Hit Box)
+//                // 예: x ~ x+width, y ~ y+height 범위가 버튼의 영역임
+//                Log.d("ButtonPos", "X: $x, Y: $y, W: $width, H: $height")
+//
+//                // 3. 리스너 제거 (중복 호출 방지)
+//                binding.serviceStartButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
+//
+//            }
+//        })
     }
 
     override fun onPause() {
@@ -231,7 +235,9 @@ class WorkingActivity : AppCompatActivity() {
         }
         binding.serviceStartButton.setOnClickListener {
             lifecycleScope.launch {
-                handleWakewordDetected()
+//                handleWakewordDetected()
+                workingViewModel.onServiceForcedStart()
+                binding.serviceStartButton.visibility = View.GONE
             }
         }
     }
@@ -1030,6 +1036,9 @@ class WorkingActivity : AppCompatActivity() {
                     hideOnModal()
                     Log.d(TAG, "서비스 종료 완료")
                     socketIoSttClient.sendServiceCompletedAudioCompleted()
+                    binding.serviceStartButton.apply {
+                        if (isGone) visibility = View.VISIBLE
+                    }
                 }
             }
         } catch (e: Exception) {

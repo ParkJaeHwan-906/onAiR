@@ -474,6 +474,20 @@ class SocketIoSttClient(
             false
         }
     }
+    fun sendWakeWordForce() : Boolean {
+        if (!isConnected()) {
+            Log.w(TAG, "⚠️ Socket.IO 서버에 연결되어 있지 않습니다.")
+            return false
+        }
+        return try {
+            socket?.emit("wakeword_force", emptyMap<String,String>())
+            Log.i(TAG, "강제 wakeword 버튼 이벤트 전송")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "강제 wake word 버튼 이벤트 전송 실패: ${e.message}")
+            false
+        }
+    }
 
     /**
      * 모바일 음성 파일 재생 완료 이벤트 전송 (Wakeword용)

@@ -42,19 +42,15 @@ class WorkingViewModel(
         Log.d("WorkingVM", "WorkingViewModel init 실행됨")
         viewModelScope.launch {
             SocketHolder.socketClient.wakewordFlow.collect { value ->
-                Log.d("working view model", "현재 wake word: ${value}")
+                Log.d("working view model", "현재 wake word: $value")
                 _onAirState.value = when (value) {
                     SocketIoSttClient.WakewordEvent.Detected -> OnAirState.Started
                     SocketIoSttClient.WakewordEvent.Ready -> OnAirState.Waiting
                 }
                 Log.d("working viewmodel", "현재 상태: ${_onAirState.value}")
-//                if (_onAirState.value == OnAirState.Waiting) {
-//                    _onAirState.value = OnAirState.Started
-//                }
             }
         }
     }
-
 
     fun endTask(taskId: Long, solution: String) {
         viewModelScope.launch {
@@ -107,14 +103,13 @@ class WorkingViewModel(
             _onAirState.value = OnAirState.Started
         }
     }
-
     fun onFlowCompleted() {
         _onAirState.value = OnAirState.Waiting
         SocketHolder.socketClient.resetShared()
     }
-//    fun resetError() {
-//        _errorMessage.value = ""
-//    }
+    fun onServiceForcedStart() {
+        SocketHolder.socketClient.sendWakeWordForce()
+    }
 }
 sealed class OnAirState {
     object Waiting : OnAirState()
