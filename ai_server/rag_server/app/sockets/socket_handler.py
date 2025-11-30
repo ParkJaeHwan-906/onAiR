@@ -1094,7 +1094,7 @@ async def delete_marker(sid, data):
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
 
 async def handle_wakeword_force(sid, data):
-    sneder_device = device_map.get(sid, "unknown")
+    sender_device = device_map.get(sid, "unknown")
     if sender_device != "mobile" or sender_device != "unknown":     # 모바일 또는 서버에서 요청 제외하고는 무시
         return
     await broadcast_to("raspi", "wakeword_force", {})
