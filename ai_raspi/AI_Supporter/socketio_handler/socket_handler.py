@@ -46,6 +46,7 @@ class SocketIOClient:
         self.sio.on("handle_audio_stream", self.on_handle_audio_stream)
         self.sio.on("wakeword_start_waiting", self.on_wakeword_start_waiting)
         self.sio.on("audio_playback_completed", self.on_audio_playback_completed)
+        self.sio.on("wakeword_force", self.on_wakeword_force)
 
     # ============================================================
     # 🔌 연결 이벤트
@@ -244,6 +245,12 @@ class SocketIOClient:
         await self.sio.emit("wakeword_detected", {
                 "detected": True
         })
+
+    async def on_wakeword_force(self, data):
+        logger.info("wakeword 강제화 요청")
+        print(f"wakeword 강제화 요청", flush=True)
+        if hasattr(self.manager, "stt_core"):
+            self.manager.stt_core.force_wakeword = True
 
     # ============================================================
     # 🔁 서버 연결 제어
