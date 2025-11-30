@@ -42,10 +42,9 @@ def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Di
     if not gms_api_key:
         fallback_items = [item[1] for item in detected_items]
         return f"{device_type}에서 {', '.join(fallback_items)} 오류가 탐지되었습니다."
-    
+
     # GPT-4o로 자연스러운 알림 메시지 생성
     gpt_items = [item[0] for item in detected_items]
-    
     prompt = f"""다음 정보를 바탕으로 간단하고 명확한 탐지 알림 메시지를 생성하세요.
 
 장비: {device_type}
@@ -64,6 +63,7 @@ def generate_cv_detection_notification(device_type: str, anomalies: Dict[str, Di
 답변은 알림 메시지만 출력하세요."""
     
     try:
+        raise Exception("빠른 응답을 위해 자체적으로 텍스트 생성")
         text = call_openai_via_gms(
             model=settings.GMS_MODEL_GENERATOR,
             prompt=prompt,

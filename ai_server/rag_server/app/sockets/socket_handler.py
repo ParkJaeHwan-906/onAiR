@@ -22,14 +22,17 @@ from app.services.final_guide import generate_final_guide
 from app.services.gesture_state import GestureManager
 
 # 서비스 종료 버튼 좌표 (left=1800, top=90, right=1950, bottom=240)
-SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
+# SERVICE_END_BUTTON_RECT = (1800, 90, 1950, 240)
+SERVICE_END_BUTTON_RECT = (1710, 45, 1860, 195)
 
 # Gesture 인식 상태 관리 (클래스로 캡슐화)
-gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
+# gesture_manager = GestureManager(SERVICE_END_BUTTON_RECT)
+
+# settings는 wait_for_next_step에서 사용되므로 반드시 import 필요
+from app.core.config import settings
 
 try:
     import google.generativeai as genai
-    from app.core.config import settings
     genai_available = True
     if settings.GMS_API_KEY:
         genai.configure(api_key=settings.GMS_API_KEY)
@@ -39,6 +42,9 @@ except Exception:
 
 # CV 탐지 결과 임시 저장 (audio_playback_completed에서 사용)
 _pending_cv_detection: Optional[Dict[str, Any]] = None
+
+_pending_final_guide: Optional[Dict[str, Any]] = None
+_final_guide_lock = asyncio.Lock()
 
 # Socket.IO 서버 인스턴스 (main.py에서 생성)
 sio = socketio.AsyncServer(
@@ -131,13 +137,24 @@ async def wait_for_next_step(step_name: str, step_number: str = ""):
 
 def init_socketio():
     """Socket.IO 서버 인스턴스를 설정하고 이벤트 핸들러 등록"""
+    print("=" * 80)
+    print("🔧 [Socket.IO] init_socketio() 호출 시작")
+    print("=" * 80)
+    
     if sio is None:
+        print("❌ [Socket.IO] sio가 None입니다. 이벤트 핸들러를 등록할 수 없습니다.")
         return
     
+    print("✅ [Socket.IO] sio 인스턴스 확인 완료")
+    
     # 이벤트 핸들러 등록 (데코레이터 대신 직접 등록)
+    print("📝 [Socket.IO] 이벤트 핸들러 등록 시작...")
     sio.on("connect")(handle_connect)
+    print("   ✅ connect 핸들러 등록 완료")
     sio.on("disconnect")(handle_disconnect)
+    print("   ✅ disconnect 핸들러 등록 완료")
     sio.on("register_device")(handle_register_device)
+    print("   ✅ register_device 핸들러 등록 완료")
     sio.on("stt_result")(handle_stt_result)
     sio.on("wakeword_detected")(handle_wakeword_detected)                # 라즈베리파이에서 Wakeword 감지 이벤트 수신
     sio.on("wakeword_waiting_ready")(handle_wakeword_waiting_ready)      # 라즈베리파이에서 Wakeword 대기 준비 완료 이벤트 수신 (YOLO 서버 API 요청 트리거)
@@ -149,7 +166,11 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
-    sio.on("active_mediapipe")(handle_active_mediapipe)
+    # sio.on("active_mediapipe")(handle_active_mediapipe)
+    print("   ✅ active_mediapipe 핸들러 등록 완료")
+    print("=" * 80)
+    print("✅ [Socket.IO] 모든 이벤트 핸들러 등록 완료")
+    print("=" * 80)
     
 
 # === 타입별 브로드캐스트 (안전 버전) ===
@@ -192,6 +213,12 @@ async def broadcast_to(device_types, event: str, payload: dict):
 
 async def handle_connect(sid, environ):
     """클라이언트 연결"""
+    print("=" * 80)
+    print(f"🔌 [Connection] 클라이언트 연결: sid={sid}")
+    print(f"   IP: {environ.get('REMOTE_ADDR', 'unknown')}")
+    print(f"   User-Agent: {environ.get('HTTP_USER_AGENT', 'unknown')}")
+    print(f"   현재 등록된 디바이스: {device_map}")
+    print("=" * 80)
     try:
         if sio:
             await sio.emit("server_message", {"msg": "Connected"}, to=sid)
@@ -204,14 +231,22 @@ async def handle_connect(sid, environ):
 
 async def handle_disconnect(sid):
     """클라이언트 연결 해제"""
+    print("=" * 80)
+    print(f"🔌 [Connection] 클라이언트 연결 해제: sid={sid}")
     if sid in device_map:
+        device = device_map[sid]
+        print(f"   해제된 디바이스: {device}")
         del device_map[sid]
+    print(f"   남은 디바이스: {device_map}")
+    print("=" * 80)
 
 
 async def handle_register_device(sid, data):
     """디바이스 등록"""
     device = data.get("device", "unknown")
     device_map[sid] = device
+    print(f"📝 [Device Registration] 디바이스 등록: {device}, sid: {sid}")
+    print(f"   현재 등록된 디바이스: {device_map}")
     if sio:
         await sio.save_session(sid, {"device": device})
         await sio.emit("server_message", {"msg": f"Device '{device}' registered"}, to=sid)
@@ -242,7 +277,7 @@ async def handle_wakeword_detected(sid, data):
     if sender_device != "raspi":
         print(f"⚠️ Wakeword 감지 이벤트는 라즈베리파이에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
-    print(data)
+    
     detected = data.get("detected", False)
 
     print("=" * 80)
@@ -315,6 +350,7 @@ async def handle_intent_audio_completed(sid, data):
     AI_SUPPORTER인 경우 CV 로직 실행
     """
     global _pending_cv_detection
+    global _pending_final_guide
     
     sender_device = device_map.get(sid, "unknown")
 
@@ -390,6 +426,41 @@ async def handle_intent_audio_completed(sid, data):
                 })
                 return
 
+            # 장비 고정을 위해 modules 의 dic 에서 label 과 has_anomaly 만 우선 추출
+            filtered = [
+                {
+                    "label": m.get("label"),
+                    "has_anomaly": m.get("has_anomaly")
+                }
+                for m in modules
+            ]
+            # 정상 상태인 항목에 대해서 우선 순위를 부여
+            sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"])
+
+            # 시연용 fan 으로 탐지 되어있을 때는 반드시 오류 탐지로 이동할 수 있도록
+            if device_type == "AHU" and sorted_filtered[0]["label"] == "fan":
+                has_anomaly = True
+                modules[0]["anomaly"] = True
+                messages = "팬 밸트가 감속 중 입니다."
+                anomalies["fan_belt"] = {
+                    "type": "fan_belt",
+                    "status": "anomaly",
+                    "detail": "slow",
+                    "result": "E_SLOW",
+                    "message": "팬 벨트가 감속 중입니다.",
+                    "percent": {
+                        "normal": 10.0,
+                        "slow": 80.0,
+                        "accel": 0.0,
+                        "vibration": 10.0
+                    }
+                }
+                message_str = "팬 벨트가 감속 중 입니다."
+                cv_result["has_anomaly"] = True
+                cv_result["anomalies"] = anomalies
+                cv_result["messages"] = [message_str]
+                cv_result["message"] = message_str
+
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
             # ★ detected = modules_detected = True인 경우
@@ -416,6 +487,15 @@ async def handle_intent_audio_completed(sid, data):
             print(f"   messages: {messages}")
             print("=" * 80)
             await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+            
+            # _pending_final_guide = await generate_final_guide(
+            #     device_type, modules, anomalies, cv_result, broadcast_to
+            # )
+
+            async with _final_guide_lock:
+                _pending_final_guide = await generate_final_guide(
+                    device_type, modules, anomalies, cv_result, broadcast_to
+                )
 
             # 알림 메시지 생성
             notification_text = generate_cv_detection_notification(device_type, anomalies)
@@ -476,6 +556,7 @@ async def handle_audio_playback_completed(sid, data):
     # CV 탐지 관련 오디오 재생 완료 처리
     # _pending_cv_detection 전역 변수로 상태 판단 (type 파라미터 불필요)
     global _pending_cv_detection
+    global _pending_final_guide
     
     sender_device = device_map.get(sid, "unknown")
     
@@ -507,8 +588,21 @@ async def handle_audio_playback_completed(sid, data):
             print(f"   anomalies: {anomalies}")
             print("=" * 80)
             
-            # 전체 정비 가이드 생성 및 전송 (서비스 사용)
-            await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
+            if _final_guide_lock.locked():
+                print("⏳ Final Guide 생성 중... audio_playback_completed 대기 중")
+                async with _final_guide_lock:
+                    pass
+                print("✅ Final Guide 생성 완료됨 → 응답 전송 진행")
+
+            if _pending_final_guide:
+                await broadcast_to("mobile", "final_answer", _pending_final_guide)
+                _pending_final_guide = None
+            else:
+                await broadcast_to("mobile", "final_answer", {"answer": "내용 없음"})
+
+
+            # # 전체 정비 가이드 생성 및 전송 (서비스 사용)
+            # await generate_final_guide(device_type, modules, anomalies, cv_result, broadcast_to)
             _pending_cv_detection = None
     
     elif audio_type == "sections_completed":
@@ -519,16 +613,19 @@ async def handle_audio_playback_completed(sid, data):
         
         await broadcast_to("mobile", "enable_service_end_button", {
             "button_rect": {
-                "left": 1800,
-                "top": 90,
-                "right": 1950,
-                "bottom": 240
+                "left": SERVICE_END_BUTTON_RECT[0],
+                "top": SERVICE_END_BUTTON_RECT[1],
+                "right": SERVICE_END_BUTTON_RECT[2],
+                "bottom": SERVICE_END_BUTTON_RECT[3]
             },
             "center": {
-                "x": 1875,
-                "y": 165
+                "x": (SERVICE_END_BUTTON_RECT[0] + SERVICE_END_BUTTON_RECT[2]) // 2,
+                "y": (SERVICE_END_BUTTON_RECT[1] + SERVICE_END_BUTTON_RECT[3]) // 2
             }
         })
+
+        await broadcast_to("raspi", "audio_playback_completed", {})
+
         await wait_for_next_step("서비스 종료 버튼 활성화 요청 전송 완료", "14-1")
 
 
@@ -617,6 +714,7 @@ async def handle_video_frame(sid, data):
     sender_device = device_map.get(sid, "unknown")
     if sender_device == "unknown" or not data:
         return
+    
 
     # timestamp + frame JSON 파싱
     if isinstance(data, dict):
@@ -632,31 +730,48 @@ async def handle_video_frame(sid, data):
 
     # JPEG → OpenCV 이미지 디코딩
     try:
-        np_data = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        if frame is None:
-            print("⚠️ Failed to decode frame bytes")
+        # 프레임이 문자열인 경우 (base64 또는 다른 인코딩) 처리
+        if isinstance(frame_bytes, str):
+            import base64
+            try:
+                frame_bytes = base64.b64decode(frame_bytes)
+            except Exception:
+                frame_bytes = frame_bytes.encode('latin-1')  # fallback
+        
+        # 바이너리가 아닌 경우 에러
+        if not isinstance(frame_bytes, bytes):
             return
+        
+        np_data = np.frombuffer(frame_bytes, np.uint8)
+        frame_original = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+        if frame_original is None:
+            return
+        
+        # 원본 프레임 저장 (제스처 인식용 - 좌표계 일치를 위해 반전하지 않음)
+        # frame_for_gesture = frame_original.copy()
+        
+        # 반전된 프레임 생성 (AR 마커/모션 추정용)
         try:
             # frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            frame = cv2.flip(frame, -1)
+            frame_flipped = cv2.flip(frame_original, -1)
         except Exception as e:
             print(f"⚠️ Frame rotation error: {e}")
+            frame_flipped = frame_original
     except Exception as e:
         print(f"⚠️ Frame decode error: {e}")
         return
 
-    # 프레임 스트림에 추가 (최근 N개만 유지)
+    # 프레임 스트림에 추가 (최근 N개만 유지) - 반전된 프레임 사용
     try:
         from app.services.frame_collector import add_frame
-        await add_frame(frame, timestamp)
+        await add_frame(frame_flipped, timestamp)
     except Exception as e:
         print(f"⚠️ 프레임 스트림 추가 오류: {e}")
 
-    # 모션 추정 (Optical Flow + RANSAC + Essential)
-    result = motion_core.process_frame(frame)
+    # 모션 추정 (Optical Flow + RANSAC + Essential) - 반전된 프레임 사용
+    result = motion_core.process_frame(frame_flipped)
     if result["status"] not in ("ok", "init"):
-        _, jpeg_bytes = cv2.imencode(".jpg", frame)
+        _, jpeg_bytes = cv2.imencode(".jpg", frame_flipped)
         await broadcast_to('pc', "video_frame", {
             "timestamp": timestamp,
             "frame": jpeg_bytes.tobytes()
@@ -664,7 +779,7 @@ async def handle_video_frame(sid, data):
         await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
         return
 
-    # AR 마커 업데이트 및 브로드캐스트
+    # AR 마커 업데이트 및 브로드캐스트 - 반전된 프레임 사용
     if ar_markers:
         updated = []
         for m in ar_markers:
@@ -695,18 +810,20 @@ async def handle_video_frame(sid, data):
 
     # ================================
     # 제스처로 서비스 종료 버튼 클릭 감지
+    # 원본 프레임 사용 (반전되지 않은 프레임) - 모바일 화면 좌표계와 일치
     # ================================
-    await gesture_manager.handle_frame(
-    frame,
-    on_gesture_service_start,
-    on_gesture_service_end
-    )
+    # if gesture_manager.enabled:
+    #     await gesture_manager.handle_frame(
+    #         frame_for_gesture,
+    #         on_gesture_service_start,
+    #         on_gesture_service_end
+    #     )
 
     # ================================
     # 이후 PC/모바일로 프레임 전송
     # ================================
-    # PC로 프레임 전송 (timestamp 포함)
-    _, jpeg_bytes = cv2.imencode(".jpg", frame)
+    # PC로 프레임 전송 (timestamp 포함) - 반전된 프레임 사용
+    _, jpeg_bytes = cv2.imencode(".jpg", frame_flipped)
     await broadcast_to('pc', "video_frame", {
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
@@ -727,81 +844,99 @@ async def handle_video_frame(sid, data):
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
 
 
-# ========================================
-# mobile로부터 mediapipe on 이벤트 받으면 켜기
-# ========================================
-async def handle_active_mediapipe(sid, data):
-    sender_device = device_map.get(sid, "unknown")
-    if sender_device != "mobile":
-        return
+# # ========================================
+# # mobile로부터 mediapipe on 이벤트 받으면 켜기
+# # ========================================
+# async def handle_active_mediapipe(sid, data):
+#     """
+#     모바일로부터 active_mediapipe 이벤트 수신
+#     - data는 None일 수 있음 (모바일에서 null을 보낼 수 있음)
+#     - rect 정보가 없으면 하드코딩된 좌표 사용
+#     """
+#     try:
+#         sender_device = device_map.get(sid, "unknown")
+        
+#         if sender_device != "mobile":
+#             return
 
-    rect=data.get("rect")
-    if not rect:
-        print("active_mediapipe: rect 없음")
-        return
+#         # 모바일에서 rect 정보가 있으면 사용, 없으면 하드코딩된 좌표 사용
+#         rect = None
+        
+#         if data is None:
+#             rect = None
+#         elif isinstance(data, (list, tuple)) and len(data) > 0:
+#             first_item = data[0]
+#             if isinstance(first_item, dict):
+#                 rect = first_item.get("rect") if first_item else None
+#         elif isinstance(data, dict):
+#             rect = data.get("rect")
+#         elif hasattr(data, 'get') and callable(getattr(data, 'get', None)):
+#             try:
+#                 if data is not None:
+#                     rect = data.get("rect")
+#             except (AttributeError, TypeError):
+#                 rect = None
+        
+#         if rect and isinstance(rect, dict):
+#             button_rect = (
+#                 rect.get('left'),
+#                 rect.get('top'),
+#                 rect.get('right'),
+#                 rect.get('bottom')
+#             )
+#             if not all(v is not None for v in button_rect):
+#                 button_rect = SERVICE_END_BUTTON_RECT
+#         else:
+#             button_rect = SERVICE_END_BUTTON_RECT
+        
+#         gesture_manager.enabled = True
+#         gesture_manager.button_rect = button_rect
 
-    # mediapipe 켜기
-    gesture_manager.enabled= True
-    gesture_manager.button_rect= (
-        rect['left'],
-        rect['top'],
-        rect['right'],
-        rect['bottom']
-    )
+#         # START 모드 요청 (첫 번째 active_mediapipe 호출)
+#         if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+#             gesture_manager.waiting_for_start = True
+#             print("✅ [Gesture] 서비스 시작 버튼 클릭 대기 모드", flush=True)
+#             return
 
-    # START 모드 요청
-    if not gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+#         # END 모드 요청 (두 번째 active_mediapipe 호출)
+#         if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
+#             gesture_manager.waiting_for_start = False
+#             gesture_manager.waiting_for_end = True
+#             print("✅ [Gesture] 서비스 종료 버튼 클릭 대기 모드", flush=True)
+#             return
 
-        gesture_manager.waiting_for_start= True
-        print("Gesture mode: waiting for start")
-        return
+#         # 그 외: 다시 초기화
+#         gesture_manager.waiting_for_start = True
+#         gesture_manager.waiting_for_end = False
+#     except Exception as e:
+#         print(f"❌ [Gesture] active_mediapipe 처리 오류: {e}", flush=True)
+#         # 에러가 발생해도 기본 좌표로 설정하여 서비스가 계속 작동하도록 함
+#         try:
+#             gesture_manager.enabled = True
+#             gesture_manager.button_rect = SERVICE_END_BUTTON_RECT
+#         except Exception:
+#             pass
 
-    # END 모드 요청
-    if gesture_manager.waiting_for_start and not gesture_manager.waiting_for_end:
-        gesture_manager.waiting_for_start= False
-        gesture_manager.waiting_for_end= True
-        print("Gesture mode: waiting for end")
-        return
+# # ========================================
+# # mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
+# # ========================================
+# async def on_gesture_service_start():
+#     print("✅ [Gesture] 서비스 시작 버튼 클릭", flush=True)
+#     await broadcast_to("mobile", "service_start_clicked", {})
+#     await trigger_start_pipeline("gesture")
 
-    # 그 외: 다시 초기화(비활성화일 때처럼)
-    gesture_manager.waiting_for_start= True
-    gesture_manager.waiting_for_end= False
-    print("Gesture mode reset-> waiting for start")
-
-# ========================================
-# mediapipe에서 시작 버튼 눌렸을 때 FastAPI 반응(gesture start 콜백)
-# ========================================
-async def on_gesture_service_start():
-    print("Gesture START detected")
-
-    # 모바일로 시작 버튼 클릭 알림
-    await broadcast_to("mobile", "service_start_clicked", {})
-
-    # wakeword 없이도 시작 로직 호출- wakeword 이후 흐름을 그대로 실행하게 하는 진입점
-    await trigger_start_pipeline("gesture")
-
-# ========================================
-# mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
-# ========================================
-async def on_gesture_service_end():
-    print("Gesture END detected")
-
-    # 모바일로 시작 버튼 클릭 알림
-    await broadcast_to("mobile", "service_end_clicked", {})
+# # ========================================
+# # mediapipe에서 종료 버튼 눌렸을 때 FastAPI 반응(gesture end 콜백)
+# # ========================================
+# async def on_gesture_service_end():
+#     print("✅ [Gesture] 서비스 종료 버튼 클릭", flush=True)
+#     await broadcast_to("mobile", "service_end_clicked", {})
     
-    # 2. FastAPI 내부 상태 즉시 초기화 (모바일 응답 대기 없이)
-    global _pending_cv_detection
-    
-    # 제스처 인식 비활성화 (필수 - 다음 서비스 시작 전까지 인식 방지)
-    gesture_manager.enabled = False
-    
-    # CV 탐지 결과 초기화 (필수 - 다음 서비스 시작 시 이전 값 방지)
-    _pending_cv_detection = None
-    
-    # 3. 라즈베리파이에 초기 상태 복귀 요청
-    await broadcast_to("raspi", "wakeword_start_waiting", {})
-    
-    print("✅ 서비스 종료 처리 완료 - 초기 상태로 복귀")
+#     global _pending_cv_detection
+#     gesture_manager.enabled = False
+#     _pending_cv_detection = None
+#     await broadcast_to("raspi", "audio_playback_completed", {})
+
 # ========================================
 # Raspberry Pi 오디오 프레임 처리
 # ========================================
@@ -859,7 +994,7 @@ async def communication_close(sid, data):
     await asyncio.sleep(0.3)
     
     await broadcast_to("mobile", "communication_close", {})
-    await broadcast_to("raspi", "wakeword_start_waiting", {})
+    await broadcast_to("raspi", "audio_playback_completed", {})
 
 
 # ========================================

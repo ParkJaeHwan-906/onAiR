@@ -1,5 +1,3 @@
-# app/services/gesture_state.py
-
 from app.services.gesture_service import process_gesture
 
 class GestureManager:
@@ -11,7 +9,6 @@ class GestureManager:
         self.waiting_for_end = False
 
     def reset_to_initial_state(self):
-        """제스처 인식 상태 초기화"""
         self.enabled = False
         self.waiting_for_start = False
         self.waiting_for_end = False
@@ -20,6 +17,23 @@ class GestureManager:
         if not self.enabled:
             return
 
+        # 프레임 크기 가져오기
+        frame_h, frame_w = frame.shape[:2]
+        
+        # 버튼 좌표를 기준 해상도(1920x1080)에서 실제 프레임 해상도로 변환
+        # 버튼 좌표는 1920x1080 기준으로 하드코딩되어 있음
+        REFERENCE_WIDTH = 1920
+        REFERENCE_HEIGHT = 1080
+        
+        # 비율 계산하여 좌표 변환
+        scale_x = frame_w / REFERENCE_WIDTH
+        scale_y = frame_h / REFERENCE_HEIGHT
+        
+        left = int(self.button_rect[0] * scale_x)
+        top = int(self.button_rect[1] * scale_y)
+        right = int(self.button_rect[2] * scale_x)
+        bottom = int(self.button_rect[3] * scale_y)
+
         result = process_gesture(frame, self.button_rect)
         if not result:
             return
@@ -27,20 +41,29 @@ class GestureManager:
         finger_x = result["x"]
         finger_y = result["y"]
 
-        left, top, right, bottom = self.button_rect
-        inside = (left <= finger_x <= right) and (top <= finger_y <= bottom)
+        inside = (left <= finger_x <= right and top <= finger_y <= bottom)
 
-        # END 버튼 모드인지 확인
-        if result["is_end_button"]:
-            if self.waiting_for_end and inside:
-                print("[Gesture] END detected")
-                self.waiting_for_end = False
-                await on_end()
+        if not inside:
             return
 
-        # START 감지
-        if self.waiting_for_start and inside:
-            print("[Gesture] START detected")
+        # 종료 버튼 클릭 체크
+        if self.waiting_for_end:
+            print("=" * 80)
+            print("✅ [Gesture] 서비스 종료 버튼 클릭 이벤트 발생")
+            print(f"   검지 좌표: ({finger_x}, {finger_y})")
+            print(f"   버튼 영역: ({left}, {top}, {right}, {bottom})")
+            print("=" * 80)
+            self.waiting_for_end = False
+            await on_end()
+            return
+
+        # 시작 버튼 클릭 체크
+        if self.waiting_for_start:
+            print("=" * 80)
+            print("✅ [Gesture] 서비스 시작 버튼 클릭 이벤트 발생")
+            print(f"   검지 좌표: ({finger_x}, {finger_y})")
+            print(f"   버튼 영역: ({left}, {top}, {right}, {bottom})")
+            print("=" * 80)
             self.waiting_for_start = False
             await on_start()
             return

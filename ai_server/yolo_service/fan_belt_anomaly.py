@@ -3,12 +3,12 @@ import numpy as np
 from loguru import logger
 from collections import deque, Counter
 
-MAG_THRESH = 0.5
+MAG_THRESH = 1.0
 SMOOTH_WINDOW = 4
 TREND_WINDOW = 10
-ACCEL_RATIO = 1.3
+ACCEL_RATIO = 1.10
 DECEL_RATIO = 0.90
-STABLE_TOL = 0.3
+STABLE_TOL = 0.1
 STATE_SMOOTH = 7
 INIT_IGNORE = 8
 
@@ -182,9 +182,9 @@ async def analyze_fan_belt(frames, fan_belt_boxes):
         return {
             "type": "fan_belt",
             "status": status,
-            "detail": detail,  # ✅ detail 필드 추가 (다른 모듈과 일관성)
-            "result": final_state,  # 하위 호환성을 위해 유지
-            "message": message,  # ✅ message 필드 추가
+            "detail": detail,
+            "result": final_state,
+            "message": message,
             "percent": {
                 "normal": normal,
                 "slow": slow,

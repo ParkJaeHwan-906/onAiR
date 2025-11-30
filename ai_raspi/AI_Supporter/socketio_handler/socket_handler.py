@@ -4,6 +4,13 @@ import logging
 import asyncio
 import time
 
+# 음성 데이터 테스트
+import os
+import wave
+import numpy as np
+from datetime import datetime
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SocketIOClient")
 
@@ -25,12 +32,20 @@ class SocketIOClient:
             reconnection_attempts=0  # 무한 재연결
         )
 
+        # 음성 데이터 테스트
+        # self.sample_rate = 16000
+        # self.channels = 1
+        # self.audio_save_dir = "data/audio"
+        # os.makedirs(self.audio_save_dir, exist_ok=True)
+
+
         # 이벤트 핸들러 등록
         self.sio.on("connect", self.on_connect)
         self.sio.on("disconnect", self.on_disconnect)
         self.sio.on("wakeword_audio_completed", self.on_wakeword_audio_completed)
         self.sio.on("handle_audio_stream", self.on_handle_audio_stream)
         self.sio.on("wakeword_start_waiting", self.on_wakeword_start_waiting)
+        self.sio.on("audio_playback_completed", self.on_audio_playback_completed)
 
     # ============================================================
     # 🔌 연결 이벤트
@@ -60,7 +75,9 @@ class SocketIOClient:
             return False
         
         try:
-            await self.sio.emit("wakeword_detected", {"detected" : True})
+            await self.sio.emit("wakeword_detected", {
+                "detected": True
+            })
             return True
         except Exception as e:
             logger.error(f"❌ wakeword_detected 전송 실패: {e}")
@@ -104,8 +121,37 @@ class SocketIOClient:
             logger.error(f"❌ stt_result 전송 실패: {e}")
             return False
     
+    # async def emit_audio_frame(self, timestamp, frame_bytes):
+    #     try:
+    #         await self.sio.emit(
+    #             "audio_frame",
+    #             {
+    #                 "timestamp": timestamp,
+    #                 "frame": frame_bytes
+    #             }
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"❌ audio_frame emit 오류: {e}")
+    
     async def emit_audio_frame(self, timestamp, frame_bytes):
+        # WAV 저장
+        # try:
+        #     samples = np.frombuffer(frame_bytes, dtype=np.float32)
+        #     pcm16 = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
+        #     fname = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
+        #     fpath = os.path.join(self.audio_save_dir, fname)
+        #     with wave.open(fpath, "wb") as wf:
+        #         wf.setnchannels(self.channels)
+        #         wf.setsampwidth(2)  # int16
+        #         wf.setframerate(self.sample_rate)
+        #         wf.writeframes(pcm16.tobytes())
+        #     logger.info(f"📤 audio_frame emit (file={fpath})")
+        # except Exception as e:
+        #     logger.error(f"❌ audio_frame 저장 실패: {e}")
+
+        # 기존 emit
         try:
+            logger.info("audio frame emit req")
             await self.sio.emit(
                 "audio_frame",
                 {
@@ -115,7 +161,8 @@ class SocketIOClient:
             )
         except Exception as e:
             logger.error(f"❌ audio_frame emit 오류: {e}")
-    
+
+
     async def emit_stt_result(self, msg):
         try:
             await self.sio.emit(
@@ -127,7 +174,9 @@ class SocketIOClient:
     
     async def emit_wakeword_init(self):
         try:
-            await self.sio.emit("wakeword_detected", {"detected" : False})
+            await self.sio.emit("wakeword_detected", {
+                "detected": False
+            })
         except Exception as e:
             logger.error(f"❌ wakeword_init emit 오류: {e}")
     #=============================================================
@@ -148,12 +197,17 @@ class SocketIOClient:
         - START: Operator 통신 연결 허가
         - STOP: RTC 오디오 스트리밍 중지 (초기 상태 복귀는 wakeword_start_waiting에서 처리)
         """
+        logger.info("RTC 수락 요청")
+
         if not hasattr(self.manager, "stt_core"):
             return
 
         # START 요청 (Operator 통신 연결 허가)
         if data.get("start") is True:
+            logger.info("RTC 요청 플래그 처리 전")
             self.manager.stt_core.operator_accept.set()
+            self.manager.switch_to_rtc()
+            logger.info("RTC 요청 플래그 처리 후")
 
         # STOP 요청 (Operator 통신 종료 - RTC 중지만 담당)
         elif data.get("start") is False:
@@ -184,6 +238,12 @@ class SocketIOClient:
             self.manager.stt_core.reset_to_initial_state()
         else:
             logger.warning("⚠️ reset_to_initial_state 메서드가 없습니다.")
+
+    async def on_audio_playback_completed(self):
+        logger.info("AI Supporter 종료")
+        await self.sio.emit("wakeword_detected", {
+                "detected": True
+        })
 
     # ============================================================
     # 🔁 서버 연결 제어

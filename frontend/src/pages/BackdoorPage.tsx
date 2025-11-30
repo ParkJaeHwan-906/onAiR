@@ -83,8 +83,19 @@ function BackdoorPage() {
         b.x1,
         b.y1 - 4
       );
+      if (b.value !== null && b.value !== undefined) {
+        ctx.fillStyle = color;
+        if (b.label === "thermometer") {
+          ctx.fillText(`Temp: ${b.value}°C`, b.x1, b.y2 + 12);
+        }
+        else if (b.label === "pressure_gauge") {
+          ctx.fillText(`Pressure: ${b.value}`, b.x1, b.y2 + 12);
+        }
+      }
     });
   };
+
+
 
   /* ------------------------------------------
    * 싱크용 버퍼
