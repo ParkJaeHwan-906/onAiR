@@ -29,6 +29,9 @@ class STTCore:
         # wakeword 감지 무시 플래그 (서비스 진행 중에는 True)
         self.ignore_wakeword = False
 
+        # wakeword 강제화 
+        self.force_wakeword = False
+
         # Threshold
         self.WAKEWORD_LCS_THRESHOLD_ENG = 0.60
         self.WAKEWORD_LCS_THRESHOLD_KOR = 0.60
@@ -236,6 +239,29 @@ class STTCore:
 
             while True:
                 try:
+                    if self.force_wakeword and not self.ignore_wakeword:
+                        logger.info("강제 Wakeword 적용")
+
+                        self.ignore_wakeword = True
+                        self.wakeword_detector.pause()
+                        self.wakeword_detector.clear_events()
+                        self.force_wakeword = False
+
+                        self.manager.on_wakeword_detected()
+
+                        self.wakeword_audio_done.clear()
+                        self.wakeword_audio_done.wait()
+
+                        self.manager.switch_to_stt()
+                        loop = self.manager.socketio_client.loop
+
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.start_main_stt_session(), loop
+                        )
+                        future.add_done_callback(lambda f: logger.info("[STT] forced session finished"))
+
+                        continue
+
                     """
                     계속해서 wakeword 가 들어올 때까지 대기
                     """
