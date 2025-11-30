@@ -166,6 +166,7 @@ def init_socketio():
     sio.on("audio_frame")(handle_audio_frame)  
     sio.on("ar-marker")(handle_ar_marker)
     sio.on("delete-marker")(delete_marker)
+    sio.on("wakeword_force")(handle_wakeword_force)
     # sio.on("active_mediapipe")(handle_active_mediapipe)
     print("   ✅ active_mediapipe 핸들러 등록 완료")
     print("=" * 80)
@@ -1091,5 +1092,11 @@ async def delete_marker(sid, data):
             idx += 1
     
     await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+
+async def handle_wakeword_force(sid):
+    sneder_device = device_map.get(sid, "unknown")
+    if sender_device != "mobile" or sender_device != "unknown":     # 모바일 또는 서버에서 요청 제외하고는 무시
+        return
+    await broadcast_to("raspi", "wakeword_force", {})
 
     
