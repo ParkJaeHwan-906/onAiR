@@ -246,9 +246,9 @@ class SocketIOClient:
                 "detected": True
         })
 
-    async def on_wakeword_force(self):
+    async def on_wakeword_force(self, data):
         logger.info("wakeword 강제화 요청")
-        
+        print(f"wakeword 강제화 요청", flush=True)
         if hasattr(self.manager, "stt_core"):
             self.manager.stt_core.force_wakeword = True
 
