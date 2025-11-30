@@ -561,7 +561,7 @@ class WorkingActivity : AppCompatActivity() {
 
                 // 모달 텍스트를 "관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중..."으로 변경 (오디오 재생과 동시에)
                 runOnUiThread {
-                    aiOnDialog?.updateMessage("관리자에게 문제 사항을 문의 부탁드립니다. 통신 연결 중...")
+                    aiOnDialog?.updateMessage("통신 연결 중...")
                 }
                 
                 // CV 탐지 정상 음성 파일 재생
@@ -857,6 +857,7 @@ class WorkingActivity : AppCompatActivity() {
                 // 모달 표시 ("답변 생성 중...")
                 runOnUiThread {
                     showModal("답변 생성 중...")
+                    aiOnDialog?.updateMessage("답변 생성 중...")
                 }
                 
                 // FastAPI 서버로 재생 완료 이벤트 전송

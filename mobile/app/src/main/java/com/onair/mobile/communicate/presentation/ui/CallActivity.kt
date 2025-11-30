@@ -48,8 +48,10 @@ import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toColorLong
 import androidx.compose.ui.platform.LocalContext
@@ -129,7 +131,13 @@ class CallActivity : FragmentActivity() {
         ) {
             WhiteboardCanvas(
                 viewModel = viewModel,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = 1.42f, // 가로 1.6배 확대
+                        scaleY = 1.42f, // 세로 1.6배 확대
+                        transformOrigin = TransformOrigin(pivotFractionX = 0.45f, pivotFractionY = 0.12f)
+                    ),
             )
 
             blueprintTrack?.let {
