@@ -41,7 +41,10 @@ class AiOnDialog(val statusMessage: String) : DialogFragment(
     
     fun updateMessage(newMessage: String) {
         if (::binding.isInitialized) {
-            binding.aiStatusText.text = newMessage
+            binding.aiStatusText.apply {
+                text = newMessage
+                visibility = View.VISIBLE
+            }
         }
     }
 }

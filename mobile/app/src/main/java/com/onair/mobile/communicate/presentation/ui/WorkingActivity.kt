@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
@@ -156,6 +157,26 @@ class WorkingActivity : AppCompatActivity() {
                 handleServiceEnd()
             }
         }
+        binding.serviceStartButton.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                // 1. 좌표 구하기
+                val location = IntArray(2)
+                binding.serviceStartButton.getLocationOnScreen(location)
+
+                val x = location[0] // 시작점 X (픽셀)
+                val y = location[1] // 시작점 Y (픽셀)
+                val width = binding.serviceStartButton.width
+                val height = binding.serviceStartButton.height
+
+                // 2. MediaPipe 연동을 위한 영역 정의 (Hit Box)
+                // 예: x ~ x+width, y ~ y+height 범위가 버튼의 영역임
+                Log.d("ButtonPos", "X: $x, Y: $y, W: $width, H: $height")
+
+                // 3. 리스너 제거 (중복 호출 방지)
+                binding.serviceStartButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
+
+            }
+        })
     }
 
     override fun onPause() {
@@ -294,7 +315,7 @@ class WorkingActivity : AppCompatActivity() {
                     when (onAirState) {
                         OnAirState.Started -> handleWakewordDetected()
                         OnAirState.Processing -> Log.d(TAG, "Processing")
-                        OnAirState.Waiting -> Log.d(TAG, "Waiting")
+                        OnAirState.Waiting -> hideModal()
                     }
                 }
             }
@@ -430,7 +451,8 @@ class WorkingActivity : AppCompatActivity() {
 
                         // 모달 표시: "AI 서포터 on"
                         runOnUiThread {
-                            showModal("AI 서포터 on")
+                            aiOnDialog?.updateMessage("AI 서포터 on")
+//                            showModal("AI 서포터 on")
                         }
 
                         // AI Supporter 시작 오디오 재생
@@ -466,7 +488,8 @@ class WorkingActivity : AppCompatActivity() {
                         Log.i(TAG, "🔊 OPERATOR 음성 파일 재생 시작: $OPERATOR_AUDIO_FILE")
                         // 모달 표시
                         runOnUiThread {
-                            showModal("통신 연결 중...")
+                            aiOnDialog?.updateMessage("통신 연결 중...")
+//                            showModal("통신 연결 중...")
                         }
                         mediaPlayerController.playLocalAudio(OPERATOR_AUDIO_FILE) {
                             // 재생 완료 콜백
@@ -630,7 +653,7 @@ class WorkingActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     binding.serviceStartButton.visibility = View.GONE
-                    showOnModal()
+                    showModal("on AiR")
                 }
 
                 mediaPlayerController.playLocalAudio(WAKEWORD_AUDIO_FILE) {
@@ -671,7 +694,7 @@ class WorkingActivity : AppCompatActivity() {
 
                 // 서비스 종료 오디오 재생 시 OnAir 모달 표시
                 runOnUiThread {
-                    showOnModal()
+                    showModal("on air")
                 }
 
                 mediaPlayerController.playLocalAudio(fileToPlay) {

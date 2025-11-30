@@ -1,5 +1,6 @@
 package com.onair.mobile.communicate.presentation.ui
 
+import android.app.Activity
 import android.content.Context
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -62,15 +63,13 @@ import com.onair.mobile.communicate.utils.viewModelByFactory
 import io.livekit.android.compose.ui.RendererType
 import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.collections.emptyList
 import androidx.core.graphics.toColorInt
+import com.onair.mobile.assistant.data.tts.MediaPlayerController
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
 import com.onair.mobile.communicate.presentation.viewmodel.CallViewModel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
@@ -80,9 +79,11 @@ data class TimedPath(
     val color: Color,
     val timestamp: Long = System.currentTimeMillis()
 )
-//lateinit var description : String
 class CallActivity : FragmentActivity() {
     private lateinit var description : String
+    private lateinit var mediaPlayerController: MediaPlayerController
+    private var onAirOnDialog:  OnAirOnDialog? = null
+    private val TAG = "CallActivity"
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
@@ -151,8 +152,8 @@ class CallActivity : FragmentActivity() {
             }
         }
     }
-    private val REMOTE_WIDTH = 600f
-    private val REMOTE_HEIGHT = 680f
+    private val REMOTE_WIDTH = 480f
+    private val REMOTE_HEIGHT = 360f
 
     @Composable
     fun WhiteboardCanvas(
@@ -185,86 +186,13 @@ class CallActivity : FragmentActivity() {
             var pulseMarkers: List<ArMarker>? = null
 
             val context = LocalContext.current
-            val activity = context as? FragmentActivity
-            
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
-                    Log.d("CallActivity", "============================================================")
-                    Log.d("CallActivity", "📩 [CallActivity] 통신 종료 이벤트 수신")
-                    Log.d("CallActivity", "   서비스 종료 오디오 재생 및 모달 표시")
-                    Log.d("CallActivity", "============================================================")
-                    
-                    // 서비스 종료 오디오 재생 시작과 동시에 모달 표시
-                    var dialog: OnAirOnDialog? = null
-                    
-                    // 모달 표시와 오디오 재생을 동시에 시작
-                    launch(Dispatchers.Main) {
-                        try {
-                            // 기존 모달이 있으면 먼저 숨기기 (WorkingActivity의 showOnModal() 로직과 동일)
-                            val existingFragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
-                            if (existingFragment != null && existingFragment is OnAirOnDialog && existingFragment.isVisible) {
-                                existingFragment.dismissAllowingStateLoss()
-                            }
-                            
-                            // 새 모달 생성 및 표시
-                            dialog = OnAirOnDialog()
-                            dialog?.show(activity?.supportFragmentManager ?: return@launch, "onAiR on")
-                            Log.d("CallActivity", "✅ [CallActivity] OnAirOnDialog 표시 완료")
-                        } catch (e: Exception) {
-                            Log.e("CallActivity", "❌ [CallActivity] 모달 표시 오류: ${e.message}")
-                            e.printStackTrace()
-                        }
-                    }
-                    
-                    // 오디오 재생 시작 (모달 표시와 동시에)
-                    try {
-                        context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
-                        Log.d("CallActivity", "✅ [CallActivity] 서비스 종료 오디오 재생 완료")
-                        
-                        // 모달 숨기기 (WorkingActivity의 hideOnModal() 로직과 동일)
-                        withContext(Dispatchers.Main) {
-                            try {
-                                // 방법 1: FragmentManager에서 직접 찾아서 dismiss
-                                val fragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
-                                if (fragment != null && fragment is OnAirOnDialog) {
-                                    fragment.dismissAllowingStateLoss()
-                                }
-                                
-                                // 방법 2: dialog 참조를 통해 dismiss
-                                dialog?.dismissAllowingStateLoss()
-                                dialog?.dismiss()
-                                
-                                dialog = null
-                                Log.d("CallActivity", "✅ [CallActivity] OnAirOnDialog 숨김 완료")
-                            } catch (e: Exception) {
-                                Log.e("CallActivity", "❌ [CallActivity] 모달 숨기기 오류: ${e.message}")
-                            }
-                        }
-                        
-                        // WorkingActivity로 돌아가기
-                        activity?.finish()
-                        Log.d("CallActivity", "✅ [CallActivity] WorkingActivity로 복귀")
-                    } catch (e: Exception) {
-                        Log.e("CallActivity", "❌ [CallActivity] 오디오 재생 오류: ${e.message}")
-                        e.printStackTrace()
-                        // 오류 발생 시에도 모달 숨기고 Activity 종료
-                        withContext(Dispatchers.Main) {
-                            try {
-                                // 방법 1: FragmentManager에서 직접 찾아서 dismiss
-                                val fragment = activity?.supportFragmentManager?.findFragmentByTag("onAiR on")
-                                if (fragment != null && fragment is OnAirOnDialog) {
-                                    fragment.dismissAllowingStateLoss()
-                                }
-                                
-                                // 방법 2: dialog 참조를 통해 dismiss
-                                dialog?.dismissAllowingStateLoss()
-                                dialog?.dismiss()
-                                dialog = null
-                            } catch (e2: Exception) {
-                                Log.e("CallActivity", "❌ [CallActivity] 모달 숨기기 오류: ${e2.message}")
-                            }
-                        }
-                        activity?.finish()
+                    showOnModal()
+                    mediaPlayerController.playLocalAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3") {
+                        Log.d("Demo", "오디오 함수 리턴")
+                        hideOnModal()
+                        (context as? Activity)?.finish()
                     }
                 }
             }
@@ -379,15 +307,6 @@ class CallActivity : FragmentActivity() {
                             canvas.drawPath(it, linePaint)
                         }
                     }
-        //            markers.forEach { marker ->
-        //                ArMarker(marker = marker)
-        ////                val alpha = marker.pulseOpacity.coerceIn(0f, 1f)
-        ////                drawCircle(
-        ////                    color = marker.color.copy(alpha = alpha),
-        ////                    radius = 100 * marker.pulseOpacity,
-        ////                    center = Offset(marker.x, marker.y)
-        ////                )
-        //            }
                 }
                 Log.d("CallActivity marker", markers.toString())
                 markers.forEach { marker ->
@@ -400,8 +319,6 @@ class CallActivity : FragmentActivity() {
                 }
             }
         }
-    //    val points = remember { mutableStateListOf<Points>() }
-        // 웹이랑 똑같게
     }
     private fun calculateTransform(screenWidth: Float, screenHeight: Float): Triple<Float, Float, Float> {
         val scale = screenHeight / REMOTE_HEIGHT
@@ -505,6 +422,55 @@ class CallActivity : FragmentActivity() {
         } catch (e: Exception) {
             mediaPlayer.release()
             if (continuation.isActive) continuation.resume(Unit)
+        }
+    }
+    private fun showOnModal() {
+        try {
+            // 기존 모달이 있으면 먼저 숨기기
+            if (onAirOnDialog != null && onAirOnDialog?.isVisible == true) {
+                onAirOnDialog?.dismissAllowingStateLoss()
+                onAirOnDialog = null
+            }
+
+            // 새 모달 생성 및 표시
+            onAirOnDialog = OnAirOnDialog()
+            onAirOnDialog?.show(supportFragmentManager, "onAiR on")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ [모바일] showOnModal() 오류: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    private fun hideOnModal() {
+        try {
+            // 방법 1: FragmentManager에서 직접 찾아서 dismiss
+            try {
+                val fragment = supportFragmentManager.findFragmentByTag("onAiR on")
+                if (fragment != null && fragment is OnAirOnDialog) {
+                    fragment.dismissAllowingStateLoss()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ FragmentManager에서 OnAir 모달 dismiss 오류: ${e.message}")
+            }
+
+            // 방법 2: onAirOnDialog를 통해 dismiss
+            if (onAirOnDialog != null) {
+                try {
+                    onAirOnDialog?.dismissAllowingStateLoss()
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ onAirOnDialog dismiss 오류: ${e.message}")
+                    try {
+                        onAirOnDialog?.dismiss()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "❌ onAirOnDialog dismiss()도 실패: ${e2.message}")
+                    }
+                }
+            }
+
+            onAirOnDialog = null
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ hideOnModal() 전체 오류: ${e.message}")
+            e.printStackTrace()
         }
     }
 }

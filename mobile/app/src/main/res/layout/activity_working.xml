@@ -240,11 +240,11 @@
             <ImageButton
                 android:layout_width="50dp"
                 android:layout_height="50dp"
-                android:src="@drawable/white_background_logo"
+                android:src="@drawable/onair_logo_light"
                 android:id="@+id/service_start_button"
                 android:visibility="visible"
                 android:scaleType="centerInside"
-                android:backgroundTint="@color/white"
+                android:backgroundTint="#80ffffff"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"/>
             <Button
