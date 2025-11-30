@@ -32,7 +32,6 @@ def classify_intent(text: str) -> dict:
             "reasoning": "판단 근거"
         }
     """
-    raise Exception("빠른 응답을 위해 수동으로 처리합니다.")
     
     if not gms_api_key:
         # GMS API 키가 없으면 기본적으로 AI_SUPPORTER로 분류
@@ -80,6 +79,7 @@ def classify_intent(text: str) -> dict:
 """
 
     try:
+        raise Exception("빠른 응답을 위해 수동으로 처리합니다.")
         print(f"🔵 [Intent 분류] Gemini-Flash API 호출 시작: '{text[:50]}...'")
         # GMS API를 통해 Gemini 호출
         text_response = call_gemini_via_gms(
