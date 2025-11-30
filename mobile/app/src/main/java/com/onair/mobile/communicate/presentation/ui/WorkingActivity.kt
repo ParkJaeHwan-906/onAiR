@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.animation.AnimationUtils
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -289,6 +290,19 @@ class WorkingActivity : AppCompatActivity() {
             launch {
                 workingViewModel.endService.collect {
                     handleServiceEnd()
+                }
+            }
+            launch {
+                workingViewModel.errorMessage.collect { error ->
+                    Log.d(TAG, "error message 변경됨 : $error")
+                    if (error.isNotBlank()) {
+                        Toast.makeText(
+                            this@WorkingActivity,
+                            error,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        handleServiceEnd()
+                    }
                 }
             }
         }

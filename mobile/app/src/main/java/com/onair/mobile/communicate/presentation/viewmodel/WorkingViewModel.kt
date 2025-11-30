@@ -7,7 +7,10 @@ import com.onair.mobile.communicate.data.TaskRepository
 import com.onair.mobile.communicate.data.WorkingRepository
 import com.onair.mobile.communicate.data.network.SocketIoSttClient
 import com.onair.mobile.communicate.data.source.remote.SocketHolder
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -25,7 +28,15 @@ class WorkingViewModel(
     val finalAnswer = SocketHolder.socketClient.finalAnswer
     val cvAnswer = SocketHolder.socketClient.cvAnswer
     val endService = SocketHolder.socketClient.endService
-    val wakewordFlow = SocketHolder.socketClient.wakewordFlow
+//    val wakewordFlow = SocketHolder.socketClient.wakewordFlow
+//    private val _errorMessage = MutableStateFlow<String>("")
+//    val errorMessage = _errorMessage.asStateFlow()
+    private val _errorMessage = MutableSharedFlow<String>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val errorMessage = _errorMessage.asSharedFlow()
 
     init {
         Log.d("WorkingVM", "WorkingViewModel init 실행됨")
@@ -74,6 +85,8 @@ class WorkingViewModel(
                 result.onSuccess {
                     Log.i("request call", "통신 연결 요청 성공")
                 }.onFailure { exception ->
+                    _errorMessage.tryEmit(exception.message.toString())
+//                    _errorMessage.value = exception.message.toString()
                     Log.e("request call", exception.message.toString())
                 }
             }
@@ -99,6 +112,9 @@ class WorkingViewModel(
         _onAirState.value = OnAirState.Waiting
         SocketHolder.socketClient.resetShared()
     }
+//    fun resetError() {
+//        _errorMessage.value = ""
+//    }
 }
 sealed class OnAirState {
     object Waiting : OnAirState()
