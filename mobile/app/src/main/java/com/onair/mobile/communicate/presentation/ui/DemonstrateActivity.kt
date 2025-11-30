@@ -1,10 +1,8 @@
 package com.onair.mobile.communicate.presentation.ui
 
 import android.app.Activity
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -72,7 +70,6 @@ import io.livekit.android.compose.ui.ScaleType
 import io.livekit.android.compose.ui.VideoTrackView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import kotlin.getValue
 import kotlin.math.roundToInt
@@ -81,7 +78,7 @@ class DemonstrateActivity : AppCompatActivity() {
     private lateinit var description : String
     private lateinit var mediaPlayerController: MediaPlayerController
     private var onAirOnDialog:  OnAirOnDialog? = null
-    private val TAG = "WorkingActivity"
+    private val TAG = "DemonstrateActivity"
     private val callViewModel: CallViewModel by viewModelByFactory {
         val url = intent.getStringExtra("server_url")
             ?: throw NullPointerException("url is null!")
@@ -135,23 +132,6 @@ class DemonstrateActivity : AppCompatActivity() {
     private fun ByteArray.toBitmap(): Bitmap? {
         return BitmapFactory.decodeByteArray(this, 0, this.size)
     }
-    private fun Bitmap.toBottomCropped(targetRatio: Float = 4f/3f) : Bitmap {
-        val srcWidth = this.width
-        val srcHeight = this.height
-
-        val targetHeight = (srcWidth / targetRatio).toInt()
-
-        if (targetHeight >= srcHeight) return this
-
-        val top = (srcHeight - targetHeight) / 2
-//        val top = srcHeight - targetHeight
-
-        return Bitmap.createBitmap(
-            this,
-            0, top, srcWidth,
-            targetHeight
-        )
-    }
     @Composable
     fun CallScreen(viewModel: CallViewModel) {
         val blueprintTrack by viewModel.blueprintTrack.collectAsState()
@@ -174,7 +154,7 @@ class DemonstrateActivity : AppCompatActivity() {
                         .padding(16.dp)
                         .size(width = 220.dp, height = 160.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                        .background(Color.Black.copy(alpha = 0.6f))
                 ) {
                     VideoTrackView(
                         videoTrack = it,
@@ -190,11 +170,6 @@ class DemonstrateActivity : AppCompatActivity() {
     }
     private val REMOTE_WIDTH = 480f
     private val REMOTE_HEIGHT = 360f
-//    private val REMOTE_WIDTH = 600f
-//    private val REMOTE_HEIGHT = 680f
-//    private val targetRatio = 4f / 3f
-//    private val targetHeight = 360f / (4f / 3f)
-//    private val topCrop = (360f - targetHeight) / 2f
 
     @Composable
     fun WhiteboardCanvas(
@@ -215,22 +190,6 @@ class DemonstrateActivity : AppCompatActivity() {
                         y = (remoteY * scale) + offsetY
                     )
                 }
-//                { remoteX: Float, remoteY: Float ->
-//
-//                    // 1) 중앙 crop 보정
-//                    val correctedY = remoteY - topCrop
-//
-//                    // 2) crop 영역 바깥이면 표시하지 않음
-//                    if (correctedY < 0f || correctedY > targetHeight) {
-//                        Offset(-10000f, -10000f) // 화면 밖으로 버려서 안 보이게
-//                    } else {
-//                        // 3) 기존 scale + offset 로직 유지
-//                        Offset(
-//                            x = (remoteX * scale) + offsetX,
-//                            y = (correctedY * scale) + offsetY
-//                        )
-//                    }
-//                }
             }
 
             var completedPaths = remember { mutableStateListOf<TimedPath>() }
@@ -250,7 +209,6 @@ class DemonstrateActivity : AppCompatActivity() {
                         Log.d("Demo", "오디오 함수 리턴")
                         hideOnModal()
                         (context as? Activity)?.finish()
-
                     }
                 }
             }
@@ -343,10 +301,10 @@ class DemonstrateActivity : AppCompatActivity() {
                             canvas.drawPath(timedPath.path, linePaint)
                         }
                         currentPath?.let {
-                            linePaint.color = androidx.compose.ui.graphics.Color.White
+                            linePaint.color = Color.White
                             frameworkPaint.setShadowLayer(
                                 shadowRadius, 0f, 0f,
-                                (currentColor ?: androidx.compose.ui.graphics.Color.White).toArgb()
+                                (currentColor ?: Color.White).toArgb()
                             )
                             canvas.drawPath(it, linePaint)
                         }
@@ -371,15 +329,6 @@ class DemonstrateActivity : AppCompatActivity() {
 
         return Triple(scale, offsetX, offsetY)
     }
-    private fun arCalculateTransform(screenWidth: Float, screenHeight: Float): Triple<Float, Float, Float> {
-        val scale = screenHeight / REMOTE_HEIGHT
-        val scaledWidth = REMOTE_WIDTH * scale
-        val offsetX = (screenWidth - scaledWidth) /2f
-        val offsetY = 0f
-
-        return Triple(scale, offsetX, offsetY)
-    }
-
     @Composable
     fun ArMarker(marker: ArMarker, x: Float, y: Float) {
         val transition = rememberInfiniteTransition()
@@ -441,56 +390,6 @@ class DemonstrateActivity : AppCompatActivity() {
             )
         }
     }
-//    suspend fun Context.playAssetAudio(fileName: String) = suspendCancellableCoroutine<Unit> { continuation ->
-//        // MediaPlayer를 함수 내부에서 생성
-//        val mediaPlayer = MediaPlayer()
-//        Log.d("CallActivity", "MediaPlayer 재생")
-//
-//        try {
-//            // assets 폴더에서 파일 열기
-//            val afd = this.assets.openFd(fileName)
-//
-//            // 핵심: offset과 length를 같이 넘겨줘야 함
-//            mediaPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-//            afd.close() // fd는 설정 후 닫아도 됨
-//
-//            mediaPlayer.setOnCompletionListener {
-//                Log.d("Demo", "재생 완료 리스너")
-//                it.release()
-//                // 재생이 끝나면 코루틴 재개 (finish()가 호출될 수 있게 함)
-//                if (continuation.isActive) continuation.resume(Unit)
-//            }
-//
-//            mediaPlayer.setOnErrorListener { _, _, _ ->
-//                // 에러 나면 멈추지 말고 그냥 종료로 넘어가게 처리
-//                Log.e("Demo", "audio error")
-//                mediaPlayer.release()
-//                if (continuation.isActive) continuation.resume(Unit)
-//                true
-//            }
-//
-//            mediaPlayer.prepare() // 로컬 파일이므로 동기 prepare 사용
-//            mediaPlayer.start()
-//
-//            // 코루틴이 취소되면(화면 이탈 등) 플레이어도 해제
-//            continuation.invokeOnCancellation {
-//                try {
-//                    if (mediaPlayer.isPlaying) mediaPlayer.stop()
-//                    mediaPlayer.release()
-//                } catch (e: Exception) { e.printStackTrace() }
-//            }
-//
-////            // 재생이 끝나면 메모리 해제 (중요: UI 없는 "단발성" 재생이므로 스스로 해제해야 함)
-////            mediaPlayer.setOnCompletionListener { mp ->
-////                mp.release()
-////            }
-//
-//        } catch (e: Exception) {
-//            Log.e("AudioPlayer", "재생 실패: $fileName", e)
-//            mediaPlayer.release() // 에러 발생 시에도 해제
-//            if (continuation.isActive) continuation.resume(Unit)
-//        }
-//    }
     private fun showOnModal() {
         try {
             // 기존 모달이 있으면 먼저 숨기기

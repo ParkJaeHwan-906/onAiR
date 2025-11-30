@@ -9,8 +9,6 @@ object SocketHolder {
 
             onSttResult = { text, type, conf -> },
             onIntentResult = { },
-            onFinalAnswer = { },
-            onStartSseConnection = { },
             onCvDetectionNormal = { },
             onCvDetectionFailed = { },
             onWakewordDetected = { },
