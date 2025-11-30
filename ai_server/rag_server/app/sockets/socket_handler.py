@@ -461,6 +461,23 @@ async def handle_intent_audio_completed(sid, data):
                 cv_result["messages"] = [message_str]
                 cv_result["message"] = message_str
 
+            elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
+                has_anomaly = False
+                modules[0]["anomaly"] = False
+                messages = "온도가 정상입니다."
+                anomalies["gauge"] = {
+                    "type": "gauge",
+                    "status": "normal",
+                    "detail": "normal",
+                    "result": anomalies["gauge"]["results"],
+                    "message": "온도가 정상입니다.",
+                }
+                message_str = "온도가 정상입니다."
+                cv_result["has_anomaly"] = False
+                cv_result["anomalies"] = anomalies
+                cv_result["messages"] = [message_str]
+                cv_result["message"] = message_str
+                
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
             # ★ detected = modules_detected = True인 경우
