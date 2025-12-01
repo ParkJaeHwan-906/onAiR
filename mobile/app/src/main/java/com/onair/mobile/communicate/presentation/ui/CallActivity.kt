@@ -218,7 +218,7 @@ class CallActivity : FragmentActivity() {
                     
                     // 오디오 재생 시작 (모달 표시와 동시에)
                     try {
-                        context.playAssetAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3")
+                        context.playAssetAudio("001_onAir_서비스를_종료합니다.mp3")
                         Log.d("CallActivity", "✅ [CallActivity] 서비스 종료 오디오 재생 완료")
                         
                         // 모달 숨기기 (WorkingActivity의 hideOnModal() 로직과 동일)
