@@ -479,8 +479,61 @@ async def handle_intent_audio_completed(sid, data):
                 cv_result["anomalies"] = anomalies
                 cv_result["messages"] = [message_str]
                 cv_result["message"] = message_str
+                
+            # elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
+            #     has_anomaly = True
+            #     modules[0]["anomaly"] = True
+            #     messages = "온도계의 온도가 비정상적으로 높습니다."
+            #     anomalies["gauge"] = {
+            #         "type": "gauge",
+            #         "status": "anomaly",
+            #         "detail": "thermo_high",
+            #         "result": anomalies["gauge"]["results"],
+            #         "message": "온도계의 온도가 비정상적으로 높습니다.",
+            #     }
+            #     message_str = "온도계의 온도가 비정상적으로 높습니다."
+            #     cv_result["has_anomaly"] = True
+            #     cv_result["anomalies"] = anomalies
+            #     cv_result["messages"] = [message_str]
+            #     cv_result["message"] = message_str
 
-                _pending_final_guide = {
+            # -------------------------
+            # 2) 정상 (모듈 탐지 OK + 이상 없음)
+            # ★ detected = modules_detected = True인 경우
+            # -------------------------
+            if detected and not has_anomaly:
+                print("=" * 80)
+                print("✅ [CV 탐지 정상] detected=True, modules_detected=True, has_anomaly=False")
+                print(f"   device_type: {device_type}")
+                print(f"   anomalies 개수: {len(anomalies)}")
+                print("=" * 80)
+                _pending_cv_detection = cv_result
+                await broadcast_to(["mobile", "mobile2"], "cv_detection_normal", {
+                    "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
+                })
+                return
+
+            # -------------------------
+            # 3) 이상 (anomaly)
+            # -------------------------
+            print("=" * 80)
+            print("🚨 [CV 탐지 이상] detected=True, has_anomaly=True")
+            print(f"   device_type: {device_type}")
+            print(f"   anomalies: {anomalies}")
+            print(f"   messages: {messages}")
+            print("=" * 80)
+            await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
+            
+            # _pending_final_guide = await generate_final_guide(
+            #     device_type, modules, anomalies, cv_result, broadcast_to
+            # )
+
+            # async with _final_guide_lock:
+            #     _pending_final_guide = await generate_final_guide(
+            #         device_type, modules, anomalies, cv_result, broadcast_to
+            #     )
+
+            _pending_final_guide = {
                     "answer":"fan_belt.slow에 대한 정비 가이드입니다.. 원인은 전원 불균형 또는 전압 강하입니다.. 조치는 인버터 출력 주파수 감소 여부 확인입니다.. 주의사항은 지속적인 감속은 풍량 부족을 야기하여 주의 필요입니다.",
                     "structured_answer":{
                         "error_code":"fan_belt.slow",
@@ -564,59 +617,6 @@ async def handle_intent_audio_completed(sid, data):
                         "message":"팬 벨트가 감속 중 입니다."
                         }
                     }
-                
-            # elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
-            #     has_anomaly = True
-            #     modules[0]["anomaly"] = True
-            #     messages = "온도계의 온도가 비정상적으로 높습니다."
-            #     anomalies["gauge"] = {
-            #         "type": "gauge",
-            #         "status": "anomaly",
-            #         "detail": "thermo_high",
-            #         "result": anomalies["gauge"]["results"],
-            #         "message": "온도계의 온도가 비정상적으로 높습니다.",
-            #     }
-            #     message_str = "온도계의 온도가 비정상적으로 높습니다."
-            #     cv_result["has_anomaly"] = True
-            #     cv_result["anomalies"] = anomalies
-            #     cv_result["messages"] = [message_str]
-            #     cv_result["message"] = message_str
-
-            # -------------------------
-            # 2) 정상 (모듈 탐지 OK + 이상 없음)
-            # ★ detected = modules_detected = True인 경우
-            # -------------------------
-            if detected and not has_anomaly:
-                print("=" * 80)
-                print("✅ [CV 탐지 정상] detected=True, modules_detected=True, has_anomaly=False")
-                print(f"   device_type: {device_type}")
-                print(f"   anomalies 개수: {len(anomalies)}")
-                print("=" * 80)
-                _pending_cv_detection = cv_result
-                await broadcast_to(["mobile", "mobile2"], "cv_detection_normal", {
-                    "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
-                })
-                return
-
-            # -------------------------
-            # 3) 이상 (anomaly)
-            # -------------------------
-            print("=" * 80)
-            print("🚨 [CV 탐지 이상] detected=True, has_anomaly=True")
-            print(f"   device_type: {device_type}")
-            print(f"   anomalies: {anomalies}")
-            print(f"   messages: {messages}")
-            print("=" * 80)
-            await wait_for_next_step("CV 모델 오류 탐지 성공", "9")
-            
-            # _pending_final_guide = await generate_final_guide(
-            #     device_type, modules, anomalies, cv_result, broadcast_to
-            # )
-
-            # async with _final_guide_lock:
-            #     _pending_final_guide = await generate_final_guide(
-            #         device_type, modules, anomalies, cv_result, broadcast_to
-            #     )
 
             # 알림 메시지 생성
             notification_text = generate_cv_detection_notification(device_type, anomalies)
@@ -709,11 +709,11 @@ async def handle_audio_playback_completed(sid, data):
             print(f"   anomalies: {anomalies}")
             print("=" * 80)
             
-            if _final_guide_lock.locked():
-                print("⏳ Final Guide 생성 중... audio_playback_completed 대기 중")
-                async with _final_guide_lock:
-                    pass
-                print("✅ Final Guide 생성 완료됨 → 응답 전송 진행")
+            # if _final_guide_lock.locked():
+            #     print("⏳ Final Guide 생성 중... audio_playback_completed 대기 중")
+            #     async with _final_guide_lock:
+            #         pass
+            #     print("✅ Final Guide 생성 완료됨 → 응답 전송 진행")
 
             if _pending_final_guide:
                 await broadcast_to(["mobile", "mobile2"], "final_answer", _pending_final_guide)
