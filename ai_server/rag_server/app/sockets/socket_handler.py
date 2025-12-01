@@ -289,7 +289,7 @@ async def handle_wakeword_detected(sid, data):
     await wait_for_next_step("Wakeword 감지 이벤트 수신 완료", "2-1")
     
     # 모바일 연결 상태 확인
-    mobile_sids = [s for s, d in device_map.items() if d == "mobile"]
+    mobile_sids = [s for s, d in device_map.items() if d == "mobile" or d == "mobile2"]
     if not mobile_sids:
         print("⚠️ 모바일 디바이스가 연결되어 있지 않습니다.")
         return
@@ -297,7 +297,7 @@ async def handle_wakeword_detected(sid, data):
     print(f"📤 모바일로 wakeword_detected 이벤트 전송 시작 (연결된 모바일: {len(mobile_sids)}개)")
     
     # 모바일로 Wakeword 감지 이벤트 전송 (음성 파일 재생 시작)
-    await broadcast_to("mobile", "wakeword_detected", {
+    await broadcast_to(["mobile", "mobile2"], "wakeword_detected", {
         "detected": detected
     })
     
@@ -328,7 +328,7 @@ async def handle_wakeword_audio_completed(sid, data):
     sender_device = device_map.get(sid, "unknown")
     
     # 모바일에서만 받음
-    if sender_device != "mobile":
+    if sender_device != "mobile" and sender_device != "mobile2":
         print(f"⚠️ 음성 파일 재생 완료 이벤트는 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
     
@@ -422,7 +422,7 @@ async def handle_intent_audio_completed(sid, data):
                 print(f"   message: {cv_raw.get('message', 'N/A')}")
                 print("=" * 80)
                 _pending_cv_detection = cv_result
-                await broadcast_to("mobile", "cv_detection_failed", {
+                await broadcast_to(["mobile", "mobile2"], "cv_detection_failed", {
                     "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
                 })
                 return
@@ -462,23 +462,40 @@ async def handle_intent_audio_completed(sid, data):
                 cv_result["messages"] = [message_str]
                 cv_result["message"] = message_str
 
+            # elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
+            #     has_anomaly = False
+            #     modules[0]["anomaly"] = False
+            #     messages = "온도가 정상입니다."
+            #     anomalies["gauge"] = {
+            #         "type": "gauge",
+            #         "status": "normal",
+            #         "detail": "normal",
+            #         "result": anomalies["gauge"]["results"],
+            #         "message": "온도가 정상입니다.",
+            #     }
+            #     message_str = "온도가 정상입니다."
+            #     cv_result["has_anomaly"] = False
+            #     cv_result["anomalies"] = anomalies
+            #     cv_result["messages"] = [message_str]
+            #     cv_result["message"] = message_str
+                
             elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
-                has_anomaly = False
-                modules[0]["anomaly"] = False
-                messages = "온도가 정상입니다."
+                has_anomaly = True
+                modules[0]["anomaly"] = True
+                messages = "온도계의 온도가 비정상적으로 높습니다."
                 anomalies["gauge"] = {
                     "type": "gauge",
-                    "status": "normal",
-                    "detail": "normal",
+                    "status": "anomaly",
+                    "detail": "anomaly",
                     "result": anomalies["gauge"]["results"],
-                    "message": "온도가 정상입니다.",
+                    "message": "온도계의 온도가 비정상적으로 높습니다.",
                 }
-                message_str = "온도가 정상입니다."
-                cv_result["has_anomaly"] = False
+                message_str = "온도계의 온도가 비정상적으로 높습니다."
+                cv_result["has_anomaly"] = True
                 cv_result["anomalies"] = anomalies
                 cv_result["messages"] = [message_str]
                 cv_result["message"] = message_str
-                
+
             # -------------------------
             # 2) 정상 (모듈 탐지 OK + 이상 없음)
             # ★ detected = modules_detected = True인 경우
@@ -490,7 +507,7 @@ async def handle_intent_audio_completed(sid, data):
                 print(f"   anomalies 개수: {len(anomalies)}")
                 print("=" * 80)
                 _pending_cv_detection = cv_result
-                await broadcast_to("mobile", "cv_detection_normal", {
+                await broadcast_to(["mobile", "mobile2"], "cv_detection_normal", {
                     "message": "탐지 결과 정상입니다. 오퍼레이터와의 통신을 통해 문제를 해결하겠습니다."
                 })
                 return
@@ -540,7 +557,7 @@ async def handle_intent_audio_completed(sid, data):
             }
 
             # 모바일로 anomaly 전송
-            await broadcast_to("mobile", "cv_detection_anomaly", payload)
+            await broadcast_to(["mobile", "mobile2"], "cv_detection_anomaly", payload)
             # await broadcast_to(["mobile", "pc"], "cv_detection_anomaly", payload)
 
             # ⚠️ 주의: cv_detection_success는 generate_final_guide에서 전송됨 (중복 방지)
@@ -550,7 +567,7 @@ async def handle_intent_audio_completed(sid, data):
             import traceback
             traceback.print_exc()
 
-            await broadcast_to("mobile", "cv_detection_failed", {
+            await broadcast_to(["mobile", "mobile2"], "cv_detection_failed", {
                 "message": "오류를 탐지하지 못했습니다. AI_SUPPORTER와의 대화를 통해 문제를 해결하겠습니다."
             })
             return
@@ -613,10 +630,10 @@ async def handle_audio_playback_completed(sid, data):
                 print("✅ Final Guide 생성 완료됨 → 응답 전송 진행")
 
             if _pending_final_guide:
-                await broadcast_to("mobile", "final_answer", _pending_final_guide)
+                await broadcast_to(["mobile", "mobile2"], "final_answer", _pending_final_guide)
                 _pending_final_guide = None
             else:
-                await broadcast_to("mobile", "final_answer", {"answer": "내용 없음"})
+                await broadcast_to(["mobile", "mobile2"], "final_answer", {"answer": "내용 없음"})
 
 
             # # 전체 정비 가이드 생성 및 전송 (서비스 사용)
@@ -629,7 +646,7 @@ async def handle_audio_playback_completed(sid, data):
         print("✅ [섹션별 TTS 재생 완료] 서비스 종료 버튼 활성화 요청")
         print("=" * 80)
         
-        await broadcast_to("mobile", "enable_service_end_button", {
+        await broadcast_to(["mobile", "mobile2"], "enable_service_end_button", {
             "button_rect": {
                 "left": SERVICE_END_BUTTON_RECT[0],
                 "top": SERVICE_END_BUTTON_RECT[1],
@@ -679,14 +696,15 @@ async def handle_stt_result(sid, data):
             return
         
         # 1. 먼저 모바일로 SSE 연결 시작 요청 전송
-        try:
-            await broadcast_to("mobile", "start_sse_connection", {
-                "text": stt_text,
-                "timestamp": None
-            })
-            await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
-        except Exception as e:
-            print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
+        # 이거 이제 안씀
+        # try:
+        #     await broadcast_to("mobile", "start_sse_connection", {
+        #         "text": stt_text,
+        #         "timestamp": None
+        #     })
+        #     await wait_for_next_step("SSE 연결 시작 요청 전송 완료", "6-1")
+        # except Exception as e:
+        #     print(f"⚠️ SSE 연결 시작 요청 전송 실패: {e}")
         
         # 2. Gemini-Flash로 Intent 분류 및 모바일로 전송
         try:
@@ -696,7 +714,7 @@ async def handle_stt_result(sid, data):
             await wait_for_next_step("Intent 분류 완료", "7")
             
             # 모바일로 Intent 결과 전송
-            await broadcast_to("mobile", "intent_result", {
+            await broadcast_to(["mobile", "mobile2"], "intent_result", {
                 "text": stt_text,
                 "intent": intent,
                 "confidence": intent_result.get("confidence", 0.5),
@@ -715,7 +733,7 @@ async def handle_stt_result(sid, data):
         except Exception as e:
             print(f"❌ 버퍼링 STT 처리 오류: {e}")
             # 에러 발생 시 기본값으로 AI_SUPPORTER 전송
-            await broadcast_to("mobile", "intent_result", {
+            await broadcast_to(["mobile", "mobile2"], "intent_result", {
                 "text": stt_text,
                 "intent": "AI_SUPPORTER",
                 "confidence": 0.5,
@@ -794,7 +812,7 @@ async def handle_video_frame(sid, data):
             "timestamp": timestamp,
             "frame": jpeg_bytes.tobytes()
         })
-        await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
+        await broadcast_to(['mobile', "mobile2"], "video_frame", jpeg_bytes.tobytes())
         return
 
     # AR 마커 업데이트 및 브로드캐스트 - 반전된 프레임 사용
@@ -824,7 +842,7 @@ async def handle_video_frame(sid, data):
                 "opacity": m["opacity"]
             })
         ar_markers[:] = updated
-        await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+        await broadcast_to(['pc', 'mobile', "mobile2"], "ar-info", {"markers": ar_markers})
 
     # ================================
     # 제스처로 서비스 종료 버튼 클릭 감지
@@ -846,7 +864,7 @@ async def handle_video_frame(sid, data):
         "timestamp": timestamp,
         "frame": jpeg_bytes.tobytes()
     })
-    await broadcast_to('mobile', "video_frame", jpeg_bytes.tobytes())
+    await broadcast_to(['mobile', "mobile2"], "video_frame", jpeg_bytes.tobytes())
     
     try:
         yolo_res = await get_latest_yolo_result()
@@ -857,7 +875,7 @@ async def handle_video_frame(sid, data):
                     "timestamp": frame_ts,
                     "boxes": yolo_res.get("boxes", []),
                 }
-                await broadcast_to(['pc', 'mobile'], "video_overlay", payload)
+                await broadcast_to(['pc', 'mobile', "mobile2"], "video_overlay", payload)
     except Exception as e:
         print(f"⚠️ YOLO overlay 전송 오류: {e}")
 
@@ -974,6 +992,10 @@ async def accept_communication(sid, data):
     오퍼레이터 통신 시작 이벤트
     AI_Supporter/OPERATOR 실행 중이면 기능을 중지하고 WebRTC 오디오 스트리밍을 시작합니다.
     """
+    sender_device =device_map.get(sid, "unknown")
+    if sender_device == "unknown" or sender_device == "mobile2":
+        return
+
     global ar_markers
     ar_markers.clear()
 
@@ -1004,14 +1026,14 @@ async def communication_close(sid, data):
     global ar_markers
     
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown":
+    if sender_device == "unknown" or sender_device == "mobile2":
         return
 
     await broadcast_to("raspi", "handle_audio_stream", {"start": False})
     ar_markers.clear()
     await asyncio.sleep(0.3)
     
-    await broadcast_to("mobile", "communication_close", {})
+    await broadcast_to(["mobile", "mobile2"], "communication_close", {})
     await broadcast_to("raspi", "audio_playback_completed", {})
 
 
@@ -1026,7 +1048,7 @@ async def handle_control_raspi(sid, data):
     sender_device = device_map.get(sid, "unknown")
     
     # 모바일에서만 받음
-    if sender_device != "mobile":
+    if sender_device != "mobile" and sender_device != "mobile2":
         print(f"⚠️ 라즈베리파이 제어 명령은 모바일에서만 받을 수 있습니다. 수신자: {sender_device}")
         return
     
@@ -1067,14 +1089,14 @@ async def handle_ar_marker(sid, data):
         "opacity": data.get("opacity", 1.0)
     }
     ar_markers.append(marker)
-    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile', 'mobile2'], "ar-info", {"markers": ar_markers})
 
 async def delete_marker(sid, data):
     """
     전달받은 idx에 해당하는 AR 마커 삭제
     """
     sender_device = device_map.get(sid, "unknown")
-    if sender_device == "unknown":
+    if sender_device == "unknown" or sender_device == "mobile2":
         return
 
     target_idx = data.get("idx")
@@ -1091,7 +1113,7 @@ async def delete_marker(sid, data):
             marker["idx"] = idx
             idx += 1
     
-    await broadcast_to(['pc', 'mobile'], "ar-info", {"markers": ar_markers})
+    await broadcast_to(['pc', 'mobile', "mobile2"], "ar-info", {"markers": ar_markers})
 
 async def handle_wakeword_force(sid, data):
     print(f"wakeword 강제화 전송 받음")
