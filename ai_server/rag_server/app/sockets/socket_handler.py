@@ -559,7 +559,7 @@ async def handle_intent_audio_completed(sid, data):
                         "possible_causes_markdown":"#### 🟥 원인\n- 전원 불균형 또는 전압 강하",
                         "recommended_actions_markdown":"#### 🛠 조치\n 인버터 출력 주파수 감소 여부 확인",
                         "safety_warnings_markdown":"#### ⚠ 주의사항\n- 지속적인 감속은 풍량 부족을 야기하여 주의 필요",
-                        "possible_causes_audio":None,
+                        "possible_causes_audio":"dummyqdata",
                         "safety_warnings_audio_encoding":"audio/mpeg",
                         "tts_text":"fan_belt.slow에 대한 정비 가이드입니다.. 원인은 전원 불균형 또는 전압 강하입니다.. 조치는 인버터 출력 주파수 감소 여부 확인입니다.. 주의사항은 지속적인 감속은 풍량 부족을 야기하여 주의 필요입니다.",
                         "possible_causes":[],
