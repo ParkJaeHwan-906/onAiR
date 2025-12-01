@@ -483,15 +483,15 @@ async def handle_intent_audio_completed(sid, data):
             elif device_type == "AHU" and sorted_filtered[0]["label"] == "thermometer":
                 has_anomaly = True
                 modules[0]["anomaly"] = True
-                messages = "코일 표면 오염 및 스케일 여부를 확인하고 필요한 경우 세척한다. 냉동기의 출수온도를 측정하여 7~12도 범위인지 확인한다. 히터 릴레이 접점 용접 여부를 점검한다. 온도센서 위치, 배선 상태, 단선 여부를 확인한다. 팬 RPM이 정상인지 점검해 풍량 확보가 가능한지 확인한다. 80도 이상 고온은 히터 과열 또는 코일 손상 가능성이 있어 즉시 조치해야 한다."
+                messages = "온도계의 온도가 비정상적으로 높습니다."
                 anomalies["gauge"] = {
                     "type": "gauge",
                     "status": "anomaly",
-                    "detail": "anomaly",
+                    "detail": "thermo_high",
                     "result": anomalies["gauge"]["results"],
-                    "message": "코일 표면 오염 및 스케일 여부를 확인하고 필요한 경우 세척한다. 냉동기의 출수온도를 측정하여 7~12도 범위인지 확인한다. 히터 릴레이 접점 용접 여부를 점검한다. 온도센서 위치, 배선 상태, 단선 여부를 확인한다. 팬 RPM이 정상인지 점검해 풍량 확보가 가능한지 확인한다. 80도 이상 고온은 히터 과열 또는 코일 손상 가능성이 있어 즉시 조치해야 한다.",
+                    "message": "온도계의 온도가 비정상적으로 높습니다.",
                 }
-                message_str = "코일 표면 오염 및 스케일 여부를 확인하고 필요한 경우 세척한다. 냉동기의 출수온도를 측정하여 7~12도 범위인지 확인한다. 히터 릴레이 접점 용접 여부를 점검한다. 온도센서 위치, 배선 상태, 단선 여부를 확인한다. 팬 RPM이 정상인지 점검해 풍량 확보가 가능한지 확인한다. 80도 이상 고온은 히터 과열 또는 코일 손상 가능성이 있어 즉시 조치해야 한다."
+                message_str = "온도계의 온도가 비정상적으로 높습니다."
                 cv_result["has_anomaly"] = True
                 cv_result["anomalies"] = anomalies
                 cv_result["messages"] = [message_str]
