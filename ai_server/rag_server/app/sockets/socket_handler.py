@@ -436,7 +436,8 @@ async def handle_intent_audio_completed(sid, data):
                 for m in modules
             ]
             # 정상 상태인 항목에 대해서 우선 순위를 부여
-            sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"])
+            # sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"])
+            sorted_filtered = sorted(filtered, key=lambda x: x["has_anomaly"], reverse=True)
 
             # 시연용 fan 으로 탐지 되어있을 때는 반드시 오류 탐지로 이동할 수 있도록
             if device_type == "AHU" and sorted_filtered[0]["label"] == "fan":
