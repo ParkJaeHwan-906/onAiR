@@ -1092,8 +1092,8 @@ async def accept_communication(sid, data):
         "type": "description",
         "idx": -1,
         "info": {
-            "x": 0.0,
-            "y": 0.0,
+            "x": -100000.0,
+            "y": -100000.0,
             "size": 10
         },
         "color": None,
