@@ -93,7 +93,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
-        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
