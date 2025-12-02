@@ -6,11 +6,11 @@ import os
 
 DATA_PATH = "data.yaml"
 MODEL_PATH = "yolo11n.pt"
-PROJECT_PATH = "/runs/tune_optuna"
-N_TRIALS = 50
-EPOCHS = 50
+PROJECT_PATH = "runs/tune_optuna"
+N_TRIALS = 20
+EPOCHS = 40
 DEVICE = 1 
-IMG_SIZE = 512
+IMG_SIZE = (480,360)
 
 
 def objective(trial):
@@ -68,12 +68,3 @@ print(f"\n Best mAP@50: {study.best_value:.4f}")
 
 os.makedirs(PROJECT_PATH, exist_ok=True)
 study.trials_dataframe().to_csv(os.path.join(PROJECT_PATH, "optuna_results.csv"), index=False)
-
-
-try:
-    import optuna.visualization as vis
-    vis.plot_optimization_history(study).write_html(os.path.join(PROJECT_PATH, "optuna_history.html"))
-    vis.plot_param_importances(study).write_html(os.path.join(PROJECT_PATH, "optuna_importance.html"))
-    print("\n 시각화 HTML 저장 완료 (optuna_history.html, optuna_importance.html)")
-except:
-    print("시각화 모듈(optuna.visualization) 불가 시 무시됨.")

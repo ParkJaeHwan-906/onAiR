@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 12
+names: ['AHU', 'AHU_pannel', 'belt', 'button_left', 'button_right', 'drive_lamp', 'fan', 'overheat_lamp', 'power_lamp', 'pressure_gauge', 'temperature_FND', 'thermometer']
+
+roboflow:
+  workspace: boiler-chiller
+  project: onair-g8fkz
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/boiler-chiller/onair-g8fkz/dataset/1

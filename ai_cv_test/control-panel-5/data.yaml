@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['button', 'overheat', 'power', 'run', 'temperature']
+
+roboflow:
+  workspace: boiler-chiller
+  project: control-panel-laufu
+  version: 5
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/boiler-chiller/control-panel-laufu/dataset/5

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 18
+names: ['AHU', 'AHU_pannel', 'Boiler', 'Chiler', 'belt', 'button_off', 'button_on', 'button_right', 'control_panel', 'drive_lamp', 'overheat_lamp', 'overheat_light', 'power_lamp', 'power_light', 'pressure_gauge', 'run_light', 'temperature_FND', 'thermometer']
+
+roboflow:
+  workspace: boiler-chiller
+  project: on_air-ahtss
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/boiler-chiller/on_air-ahtss/dataset/2
