@@ -108,7 +108,7 @@ class CallActivity : FragmentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
         description = intent.getStringExtra("description")
-            ?: throw java.lang.NullPointerException("description is null")
+            ?: "RC카 고장"
         val socketClient = SocketHolder.socketClient
         Log.i("CallActivity", "📡 CallActivity에서 Socket 연결 상태 확인: isActive=${socketClient.isConnected()}")
         mediaPlayerController = MediaPlayerController(this)
@@ -198,7 +198,7 @@ class CallActivity : FragmentActivity() {
             LaunchedEffect(viewModel) {
                 viewModel.finishEvent.collect {
                     showOnModal()
-                    mediaPlayerController.playLocalAudio("001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3") {
+                    mediaPlayerController.playLocalAudio("001_onAir_서비스를_종료합니다.mp3") {
                         Log.d("Demo", "오디오 함수 리턴")
                         hideOnModal()
                         (context as? Activity)?.finish()

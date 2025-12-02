@@ -410,7 +410,7 @@ class SocketIoSttClient(
             return
         }
         try {
-            socket?.emit("active_mediapipe", null)
+//            socket?.emit("active_mediapipe", null)
             Log.i(TAG, "📤 MediaPipe 버튼 활성화 이벤트 전송 완료")
         } catch (e: Exception) {
             Log.e(TAG, "❌ MediaPipe 버튼 활성화 이벤트 전송 실패: ${e.message}")

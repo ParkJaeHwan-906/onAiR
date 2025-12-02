@@ -91,7 +91,7 @@ class WorkingActivity : AppCompatActivity() {
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
-        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -841,11 +841,13 @@ class WorkingActivity : AppCompatActivity() {
                 // 오디오 재생
                 if (value.audio_content != null && value.audio_content.isNotBlank()) {
                     Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
-                    playAudio(value.audio_content)
+//                    playAudio(value.audio_content)
                     Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
                 } else {
                     Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
                 }
+                Thread.sleep(3000)
+//                delay(3000)
                 
                 // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
                 binding.cvResultError.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
@@ -884,12 +886,14 @@ class WorkingActivity : AppCompatActivity() {
                 answer.possible_causes_markdown,
                 answer.possible_causes_audio
             )
+            delay(1000)
             runSection(
                 binding.aiResultAction,
                 binding.aiResultActionText,
                 answer.recommended_actions_markdown,
                 answer.recommended_actions_audio
             )
+            delay(1000)
             runSection(
                 binding.aiResultWarning,
                 binding.aiResultWarningText,
@@ -916,9 +920,10 @@ class WorkingActivity : AppCompatActivity() {
             val typingJob = launch(Dispatchers.Main) {
                 showTypingEffect(textView, text)
             }
-            val audioJob = launch {
-                playAudio(audioBase64)
-            }
+            delay(2000)
+//            val audioJob = launch {
+//                playAudio(audioBase64)
+//            }
         }
 
     }
@@ -1033,13 +1038,19 @@ class WorkingActivity : AppCompatActivity() {
 
             withContext(Dispatchers.Main) {
                 showOnModal()
-                mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
-                    hideOnModal()
-                    Log.d(TAG, "서비스 종료 완료")
-                    socketIoSttClient.sendServiceCompletedAudioCompleted()
-                    binding.serviceStartButton.apply {
-                        if (isGone) visibility = View.VISIBLE
-                    }
+//                mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
+//                    hideOnModal()
+//                    Log.d(TAG, "서비스 종료 완료")
+//                    socketIoSttClient.sendServiceCompletedAudioCompleted()
+//                    binding.serviceStartButton.apply {
+//                        if (isGone) visibility = View.VISIBLE
+//                    }
+//                }
+                delay(1000)
+                hideOnModal()
+                socketIoSttClient.sendServiceCompletedAudioCompleted()
+                binding.serviceStartButton.apply {
+                    if (isGone) visibility = View.VISIBLE
                 }
             }
         } catch (e: Exception) {

@@ -9,11 +9,13 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.animation.AnimationUtils
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.isGone
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -83,7 +85,6 @@ class DemoWorkingActivity : AppCompatActivity() {
     private var aiOnDialog: AiOnDialog? = null
     private var onAirOnDialog:  OnAirOnDialog? = null
     private var isActivityResumed = false  // Activity가 resume 상태인지 추적
-    private var hasSentCommunicationClose = false  // communication_close 이벤트 전송 여부 추적
 
     private val TAG = "DemoWorkingActivity"
 
@@ -93,7 +94,7 @@ class DemoWorkingActivity : AppCompatActivity() {
         private const val OPERATOR_AUDIO_FILE = "001_통신_연결을_시작합니다.mp3"
         private const val CV_DETECTION_FAILED_AUDIO_FILE = "001_오류_탐지에_실패하였습니다_관리자와의_통신을_통해_문.mp3"
         private const val CV_DETECTION_NORMAL_AUDIO_FILE = "001_탐지_결과_정상입니다_관리자와의_통신을_통해_문제_상.mp3"
-        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다_다른_문제사항이_있으면.mp3"
+        private const val SERVICE_END_AUDIO_FILE = "001_onAir_서비스를_종료합니다.mp3"
     }
 
     private val FASTAPI_SERVER_URL = "https://onair.ai.kr"
@@ -132,7 +133,6 @@ class DemoWorkingActivity : AppCompatActivity() {
                 if (!socketIoSttClient.isConnected()){
                     socketIoSttClient.connect()
                     Log.i(TAG, "✅ Socket.IO 클라이언트 연결 시작: $FASTAPI_SERVER_URL")
-                    Log.d(TAG, hasSentCommunicationClose.toString())
                 }
             }
         } catch (e: Exception) {
@@ -155,31 +155,34 @@ class DemoWorkingActivity : AppCompatActivity() {
                 Log.w(TAG, "⚠️ Socket.IO 연결 대기 중... activeMediaPipe()는 연결 완료 후 호출됩니다")
             }
         }
-        lifecycleScope.launch {
-            workingViewModel.endService.collect {
-                handleServiceEnd()
-            }
+        binding.serviceStartButton.apply {
+            if (isGone) visibility = View.VISIBLE
         }
-        binding.serviceStartButton.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                // 1. 좌표 구하기
-                val location = IntArray(2)
-                binding.serviceStartButton.getLocationOnScreen(location)
-
-                val x = location[0] // 시작점 X (픽셀)
-                val y = location[1] // 시작점 Y (픽셀)
-                val width = binding.serviceStartButton.width
-                val height = binding.serviceStartButton.height
-
-                // 2. MediaPipe 연동을 위한 영역 정의 (Hit Box)
-                // 예: x ~ x+width, y ~ y+height 범위가 버튼의 영역임
-                Log.d("ButtonPos", "X: $x, Y: $y, W: $width, H: $height")
-
-                // 3. 리스너 제거 (중복 호출 방지)
-                binding.serviceStartButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-            }
-        })
+//        lifecycleScope.launch {
+//            workingViewModel.endService.collect {
+//                handleServiceEnd()
+//            }
+//        }
+//        binding.serviceStartButton.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+//            override fun onGlobalLayout() {
+//                // 1. 좌표 구하기
+//                val location = IntArray(2)
+//                binding.serviceStartButton.getLocationOnScreen(location)
+//
+//                val x = location[0] // 시작점 X (픽셀)
+//                val y = location[1] // 시작점 Y (픽셀)
+//                val width = binding.serviceStartButton.width
+//                val height = binding.serviceStartButton.height
+//
+//                // 2. MediaPipe 연동을 위한 영역 정의 (Hit Box)
+//                // 예: x ~ x+width, y ~ y+height 범위가 버튼의 영역임
+//                Log.d("ButtonPos", "X: $x, Y: $y, W: $width, H: $height")
+//
+//                // 3. 리스너 제거 (중복 호출 방지)
+//                binding.serviceStartButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
+//
+//            }
+//        })
     }
 
     override fun onPause() {
@@ -245,7 +248,9 @@ class DemoWorkingActivity : AppCompatActivity() {
         }
         binding.serviceStartButton.setOnClickListener {
             lifecycleScope.launch {
-                handleWakewordDetected()
+//                handleWakewordDetected()
+                workingViewModel.onServiceForcedStart()
+                binding.serviceStartButton.visibility = View.GONE
             }
         }
     }
@@ -324,6 +329,19 @@ class DemoWorkingActivity : AppCompatActivity() {
             launch {
                 workingViewModel.endService.collect {
                     handleServiceEnd()
+                }
+            }
+            launch {
+                workingViewModel.errorMessage.collect { error ->
+                    Log.d(TAG, "error message 변경됨 : $error")
+                    if (error.isNotBlank()) {
+                        Toast.makeText(
+                            this@DemoWorkingActivity,
+                            error,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        handleServiceEnd()
+                    }
                 }
             }
         }
@@ -856,12 +874,13 @@ class DemoWorkingActivity : AppCompatActivity() {
                 // 오디오 재생
                 if (value.audio_content != null && value.audio_content.isNotBlank()) {
                     Log.i(TAG, "🔊 CV 탐지 이상 알림 TTS 재생 시작")
-                    playAudio(value.audio_content)
+//                    playAudio(value.audio_content)
                     Log.i(TAG, "✅ CV 탐지 이상 알림 TTS 재생 완료")
                 } else {
                     Log.w(TAG, "⚠️ CV 탐지 이상 알림 오디오가 없습니다")
                 }
-
+//                delay(3000)
+                Thread.sleep(3000)
                 // 오디오 재생 완료 후 바로 카드 fadeOut (완료까지 대기)
                 binding.cvResultError.fadeOut()  // suspend 함수이므로 완료까지 자동으로 대기
                 // fadeOut 완료 후 visibility를 GONE으로 설정하여 다음 섹션과 겹치지 않도록
@@ -872,6 +891,7 @@ class DemoWorkingActivity : AppCompatActivity() {
                 // 모달 표시 ("답변 생성 중...")
                 runOnUiThread {
                     showModal("답변 생성 중...")
+                    aiOnDialog?.updateMessage("답변 생성 중...")
                 }
 
                 // FastAPI 서버로 재생 완료 이벤트 전송
@@ -898,12 +918,14 @@ class DemoWorkingActivity : AppCompatActivity() {
                 answer.possible_causes_markdown,
                 answer.possible_causes_audio
             )
+            delay(1000)
             runSection(
                 binding.aiResultAction,
                 binding.aiResultActionText,
                 answer.recommended_actions_markdown,
                 answer.recommended_actions_audio
             )
+            delay(1000)
             runSection(
                 binding.aiResultWarning,
                 binding.aiResultWarningText,
@@ -930,9 +952,11 @@ class DemoWorkingActivity : AppCompatActivity() {
             val typingJob = launch(Dispatchers.Main) {
                 showTypingEffect(textView, text)
             }
-            val audioJob = launch {
-                playAudio(audioBase64)
-            }
+            delay(2000)
+
+//            val audioJob = launch {
+//                playAudio(audioBase64)
+//            }
         }
 
     }
@@ -1051,10 +1075,19 @@ class DemoWorkingActivity : AppCompatActivity() {
 
             withContext(Dispatchers.Main) {
                 showOnModal()
-                mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
-                    hideOnModal()
-                    Log.d(TAG, "서비스 종료 완료")
-                    socketIoSttClient.sendServiceCompletedAudioCompleted()
+//                mediaPlayerController.playLocalAudio(SERVICE_END_AUDIO_FILE) {
+//                    hideOnModal()
+//                    Log.d(TAG, "서비스 종료 완료")
+//                    socketIoSttClient.sendServiceCompletedAudioCompleted()
+//                    binding.serviceStartButton.apply {
+//                        if (isGone) visibility = View.VISIBLE
+//                    }
+//                }
+                delay(1000)
+                hideOnModal()
+                socketIoSttClient.sendServiceCompletedAudioCompleted()
+                binding.serviceStartButton.apply {
+                    if (isGone) visibility = View.VISIBLE
                 }
             }
         } catch (e: Exception) {

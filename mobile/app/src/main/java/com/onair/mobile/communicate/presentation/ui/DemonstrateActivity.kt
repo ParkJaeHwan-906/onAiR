@@ -84,11 +84,11 @@ class DemonstrateActivity : AppCompatActivity() {
             ?: throw NullPointerException("url is null!")
         val token = intent.getStringExtra("token")
             ?: throw NullPointerException("token is null")
-    CallViewModel(
-        url = url,
-        token = token,
-        application = application
-    )
+        CallViewModel(
+            url = url,
+            token = token,
+            application = application
+        )
     }
     private lateinit var binding: ActivityDemonstrateBinding
 
