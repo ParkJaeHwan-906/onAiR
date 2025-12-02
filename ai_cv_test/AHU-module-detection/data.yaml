@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 6
+names: ['belt', 'control panel', 'differential pressure gauge', 'freeze prevention control panel', 'pressure gauge', 'thermometer']
+
+roboflow:
+  workspace: boiler-chiller
+  project: ahu-module-detection-fnnpj
+  version: 2
+  license: Private
+  url: https://app.roboflow.com/boiler-chiller/ahu-module-detection-fnnpj/2
