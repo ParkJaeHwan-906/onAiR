@@ -6,11 +6,11 @@ import os
 
 DATA_PATH = "data.yaml"
 MODEL_PATH = "yolo11n.pt"
-PROJECT_PATH = "/runs/tune_optuna"
-N_TRIALS = 50
+PROJECT_PATH = "runs/tune_optuna"
+N_TRIALS = 10
 EPOCHS = 50
 DEVICE = 1 
-IMG_SIZE = 512
+IMG_SIZE = (480,360)
 
 
 def objective(trial):
