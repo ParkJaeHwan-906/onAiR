@@ -6,6 +6,7 @@
 
 <p align="center"><img src="./docs/reflet_front.png" width="700" /></p>
 <p align="center"><img src="./docs/reflet_back.png" width="700" /></p>
+<p align="center"><img src="./docs/preview.jpg" width="350" /><img src="./docs/exhibition.png" width="350" />
 
 
 ## 2. 문제 정의
