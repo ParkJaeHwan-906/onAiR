@@ -1,5 +1,5 @@
 ## 1. 프로젝트 소개
-<p align="center"><img src="./docs/logo.png" width="200" /></p>
+<p align="center"><img src="./docs/logo.png" width="500" /></p>
 
 - 스마트 글라스 기반 산업 현장 보조 시스템
 - AR 작업지시·AI서포터·음성인터랙션을 결합한 원격/자율 작업 지원 시스템
@@ -407,11 +407,9 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
   - 서버: 카메라 좌표계 (0 ~ 480, 0 ~ 360)
   - 클라이언트: Stage 좌표계 (동적 크기)
   - 변환: `convertCameraToStage()` 함수로 자동 변환
-
 ---
 
 ---
-
 ## 산출물
 
 - 요구사항 정의서
