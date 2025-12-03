@@ -1,18 +1,12 @@
 ## 1. 프로젝트 소개
-
+<p align="center"><img src="./docs/logo.png" width="200" /></p>
 - 스마트 글라스 기반 산업 현장 보조 시스템
 - AR 작업지시·AI서포터·음성인터랙션을 결합한 원격/자율 작업 지원 시스템
 - 주요 목표: 실시간 영상 인식, 설비 자동 판별, 이상탐지, AR 오버레이, Wakeword 기반 AI 지원
 
+<p align="center"><img src="./docs/reflet_front.png" width="200" /></p>
+<p align="center"><img src="./docs/reflet_back.png" width="200" /></p>
 
-
-![image.png](attachment:701d1ce9-71c7-444c-bd11-0b2eaa9cbc97:image.png)
-
-![image.png](attachment:fa67f675-30b0-4a90-8189-d1bbcf2b4c1e:image.png)
-
-![image.png](attachment:788a195c-5d25-4417-8160-6f536947645e:image.png)
-
-![KakaoTalk_20251202_194018957_01.jpg](attachment:e7d9b584-c0d9-4c6b-bb5a-134a85eb9167:KakaoTalk_20251202_194018957_01.jpg)
 
 ## 2. 문제 정의
 
@@ -23,31 +17,21 @@
 
 ## 3. 프로젝트 미리보기
 
-- 실제 시연 장면 (스마트 글라스 화면)
-- YOLO 탐지 화면
+- YOLO 탐지
+<p align="center"> <img src="./docs/yololabels.jpg" width="550" /> </p>
+<p align="center"> <img src="./docs/yolo_results.png" width="700" /> </p>
 
 - 팬/벨트 이상탐지
-
-![image.png](attachment:ce3cd8d7-6e2b-4044-ba35-bede672f99c8:image.png)
-
-![image.png](attachment:9ecb8671-897a-412e-a3f0-718ea3e37295:image.png)
-
-![image.png](attachment:b6315d12-b19b-4b5b-a97b-0b34c939ab96:image.png)
+<p align="center"> <img src="./docs/fan_flow.png" width="260" /> <img src="./docs/fan_slowdown.png" width="260" /> <img src="./docs/fan_accelerate.png" width="260" /> </p>
 
 - 게이지 자동 읽기
-    
-    ![image.png](attachment:9fb37296-1306-42a8-af09-0216ab4948ec:image.png)
-    
-
-![image.png](attachment:201980d9-c97a-4197-9dba-369107c123f8:image.png)
+<p align="center"> <img src="./docs/pressure_gauge.png" width="350" /> <img src="./docs/pressure_gauge.png" width="350" /> </p>
 
 - 컨트롤 패널 점등 여부 확인
-    
-    ![image.png](attachment:d4c35502-1ea4-4fb4-ae11-b089f9b41bf5:image.png)
+<p align="center"> <img src="./docs/control_panel.png" width="500" /> </p>
     
 - AR 오버레이
-    
-    ![image.png](attachment:583597e5-9e03-4054-a8a5-58a5006b8ba7:image.png)
+<p align="center"> <img src="./docs/ar.jpg" width="450" /> <img src="./docs/ar_overlay.png" width="450" /> </p>
     
 
 ## 4. 주요 기능
@@ -60,13 +44,6 @@
 ### 실시간 모듈 탐지
 
 - AHU/Boiler/Chiller 자동 분류
-    
-    ![results.png](attachment:91392b85-3929-4b23-b369-a76410aee444:results.png)
-    
-    ![labels.jpg](attachment:96875c4d-fc41-49d2-9960-414dc13833a6:labels.jpg)
-    
-    ![train_batch0.jpg](attachment:e56c6ded-4f3e-469f-a85f-9c1deea850f1:train_batch0.jpg)
-    
 - 팬/벨트/게이지/패널 탐지
 
 ### 이상탐지
