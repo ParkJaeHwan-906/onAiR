@@ -23,10 +23,21 @@
 <p align="center"> <img src="./docs/yolo_results.png" width="700" /> </p>
 
 - 팬/벨트 이상탐지
-<p align="center"> <img src="./docs/fan_flow.png" width="260" /> <img src="./docs/fan_slowdown.png" width="260" /> <img src="./docs/fan_accelerate.png" width="260" /> </p>
+<table>
+  <tr>
+    <td style="vertical-align: top; width: 50%;">
+      <img src="./docs/fan_flow.png" width="100%">
+    </td>
+    <td style="vertical-align: top; width: 50%;">
+      <img src="./docs/fan_slowdown.png" width="100%">
+      <br/>
+      <img src="./docs/fan_accelerate.png" width="100%" style="margin-top:10px;">
+    </td>
+  </tr>
+</table>
 
 - 게이지 자동 읽기
-<p align="center"> <img src="./docs/pressure_gauge.png" width="350" /> <img src="./docs/pressure_gauge.png" width="350" /> </p>
+<p align="center"> <img src="./docs/pressure_gauge.png" width="350" /> <img src="./docs/thermometer.png" width="350" /> </p>
 
 - 컨트롤 패널 점등 여부 확인
 <p align="center"> <img src="./docs/control_panel.png" width="500" /> </p>
