@@ -25,13 +25,12 @@
 - 팬/벨트 이상탐지
 <table style="width:100%; table-layout:fixed;">
   <tr>
-    <td style="width:50%; vertical-align: top; padding-right:10px;">
-      <img src="./docs/fan_flow.png" style="width:100%; max-width:350px; height:auto;">
+    <td style="width:50%; vertical-align: top; text-align:center;">
+      <img src="./docs/fan_flow.png" width="350">
     </td>
-    <td style="width:50%; vertical-align: top; padding-left:10px;">
-      <img src="./docs/fan_slowdown.png" style="width:100%; max-width:350px; height:auto;">
-      <br/><br/>
-      <img src="./docs/fan_accelerate.png" style="width:100%; max-width:350px; height:auto;">
+    <td style="width:50%; vertical-align: top; text-align:center;">
+      <img src="./docs/fan_slowdown.png" width="350"><br><br>
+      <img src="./docs/fan_accelerate.png" width="350">
     </td>
   </tr>
 </table>
@@ -659,16 +658,7 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     
     # 6. 시스템 아키텍처(요약)
     
-    ```
-    Web / Mobile / Raspberry Pi
-            ↓
-          API Gateway
-            ↓
-    Backend — AI Server — Vision Service
-            ↓
-    MySQL / Redis / Elasticsearch / FAISS
-    ```
-    
+    <p align="center"><img src="./docs/architecture.png.png" width="800" /></p>
     ---
     
     # 7. 데이터 모델 (핵심)
