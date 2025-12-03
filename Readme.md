@@ -657,6 +657,7 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     ---
     
     # 6. 시스템 아키텍처(요약)
+    
     ---
     <p align="center"><img src="./docs/architecture.png" width="700" /></p>
     ---
@@ -686,11 +687,11 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     * Google Cloud 및 GPT 사용량 제한 존재
     
     
-# ERD
+- ERD
     <p align="center"> <img src="./docs/ERD.png" width="700" /> </p>
   
     
-# API 설계
+- API 설계
     
     # 🔗 BaseURL
     
