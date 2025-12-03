@@ -4,8 +4,8 @@
 - AR 작업지시·AI서포터·음성인터랙션을 결합한 원격/자율 작업 지원 시스템
 - 주요 목표: 실시간 영상 인식, 설비 자동 판별, 이상탐지, AR 오버레이, Wakeword 기반 AI 지원
 
-<p align="center"><img src="./docs/reflet_front.png" width="200" /></p>
-<p align="center"><img src="./docs/reflet_back.png" width="200" /></p>
+<p align="center"><img src="./docs/reflet_front.png" width="700" /></p>
+<p align="center"><img src="./docs/reflet_back.png" width="700" /></p>
 
 
 ## 2. 문제 정의
@@ -685,8 +685,8 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     
     
 - ERD
-    
-    ![image.png](attachment:d2925149-b076-4e87-b08d-59bf5340d2db:image.png)
+    <p align="center"> <img src="./docs/ERD.png" width="700" /> </p>
+  
     
 - API 설계
     
