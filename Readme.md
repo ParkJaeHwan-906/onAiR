@@ -23,15 +23,15 @@
 <p align="center"> <img src="./docs/yolo_results.png" width="700" /> </p>
 
 - 팬/벨트 이상탐지
-<table>
+<table style="width:100%; table-layout:fixed;">
   <tr>
-    <td style="vertical-align: top; width: 50%;">
-      <img src="./docs/fan_flow.png" width="100%">
+    <td style="width:50%; vertical-align: top; padding-right:10px;">
+      <img src="./docs/fan_flow.png" style="width:100%; max-width:350px; height:auto;">
     </td>
-    <td style="vertical-align: top; width: 50%;">
-      <img src="./docs/fan_slowdown.png" width="100%">
-      <br/>
-      <img src="./docs/fan_accelerate.png" width="100%" style="margin-top:10px;">
+    <td style="width:50%; vertical-align: top; padding-left:10px;">
+      <img src="./docs/fan_slowdown.png" style="width:100%; max-width:350px; height:auto;">
+      <br/><br/>
+      <img src="./docs/fan_accelerate.png" style="width:100%; max-width:350px; height:auto;">
     </td>
   </tr>
 </table>
