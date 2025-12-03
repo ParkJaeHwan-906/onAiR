@@ -126,9 +126,6 @@
 
 ## 상세 기술 설명
 
-```kotlin
-# 기능 상세 설명
-
 ## 1. 웨이크워드 인식 (TFLite CNN 모델)
 
 작업자의 음성 중 "onAiR"라는 시동어를 실시간으로 감지하여 AI 서포터를 활성화하는 데 활용한다.
@@ -423,16 +420,12 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
   - 변환: `convertCameraToStage()` 함수로 자동 변환
 
 ---
-```
 
 ---
 
 ## 산출물
 
 - 요구사항 정의서
-    
-    ```kotlin
-    # 📄 요구사항 명세서 (Requirements Specification)
     
     ## 1. 문서 정보
     
@@ -713,7 +706,6 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     * 현장 환경(조도/망 품질)에 성능 영향
     * Google Cloud 및 GPT 사용량 제한 존재
     
-    ```
     
 - ERD
     
@@ -721,7 +713,6 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     
 - API 설계
     
-    ```kotlin
     # 🔗 BaseURL
     
     | 기능             | Path                                         | 설명              |
@@ -803,7 +794,7 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     | 실시간 통신 응답               | POST   | `/webrtc/response`                    | ✔️    | 통신 요청에 대한 응답                     |
     | 관전자 토큰 발급               | GET    | `/webrtc/get-join-token`              | ❌     | 관리자/작업자가 통신 중인 방에 입장할 수 있는 토큰 발급 |
     
-    ```
+
     
 
 ---
