@@ -1,5 +1,6 @@
 ## 1. 프로젝트 소개
 <p align="center"><img src="./docs/logo.png" width="200" /></p>
+
 - 스마트 글라스 기반 산업 현장 보조 시스템
 - AR 작업지시·AI서포터·음성인터랙션을 결합한 원격/자율 작업 지원 시스템
 - 주요 목표: 실시간 영상 인식, 설비 자동 판별, 이상탐지, AR 오버레이, Wakeword 기반 AI 지원
@@ -658,7 +659,7 @@ OpenCV를 활용한 Optical Flow 기반 Visual SLAM으로 실시간 카메라 �
     
     # 6. 시스템 아키텍처(요약)
     
-    <p align="center"><img src="./docs/architecture.png.png" width="800" /></p>
+    <p align="center"><img src="./docs/architecture.png" width="800" /></p>
     ---
     
     # 7. 데이터 모델 (핵심)
