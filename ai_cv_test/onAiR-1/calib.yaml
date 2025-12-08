@@ -1,0 +1,7 @@
+path: ./calib
+
+train: .
+val: .
+
+nc: 1
+names: ["calibration"]

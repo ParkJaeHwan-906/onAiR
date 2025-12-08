@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 12
+names: ['AHU', 'AHU_pannel', 'Chiler', 'belt', 'button_left', 'button_right', 'drive_lamp', 'overheat_lamp', 'power_lamp', 'pressure_gauge', 'temperature_FND', 'thermometer']
+
+roboflow:
+  workspace: boiler-chiller
+  project: 1120-2in92
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/boiler-chiller/1120-2in92/dataset/2
