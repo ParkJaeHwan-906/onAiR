@@ -13,4 +13,7 @@ class CommunicationViewModel(
     fun stopSSE() {
         repo.stopSSE()
     }
+    fun clearEvent() {
+        repo.clearEvent()
+    }
 }

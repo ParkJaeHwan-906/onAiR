@@ -359,11 +359,14 @@ class DemoWorkingActivity : AppCompatActivity() {
         binding.acceptCall.setOnClickListener {
             workingViewModel.responseCall(
                 data.getLong("senderAccountId"), data.getString("name"), true)
+            binding.callRequestCard.visibility = View.GONE
+            sseViewModel.clearEvent()
         }
         binding.denyCall.setOnClickListener {
             workingViewModel.responseCall(
                 data.getLong("senderAccountId"), data.getString("name"), false)
-            binding.denyCall.visibility = View.GONE
+            binding.callRequestCard.visibility = View.GONE
+            sseViewModel.clearEvent()
         }
     }
     private fun goCall() {

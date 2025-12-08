@@ -1,12 +1,14 @@
 package com.onair.mobile.communicate.data
 
 import android.util.Log
+import com.onair.mobile.OnairApp
 import com.onair.mobile.communicate.PreferenceUtil
 import com.onair.mobile.communicate.data.source.remote.api.ApiService
 import com.onair.mobile.communicate.data.model.dto.ApiResponse
 import com.onair.mobile.communicate.data.model.dto.LoginRequest
 import com.onair.mobile.communicate.data.model.dto.RefreshRequest
 import com.onair.mobile.communicate.data.model.dto.TokenData
+import com.onair.mobile.communicate.presentation.viewmodel.CommunicationViewModel
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response

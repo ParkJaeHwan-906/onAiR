@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
                             sseViewModel.startSSE()
                         }
                         NavigationNext.LOGIN -> {
+                            sseViewModel.stopSSE()
                             startActivity(Intent(this@MainActivity, LoginActivity::class.java))
                             finish()
                         }

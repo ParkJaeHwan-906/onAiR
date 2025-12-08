@@ -4,6 +4,7 @@ import android.util.Log
 import com.launchdarkly.eventsource.MessageEvent
 import com.launchdarkly.eventsource.background.BackgroundEventHandler
 import com.onair.mobile.communicate.data.network.SseClient
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -25,6 +26,10 @@ class SSERepository(
     }
     fun stopSSE() {
         sseClient.disconnect()
+    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun clearEvent() {
+        _eventFlow.resetReplayCache()
     }
     override fun onOpen() {
         Log.d("SSE", "연결")

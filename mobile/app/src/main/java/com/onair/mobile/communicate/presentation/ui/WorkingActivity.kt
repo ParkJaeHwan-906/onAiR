@@ -326,11 +326,14 @@ class WorkingActivity : AppCompatActivity() {
         binding.acceptCall.setOnClickListener {
             workingViewModel.responseCall(
                 data.getLong("senderAccountId"), data.getString("name"), true)
+            binding.callRequestCard.visibility = View.GONE
+            sseViewModel.clearEvent()
         }
         binding.denyCall.setOnClickListener {
             workingViewModel.responseCall(
                 data.getLong("senderAccountId"), data.getString("name"), false)
-            binding.denyCall.visibility = View.GONE
+            binding.callRequestCard.visibility = View.GONE
+            sseViewModel.clearEvent()
         }
     }
     private fun goCall() {
@@ -351,11 +354,12 @@ class WorkingActivity : AppCompatActivity() {
                     Log.i(TAG, "📤 FastAPI 서버로 accept_communication 이벤트 전송 완료")
 
                     if (aiOnDialog != null) hideModal()
+                    sseViewModel.clearEvent()
+                    binding.callRequestCard.visibility = View.GONE
 
                     startActivity(intent)
                     Log.i(TAG, "✅ CallActivity로 이동 완료")
 
-                    binding.callRequestCard.visibility = View.GONE
                 }
             }
         }
