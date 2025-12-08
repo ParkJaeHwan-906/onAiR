@@ -62,7 +62,7 @@ class RecyclerViewFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         binding.taskListRecyclerview.apply {
             taskAdapter = TaskListAdapter() { task ->
-                val intent = Intent(requireContext(), WorkingActivity::class.java)
+                val intent = Intent(requireContext(), DemoWorkingActivity::class.java)
                 intent.putExtra("taskId", task.id)
                 intent.putExtra("taskName", task.request)
                 launcher.launch(intent)
