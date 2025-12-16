@@ -37,12 +37,12 @@ const navItems = [
     icon: Cctv,
     to: "/cctv",
   },
-  {
-    id: "anomaly",
-    label: "이상탐지 모니터링",
-    icon: AlertTriangle,
-    to: "/anomaly",
-  },
+  // {
+  //   id: "anomaly",
+  //   label: "이상탐지 모니터링",
+  //   icon: AlertTriangle,
+  //   to: "/anomaly",
+  // },
 ];
 
 function SideBar() {

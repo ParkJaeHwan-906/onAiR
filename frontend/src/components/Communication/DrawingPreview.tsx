@@ -25,7 +25,7 @@ const DrawingPreview = () => {
   const [isFocused, setIsFocused] = useState(false);
   const resetFocusRef = useRef<(() => void) | null>(null);
   // 도면(3D 모델) ON/OFF 상태 (패널은 유지
-  const [showModel, setShowModel] = useState(true);
+  const [showModel, setShowModel] = useState(false);
 
   // 라이브킷
   const room = useRoomContext();

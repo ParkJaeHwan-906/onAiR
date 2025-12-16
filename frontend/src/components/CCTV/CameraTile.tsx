@@ -95,7 +95,7 @@ const CameraTile: React.FC<CameraTileProps> = ({ camera, onClick }) => {
       }
     >
       {/* ID=1 → LIVE or OFFLINE */}
-      {isTargetCamera ? (
+      {/* {isTargetCamera ? (
         isLiveConnected ? (
           <>
             <img ref={imgRef} className="cctv-video" alt="Live CCTV" />
@@ -118,7 +118,6 @@ const CameraTile: React.FC<CameraTileProps> = ({ camera, onClick }) => {
           </>
         )
       ) : (
-        /* ID=2~6 → 무조건 더미 영상 */
         <>
           <video
             src={camera.videoUrl}
@@ -134,7 +133,23 @@ const CameraTile: React.FC<CameraTileProps> = ({ camera, onClick }) => {
             <span className="live-badge">● LIVE</span>
           </div>
         </>
-      )}
+      )} */}
+      {/* 전체 다 더미데이터로 변경 */}
+      <>
+        <video
+          src={camera.videoUrl}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="cctv-video"
+        />
+
+        <div className="cctv-label live">
+          {camera.worker.name} | {camera.equipment.name}
+          <span className="live-badge">● LIVE</span>
+        </div>
+      </>
     </div>
   );
 };
