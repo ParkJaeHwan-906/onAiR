@@ -1,16 +1,15 @@
-import demo0 from "../../assets/cctv/cam1/test.mp4"
+import demo0 from "../../assets/cctv/cam1/test.mp4";
 import demo1 from "../../assets/cctv/cam1/demo1.mp4";
 import demo2 from "../../assets/cctv/cam1/demo2.mp4";
 import demo3 from "../../assets/cctv/cam1/demo3.mp4";
 import demo4 from "../../assets/cctv/cam1/demo4.mp4";
 import demo5 from "../../assets/cctv/cam1/demo5.mp4";
-import demo6 from "../../assets/cctv/cam1/demo6.mp4";
 
 export const cctvList = [
   {
     id: 1,
     videoUrl: demo0,
-    worker: { id: 4, name: "이병헌" },
+    worker: { id: 4, name: "김나영" },
     equipment: { id: 1, name: "AHU" },
   },
   {
@@ -42,11 +41,5 @@ export const cctvList = [
     videoUrl: demo5,
     worker: { id: 5, name: "김준혁" },
     equipment: { id: 5, name: "Boiler" },
-  },
-  {
-    id: 7,
-    videoUrl: demo6,
-    worker: { id: 6, name: "김나영" },
-    equipment: { id: 6, name: "Boiler" },
   },
 ];
